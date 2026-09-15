@@ -114,9 +114,10 @@ free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 - Codex 배포 전 배치 MERGE · 배포 커밋 해시 `D` 고정(브랜치가 아니라 해시).
 - 사용자 측 완료(D1 전): `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
 - btcfut의 rclone remote는 **D1 전에는 만들 수 없다**(사용자가 D1에 생긴다) → §9.3 3단계(사용자 정정 2026-09-16).
-- 키 IP 화이트리스트는 **마지막 — §9.1 로컬 점검이 끝난 뒤** 켠다(사용자 2026-09-16).
-- ⚠️ 화이트리스트가 켜지면 로컬(WSL) 키 조회는 실패한다 → 로컬 키 드라이런은 화이트리스트 **전**에 끝낸다.
-  `ipRestrict=true` 확인은 **VPS에서** 캡처 `--dry-run`으로(로컬에서는 -2015로 실패하는 것이 정상).
+- 키 IP 화이트리스트(사용자 2026-09-16 확정 순서): 키는 **이미 `ipRestrict=true`이고 허용 IP = 로컬 IP**(캡처 2026-09-15 22:22 UTC).
+  ① §9.1 로컬 점검 동안 그대로 둔다 → ② §9.2에서 VPS 공인 IP·Elastic IP 여부를 사용자에게 알린다 →
+  ③ 사용자가 **D1 5단계 전에** VPS IP를 추가 → ④ 로컬 점검이 끝났으면 사용자가 로컬 IP를 뺀다 →
+  ⑤ **D1 증명 = VPS에서 캡처 `--dry-run` 성공 + 로컬에서 실패**(`ipRestrict=true` 플래그만으로는 어느 IP인지 증명되지 않는다).
 
 ### 9.1 창 밖 사전 점검 ① — 로컬 worktree (창 전날까지 · 호스트 변경 없음)
 ```bash
@@ -126,9 +127,9 @@ uv run pytest -q && uv run ruff check . && uv run pyright && uv run python -m op
 V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 240 --var-dir $V --db $V/bot.sqlite
 ```
 - 기록: `D` · 테스트 수 · `status.json` = `exit_code 0` · `shutdown stop` · `delivered == sent` · `confirmed_facts []`.
-- 규칙 출처: 이 점검은 화이트리스트 **전**에 한다 → `rules.source runtime:signed` · `blockers []`.
-  (화이트리스트가 이미 켜졌다면 로컬은 `fallback:public+snapshot` + `blockers ["rules_from_snapshot"]`이 정상 — 그때는 VPS에서만 확인.)
-- 끝나면 사용자에게 알린다 → 사용자가 키 IP 화이트리스트를 켠다.
+- 규칙 출처: 허용 IP에 로컬 IP가 있는 동안 → `rules.source runtime:signed` · `blockers []`.
+  (로컬 IP가 이미 빠졌다면 `fallback:public+snapshot` + `blockers ["rules_from_snapshot"]`이 정상 — 그때는 VPS에서만 확인.)
+- 끝나면 사용자에게 알린다 → 사용자가 로컬 IP를 뺀다(VPS IP 추가 뒤).
 - 유닛 파일: `git diff <마지막 Codex 검토 커밋>..D -- ops/systemd/` 가 비어 있다(아니면 검토부터).
 - STOP: 하나라도 실패 · worktree는 창이 끝난 뒤 `git worktree remove`.
 
@@ -139,6 +140,9 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
   `... list-timers --all` · `... show e2e-l2collector -p NRestarts -p ActiveEnterTimestamp` · 최신 shard 시각 · `free -m` · `df -h /`.
   🔴 **추적 사본이 아니라 VPS에 실제 설치된 타이머를 읽는다**(E2E #139: 추적 유닛 ≠ VPS 유닛이었다).
 - 봇 흔적 없음(첫 배포): `id btcfut` 실패 · `/home/btcfut` 없음.
+- **VPS 공인 IP → 사용자에게 알림**(키 화이트리스트용): `curl -s ifconfig.me` 값과 SSH 접속 주소가 같은지 ·
+  Elastic IP 여부는 인스턴스 안에서 판별할 수 없다 → 사용자가 EC2 콘솔 **Elastic IPs**(또는 `aws ec2 describe-addresses --public-ips <IP>`)에서 확인.
+  Elastic IP가 아니면 인스턴스 정지·시작 때 바뀐다 → 키가 조용히 fallback(`rules_from_snapshot`)으로 떨어진다는 뜻이라 보고에 명시.
 - 타이머 겹침 표(추적 사본 기준 — 위 실측으로 교체): E2E quality 00:10 · gate-notify 00:15(휴면) · health-digest 00:30 ·
   health-alert :00/:30 · sync :07 · prune 일 02:30 · integrity 일 03:30 ↔ 봇 health-alert 5분 · digest 00:30 · sync :20 ·
   prune 일 03:30(**설치 안 함** — §9.6).
@@ -160,7 +164,8 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
    - STOP: `lsd` 실패 · remote가 E2E 폴더를 가리킴 · scope가 `drive.file`이 아님.
 4. §2 `git clone` → `git checkout D` · `uv sync --frozen` · `.env`(사용자가 채움 · `chmod 600` · `BTCFUT_DRIVE_REMOTE` 포함).
    원격 이름 검사(E2E 폴더 거부 · 값만 출력): `sudo -u btcfut bash -c 'cd /home/btcfut/BTC_Futures_E2E && .venv/bin/python -c "from ops.run_bot import load_env_file; from ops.data_stores import remote_root; from pathlib import Path; print(remote_root(load_env_file(Path(\".env\"))))"'` → `btcfut-drive:BTC_Futures_E2E` — 실제 복사는 D2 타이머부터.
-5. VPS에서 캡처 `--dry-run` → 사용자가 `ipRestrict=true`·읽기 외 권한 없음 확인.
+5. (사용자가 VPS IP를 화이트리스트에 넣은 뒤) VPS에서 `sudo -u btcfut bash -c 'cd /home/btcfut/BTC_Futures_E2E && .venv/bin/python scripts/capture_account_snapshot.py --dry-run'`
+   → `enabled = ['enableReading', 'ipRestrict']` · **로컬에서 같은 `--dry-run`이 실패**(로컬 IP 제거 뒤)해야 증명 완료. 파일은 쓰지 않는다.
 6. VPS 드라이런 240초(§2 사전 검사 · 유닛 없이) → 9.1과 같은 기준 + `confirmed_facts []`.
 7. 9.5 보고 → **멈춘다**(유닛 설치는 다음 날).
 
@@ -179,7 +184,7 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 | E2E 데이터 | 최신 shard 시각이 계속 전진 · 대장에 창 동안 새 `stop`/`connect` 없음 |
 | E2E 판정 | 다음 날 00:10 판정 결과(봇 영향 여부만 본다 — E2E 게이트는 E2E가 판정) |
 | 호스트 | `free -m`·`df -h /` 기준선 대비 · `du -sh ~btcfut/BTC_Futures_E2E/var/*` |
-| 봇 규칙 | `rules.source runtime:signed` · `fallback_reason null` · 사용자 `ipRestrict=true` 확인 |
+| 봇 규칙 | `rules.source runtime:signed` · `fallback_reason null` · 캡처 `--dry-run` VPS 성공 + 로컬 실패 · VPS IP·Elastic IP 여부 |
 | 봇 상태(D2) | 상태 파일 나이 < 120초 · `blockers []` · `stalled []` · `db_errors 0` · `confirmed_facts []` |
 | 텔레그램(D2) | 기동 알림 수신 · `delivered == sent` · `poll_errors 0` · `/status` 왕복 |
 | 데이터(D2) | `bars_1m` 증가 · shard 파일 증가 · 첫 :20 `LAST_SYNC.txt` · health-alert `none/throttled` |

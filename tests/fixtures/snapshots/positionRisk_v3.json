@@ -2,8 +2,10 @@
  "_meta": {
   "captured_at_utc": "2026-09-15T22:22:57.318Z",
   "server_time_ms": 1789510977315,
-  "endpoint": "/fapi/v1/positionSide/dual",
-  "params": null,
+  "endpoint": "/fapi/v3/positionRisk",
+  "params": {
+   "symbol": "BTCUSDT"
+  },
   "method": "GET",
   "signed": true,
   "read_only": true,
@@ -24,7 +26,5 @@
   },
   "script": "scripts/capture_account_snapshot.py"
  },
- "response": {
-  "dualSidePosition": false
- }
+ "response": []
 }

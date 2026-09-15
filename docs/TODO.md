@@ -40,7 +40,7 @@
 5b. [x] layer 8 기동 배선(`ops/runtime.py`·`ops/run_bot.py`) — 설계서 §17
 5e. [ ] 페이퍼 14일차 재평가 새 행: #5 · #7 · #9 · **#11**
 5f. [x] 페이퍼 재기동 복원 (a) · 런타임 규칙 (ii) · 레지스트리 #14 (2026-09-16 구현) · [ ] LIVE `ExchangeReader` 계좌 필드 공식 문서 확인 · LIVE 거래소 읽기 비동기화(Codex L8 #3) · 런타임 규칙 주기 재조회
-5i. [x] 재기동 복원 드라이런(SIGKILL · 읽기 전용 키 · 2026-09-15 20:32–20:39 UTC, ops_log) · [ ] 사용자: rclone remote · `TELEGRAM_OWNER_IDS` · 캡처 스크립트
+5i. [x] 재기동 복원 드라이런(SIGKILL · 읽기 전용 키 · 2026-09-15 20:32–20:39 UTC, ops_log) · [x] `TELEGRAM_OWNER_IDS`(사용자) · [x] 캡처 스크립트(2026-09-15 22:22 UTC) · [ ] rclone remote = D1 3단계
 5j. [ ] VPS 배포 시점: E2E Restart B(2026-09-17 00:12 UTC) 24h 게이트 종료 뒤(earliest 09-18) · 라이브 호스트 변경 하루 1건
 5h. [ ] 보류: `engine_events` op_id 조회 인덱스(스키마 v3) · shard `roll_failed` health 경보 · 키 `ipRestrict` 기동 확인 · [x] 짝 없는 start/connect → `dirty_previous_run`(#15 ⑤)
 5k. [ ] LIVE 체크리스트 추가(#15 ③④): 규칙 주기 재조회 ≥6h·24h 초과 규칙 진입 금지 · 일시정지 사유 집합화

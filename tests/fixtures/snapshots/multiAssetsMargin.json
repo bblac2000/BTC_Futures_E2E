@@ -1,9 +1,30 @@
 {
-  "_meta": {
-    "synthetic": true,
-    "created_at_utc": "2026-09-15",
-    "endpoint": "/fapi/v1/multiAssetsMargin",
-    "why": "no captured snapshot exists for this signed endpoint; shape per Binance docs, value per v6 §1.0(A) 2026-06-19 account measurement (multiAssetsMargin=False). Replace with a real read-only capture before live."
+ "_meta": {
+  "captured_at_utc": "2026-09-15T22:22:57.318Z",
+  "server_time_ms": 1789510977315,
+  "endpoint": "/fapi/v1/multiAssetsMargin",
+  "params": null,
+  "method": "GET",
+  "signed": true,
+  "read_only": true,
+  "synthetic": false,
+  "key_permissions": {
+   "ipRestrict": true,
+   "enableSpotAndMarginTrading": false,
+   "enableWithdrawals": false,
+   "enableInternalTransfer": false,
+   "permitsUniversalTransfer": false,
+   "enableVanillaOptions": false,
+   "enablePortfolioMarginTrading": false,
+   "enableFixApiTrade": false,
+   "enableFixReadOnly": false,
+   "enableReading": true,
+   "enableFutures": false,
+   "enableMargin": false
   },
-  "response": {"multiAssetsMargin": false}
+  "script": "scripts/capture_account_snapshot.py"
+ },
+ "response": {
+  "multiAssetsMargin": false
+ }
 }

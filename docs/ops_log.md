@@ -1765,3 +1765,13 @@ D1 창 09-18 00:35–02:30 UTC · 여기서 멈춤(사용자 항목: rclone remo
 `rclone lsd` 확인 → `BTCFUT_DRIVE_REMOTE`. §9.0 사용자 선행 항목에서 rclone 제거.
 사용자 확인: `TELEGRAM_OWNER_IDS`가 `.env`에 있음(개인 ID = 채팅 ID) · 계정에 열린 포지션 없음.
 
+## 2026-09-15 22:21–22:23 UTC — 계정 read-only 캡처(사용자 "go")
+
+- `--dry-run`(22:21:00Z) → 사용자 확인 → 실제 실행(22:22:57Z, exit 0). POST 없음(`ReadOnlyClient`) · 키 값 출력·기록 0(파일 검색 0건).
+- 키 권한(`apiRestrictions`): enabled = `enableReading`·`ipRestrict`만 · 거래·출금·이체·옵션·포트폴리오·FIX 전부 false.
+- `positionSideDual` = false · `multiAssetsMargin` = false → 합성 fixture 두 개를 실측으로 교체(값 동일 · 테스트 716 통과).
+- `positionRisk_v2` BTCUSDT 1행: `positionAmt 0.000` · `positionSide BOTH` · `marginType cross` · leverage 5 · **`isolated` 필드 있음**(False) → PROVENANCE 기록.
+  `positionRisk_v3` 0행(포지션 없음이면 빈 배열). 계정 전체 flat은 사용자 확인(스크립트는 BTCUSDT만 조회).
+- ⚠️ 키가 **이미 `ipRestrict=true`**(허용 IP = 로컬). 사용자 확정 순서: §9.1 동안 유지 → D1 5단계 전 VPS IP 추가 → 로컬 점검 뒤 로컬 IP 제거 →
+  증명 = VPS `--dry-run` 성공 + 로컬 실패. VPS 공인 IP·Elastic IP 여부는 D1 읽기 전용 사전 점검(§9.2)에서 알린다. 런북 §9 반영.
+
