@@ -23,6 +23,10 @@ class RejectReason(StrEnum):
     """`decisions.rejection_reason`에 그대로 기록되는 값(layer 4)."""
     BELOW_MIN_QTY = "below_min_qty"
     MIN_NOTIONAL = "min_notional"
+    #  layer 2 사이징 거부 사유 — 같은 enum을 쓴다(decisions 테이블에 사유 종류가 두 곳에서 갈라지지 않게)
+    SL_WRONG_SIDE = "sl_wrong_side"
+    LIQ_DISTANCE = "liq_distance"
+    LEVERAGE_INFEASIBLE = "leverage_infeasible"
 
 
 @dataclass(frozen=True)
