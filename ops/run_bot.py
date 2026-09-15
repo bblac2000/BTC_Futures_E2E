@@ -2,7 +2,8 @@
 
 순서: 인스턴스 락 → DB 마이그레이션 → 런타임 규칙(+ `runtime_rules` 기록) → 지갑 복원(마지막 엔진 스냅샷) →
 안전 상태 복원(`safety_state`) → **포지션 복원(DB 열린 행 + 마지막 엔진 스냅샷이 일치할 때만, `ops.restore`)** →
-REST 백필(마감 봉 · 공개 GET) → shard 기록기 → 텔레그램(명령·알림) → 피드 + 1초 안전 틱.
+REST 백필(마감 봉 · 공개 GET) → **직전 실행 종료 판정(`ops.run_events` — stop 없는 start/connect → `dirty_previous_run`) ·
+대장 `start`** → shard 기록기 → 텔레그램(명령·알림) → 피드 + 1초 안전 틱.
 종료(SIGTERM/SIGINT/`--duration-s`): 피드 정지 → 기록기 종료 기록(clean/dirty) → 스냅샷·상태 저장 → 텔레그램 정지 알림.
 
 🔒 **LIVE는 이 러너로 기동하지 않는다** — 라이브 체크리스트(설계서 §10)·사용자 승인 전에는 `LiveSender`를 만드는 경로 자체가
@@ -62,6 +63,7 @@ from notify import config as NK
 from notify.bot import CommandBot
 from notify.poller import TelegramPoller
 from notify.telegram_api import TelegramApi
+from ops import run_events
 from ops.delivery_counter import DeliveryCounter
 from ops.restore import apply_restore, decide_paper_restore
 from ops.runtime import BotRuntime
@@ -83,6 +85,7 @@ KEY_ENV, SECRET_ENV = "BINANCE_API_KEY", "BINANCE_API_SECRET"
 RULES_SOURCE_RUNTIME = "runtime:signed"
 RULES_SOURCE_FALLBACK = "fallback:public+snapshot"
 RULES_SOURCE_SNAPSHOT_ONLY = "fallback:snapshot"
+RUN_EVENT_SOURCE = run_events.RUN_EVENT_SOURCE
 RULES_FROM_SNAPSHOT = "rules_from_snapshot"          # 사용자 결정 2026-09-16 (ii) — 진입 차단 사유 문자열 그대로
 
 
@@ -420,6 +423,15 @@ async def _run_locked(cfg: RunConfig, *, env: Mapping[str, str], owners: frozens
     except Exception as e:  # noqa: BLE001 — 백필 실패는 알리고 계속(실시간 봉은 WS로 쌓인다)
         rt.alert(f"⚠️ REST 백필 실패: {type(e).__name__}: {e}")
 
+    try:
+        dirty = run_events.previous_run_dirty()
+        if dirty is not None:
+            run_events.mark_dirty(dirty)
+            rt.record_ops("DirtyPreviousRun", dirty, now, {"source": "manifest.events"})
+        rt.run_facts = run_events.recent_dirty_facts()
+        run_events.log_start(f"mode={cfg.mode.value} symbol={cfg.symbol} rules={loaded.db_source}")
+    except Exception as e:  # noqa: BLE001 — 대장 조회 실패는 알리고 계속(수집·안전 경로와 무관)
+        rt.alert(f"⚠️ 직전 실행 종료 판정 실패(대장): {type(e).__name__}: {e}", important=True)
     recorder = Recorder(cfg.raw_root, cfg.symbol)
     recorder.start()
     feed = feed_factory(counter, rt, recorder)

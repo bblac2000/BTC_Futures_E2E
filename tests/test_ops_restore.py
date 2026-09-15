@@ -250,3 +250,24 @@ def test_a_funding_missed_engine_block_survives_a_second_restart_until_a_human_s
     rt3, counter3, clock3, _d3, _m3 = restart(rules, db, t0=t + 140_000)
     feed(rt3, counter3, clock3, t + 140_000, t + 201_000)
     assert rt3.entry_blockers() == [], "사람의 /start 해제도 저장된다"
+
+
+def test_restart_unrestored_stays_in_status_until_start_and_survives_a_restart(rules, tmp_path):
+    """사용자 2026-09-16: 고아 포지션 close(`restart_unrestored`)는 확정 사실 — /status·상태 파일에 사람이 /start로 확인할 때까지."""
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    _tamper_snapshot(db, qty="0.001")
+    rt, _c, _k, decision, _m = restart(rules, db, t0=t + 5000)
+    assert decision.action == "mismatch"
+    facts = rt.status(t + 5000)["confirmed_facts"]
+    assert [(f["kind"], f["daily"]) for f in facts] == [("restart_unrestored", True)] and facts[0]["id"] == "1"
+    assert "restart_unrestored" in rt.status_text()
+    rt.con.close()                                                   # 확인 전에 다시 죽는다
+    rt2, _c2, _k2, decision2, _m2 = restart(rules, db, t0=t + 20_000)
+    assert decision2.action == "none", "고아 행은 이미 닫혔다"
+    assert [f["kind"] for f in rt2.status(t + 20_000)["confirmed_facts"]] == ["restart_unrestored"], "safety_state에 남는다"
+    rt2.resume("telegram:111")
+    assert rt2.status(t + 21_000)["confirmed_facts"] == [] and "restart_unrestored" not in rt2.status_text()
+    rt2.con.close()
+    rt3, _c3, _k3, _d3, _m3 = restart(rules, db, t0=t + 30_000)
+    assert rt3.status(t + 30_000)["confirmed_facts"] == [], "확인도 저장된다"

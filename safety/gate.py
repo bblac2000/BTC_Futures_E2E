@@ -27,6 +27,9 @@ class SafetyGate:
         #  엔진 진입 차단 사유(펀딩 경계 누락·주문 결과 불명 등)의 저장본 — 런타임이 저장 전에 채우고 기동 때 엔진에 되돌린다
         #  (Codex L8b #1: 메모리에만 있으면 재기동이 차단을 지운다). 해제는 사람의 /start(엔진 clear_blocks → 다음 저장).
         self.engine_blocks: list[str] = []
+        #  사람이 확인해야 하는 확정 사실(예: 재기동 복원 불일치로 닫은 고아 포지션 `restart_unrestored`) — /status·상태 파일에 남고
+        #  health가 하루 한 번 알린다 · 사람의 /start가 확인이다(사용자 2026-09-16) · safety_state에 저장
+        self.notices: list[dict] = []
 
     def pause(self, actor: str) -> str:
         if not actor:
@@ -70,6 +73,9 @@ class SafetyGate:
         if self.resume_refused(ts_ms):
             return f"{DAILY_LOSS_RESUME_REFUSED} — 변경 없음\n⚠️ 진입 금지: {', '.join(self.entry_blockers())}"
         lines = []
+        for n in self.notices:
+            lines.append(f"확인: {n.get('kind')} {n.get('id')} ({actor})")
+        self.notices = []
         if self.paused_by is not None:
             lines.append(f"일시정지 해제 ({actor})")
             self.paused_by = None
@@ -84,7 +90,8 @@ class SafetyGate:
 
     def to_state(self) -> dict:
         return {"paused_by": self.paused_by, "kill_switch": self.kill_switch.to_state(),
-                "reconcile": self.reconcile.to_state(), "engine_blocks": list(self.engine_blocks)}
+                "reconcile": self.reconcile.to_state(), "engine_blocks": list(self.engine_blocks),
+                "notices": [dict(n) for n in self.notices]}
 
     def save(self, con: sqlite3.Connection, *, ts_ms: int, mode: str) -> int:
         return R.save_safety_state(con, STATE_NAME, self.to_state(), ts_ms=ts_ms, mode=mode)
@@ -104,4 +111,5 @@ class SafetyGate:
         gate = cls(KillSwitch.from_state(limits, state["kill_switch"], wallet=wallet), stale, rec)
         gate.paused_by = state.get("paused_by")
         gate.engine_blocks = [str(r) for r in state.get("engine_blocks") or []]
+        gate.notices = [dict(n) for n in state.get("notices") or [] if isinstance(n, dict)]
         return gate

@@ -1,6 +1,6 @@
 # 런북 — 도쿄 VPS 페이퍼 배포 (BTC_Futures_E2E · 템플릿 단계)
 
-> 상태: **템플릿 — 아직 배포하지 않았다.** VPS 배포는 사용자와 따로 논의한 뒤 진행한다(2026-09-16 지시).
+> 상태: **템플릿 — 아직 배포하지 않았다.** 배포 창 절차는 §9(2026-09-16 준비 · 실행은 사용자 지시 후).
 > 상위 규칙: 스킬 `vps-ops.md` · 설계서 §2 "E2E 수집기와 별도 Linux 사용자·별도 systemd 유닛 · 메모리·디스크는 수집기 우선 · 수집기 데이터 디렉터리 접근 금지".
 > 🔴 수집기 호스트에 닿는 변경 = **Codex 검토 후** 배포.
 
@@ -65,7 +65,7 @@ free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
 | 명령 왕복 | `/status` → 모든 차단 사유가 나열된 답 · `/help` 메뉴 |
 | 피드 | `stalled: []` · `delivery`의 세 스트림 `last_seen_age_sec` < 120 |
 | DB | `sqlite3 var/bot.sqlite "select source,count(*) from bars_1m group by 1"` 가 늘어난다 · `db_errors: 0` |
-| shard | `var/raw/live/BTCUSDT/<오늘>/{kline1m_update,kline1m_close,markprice}/` 파일 증가 · 대장 `stop_dirty` 없음 |
+| shard | `var/raw/live/BTCUSDT/<오늘>/{kline1m_update,kline1m_close,markprice}/` 파일 증가 · 대장 `stop_dirty` 없음 · `confirmed_facts`에 `dirty_previous_run` 없음(SIGKILL은 `stop`을 안 남긴다 — #15 ⑤) |
 | sync | `var/markers/LAST_SYNC.txt` 시간당 갱신 · 원격 폴더가 **E2E 폴더가 아님** |
 | health | `journalctl --user -u btcfut-health-alert -n 20` 에 `alert none/throttled/sent` · `send_failed` 없음 |
 | 경보 설계 | 반복형 키에 숫자·날짜 없음(테스트 잠금) · 확정 사실은 하루 1통 · 상시 발화 경보가 없는지 첫 24시간 관찰 |
@@ -92,3 +92,73 @@ free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
 - Drive 사본 재검증(`verify_drive_copies`에 해당) — pruned 행의 원격 md5를 주기적으로 다시 대조하는 도구.
 - 대장↔파일 reconcile(고아·결손) 도구.
 - LIVE 배선(`ExchangeReader` 실구현 · 계좌 응답 필드는 공식 문서·실캡처 확인 필요) — 설계서 §10 체크리스트·사용자 승인 전 금지.
+
+## 9. 배포 창 — E2E Restart A/B와 같은 모양 (준비만 · 실행은 사용자 지시 후)
+> 규칙(사용자 2026-09-16): 가장 이른 날 **2026-09-18**, E2E Restart B(09-17 00:12 UTC)의 24h 게이트가 닫힌 뒤 · **라이브 호스트 변경 하루 1건**.
+> 🔴 수집기 호스트 변경 = 이 절 포함 Codex 배포 전 배치 MERGE 후. 명령마다 E2E에 닿지 않는지 먼저 본다.
+> 제안: 변경을 **D1(사용자·코드·환경 · 봇 미기동)**과 **D2(유닛 설치·기동)** 두 날로 나눈다 — 하루 1건 규칙의 해석(사용자 확인 필요).
+
+### 9.0 전제 — 하나라도 아니면 창을 열지 않는다
+- E2E Restart B 24h 게이트 판정이 닫혔다(E2E 쪽 보고로 확인 — 이 봇은 판정하지 않는다).
+- Codex 배포 전 배치 MERGE · 배포 커밋 해시 `D` 고정(브랜치가 아니라 해시).
+- 사용자 측 완료: 봇 사용자 rclone remote · `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행 · 키 IP 화이트리스트(**마지막**).
+- ⚠️ 화이트리스트가 켜지면 로컬(WSL) 키 조회는 실패한다 → 로컬 키 드라이런은 화이트리스트 **전**에 끝낸다.
+  `ipRestrict=true` 확인은 **VPS에서** 캡처 `--dry-run`으로(로컬에서는 -2015로 실패하는 것이 정상).
+
+### 9.1 창 밖 사전 점검 ① — 로컬 worktree (창 전날까지 · 호스트 변경 없음)
+```bash
+git fetch origin && git worktree add ../btcfut-deploy-D D && cd ../btcfut-deploy-D
+uv sync --frozen
+uv run pytest -q && uv run ruff check . && uv run pyright && uv run python -m ops.stream_tiers --scan
+V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 240 --var-dir $V --db $V/bot.sqlite
+```
+- 기록: `D` · 테스트 수 · `status.json` = `exit_code 0` · `shutdown stop` · `delivered == sent` · `blockers []` ·
+  `rules.source runtime:signed` · `rules.fallback_reason null` · `confirmed_facts []`.
+- 유닛 파일: `git diff <마지막 Codex 검토 커밋>..D -- ops/systemd/` 가 비어 있다(아니면 검토부터).
+- STOP: 하나라도 실패 · worktree는 창이 끝난 뒤 `git worktree remove`.
+
+### 9.2 창 밖 사전 점검 ② — VPS 읽기만 (창 전날 · 변경 없음)
+- §0 호스트 확인(`hostname`·`whoami`·`df -h /`)을 사용자가 대조.
+- E2E 기준선(수집기 사용자 = E2E 레지스트리 #139 기준 `ubuntu`, §0에서 대조):
+  `sudo -u ubuntu XDG_RUNTIME_DIR=/run/user/$(id -u ubuntu) systemctl --user list-units 'e2e-*' --all` ·
+  `... list-timers --all` · `... show e2e-l2collector -p NRestarts -p ActiveEnterTimestamp` · 최신 shard 시각 · `free -m` · `df -h /`.
+  🔴 **추적 사본이 아니라 VPS에 실제 설치된 타이머를 읽는다**(E2E #139: 추적 유닛 ≠ VPS 유닛이었다).
+- 봇 흔적 없음(첫 배포): `id btcfut` 실패 · `/home/btcfut` 없음.
+- 타이머 겹침 표(추적 사본 기준 — 위 실측으로 교체): E2E quality 00:10 · gate-notify 00:15(휴면) · health-digest 00:30 ·
+  health-alert :00/:30 · sync :07 · prune 일 02:30 · integrity 일 03:30 ↔ 봇 health-alert 5분 · digest 00:30 · sync :20 ·
+  prune 일 03:30(**설치 안 함** · 켜기 전 E2E integrity와 겹침 해소 — TODO 5l).
+- STOP: E2E 유닛 중 failed/inactive · 디스크 여유 < 5 GB + 봇 예상 증가분 · 호스트 불일치.
+
+### 9.3 창 D1 — 봇 사용자·코드·환경 (첫 번째 변경 · 봇 유닛 없음)
+시각: E2E 00:10 UTC 전일 판정이 기록되고 E2E health의 00:25 판정 대기가 끝난 뒤 **00:35 UTC 이후** 시작 ·
+02:30 UTC 전 종료(일요일 E2E prune). 판정이 늦거나 FAIL이면 그날 창은 열지 않는다.
+1. §0 호스트 확인 → 9.2 E2E 기준선 **재기록**(창 시작 시점).
+2. §1 사용자 생성 · linger · 수집기 홈 읽기 불가 확인.
+3. §2 `git clone` → `git checkout D` · `uv sync --frozen` · `.env`(사용자가 채움 · `chmod 600`) · rclone(사용자).
+4. VPS에서 캡처 `--dry-run` → 사용자가 `ipRestrict=true`·읽기 외 권한 없음 확인.
+5. VPS 드라이런 240초(§2 사전 검사 · 유닛 없이) → 9.1과 같은 기준 + `confirmed_facts []`.
+6. 9.5 보고 → **멈춘다**(유닛 설치는 다음 날).
+
+### 9.4 창 D2 — 유닛 설치·기동 (두 번째 변경 · 다음 날)
+시각: 9.3과 같은 규칙.
+1. §0 호스트 확인 · E2E 기준선 재기록 · `git -C ~/BTC_Futures_E2E rev-parse HEAD` == `D`.
+2. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
+3. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
+4. `systemctl --user enable --now` → §5 기동 후 대조표 전체.
+5. 9.5 보고.
+
+### 9.5 배포 후 보고 항목 (D1·D2 각각 · 24시간 뒤 한 번 더)
+| 항목 | 기준 |
+|---|---|
+| E2E 유닛 | 상태·`NRestarts`·`ActiveEnterTimestamp`가 기준선과 같다 |
+| E2E 데이터 | 최신 shard 시각이 계속 전진 · 대장에 창 동안 새 `stop`/`connect` 없음 |
+| E2E 판정 | 다음 날 00:10 판정 결과(봇 영향 여부만 본다 — E2E 게이트는 E2E가 판정) |
+| 호스트 | `free -m`·`df -h /` 기준선 대비 · `du -sh ~btcfut/BTC_Futures_E2E/var/*` |
+| 봇 규칙 | `rules.source runtime:signed` · `fallback_reason null` · 사용자 `ipRestrict=true` 확인 |
+| 봇 상태(D2) | 상태 파일 나이 < 120초 · `blockers []` · `stalled []` · `db_errors 0` · `confirmed_facts []` |
+| 텔레그램(D2) | 기동 알림 수신 · `delivered == sent` · `poll_errors 0` · `/status` 왕복 |
+| 데이터(D2) | `bars_1m` 증가 · shard 파일 증가 · 첫 :20 `LAST_SYNC.txt` · health-alert `none/throttled` |
+| 24시간 뒤 | health digest 수신 · 반복 경보 없음 · E2E 판정 영향 없음 |
+
+롤백(봇만): btcfut 사용자로 `systemctl --user disable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer`.
+E2E에 닿는 명령은 롤백에도 없다. 봇 사용자·데이터 삭제는 사람 확인 + Codex(삭제) 후.

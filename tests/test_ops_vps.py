@@ -251,6 +251,49 @@ def test_health_keys_are_fixed_codes_without_numbers_and_settled_facts_carry_a_d
     assert repeat == {"entries_blocked", "feed_stalled", "db_errors", "telegram_poll", "sync_stale", "disk_low"}
     assert all(not re.search(r"\d", k) for k in repeat), "반복형 키에 숫자·날짜가 들어가면 스로틀이 깨진다"
     assert any(k.startswith("dirty_shutdown:") for k in once) and any(k.startswith("prune_stale:") for k in once)
+    assert all(re.match(r"^[a-z_]+:\d{4}-\d{2}-\d{2}(:|$)", k) for k in once), "하루 한 번 키 = 이름:날짜[:id]"
+
+
+def test_a_once_fact_is_not_resent_when_a_later_once_fact_rewrites_the_state(tmp_path):
+    """발견(2026-09-16): 날짜 없는 once 키(`dirty_shutdown:<ts>`)가 월 필터에 걸려 저장되지 않아 5분마다 재발송됐다."""
+    var = tmp_path / "var"
+    _status(var, shutdown="stop_dirty", exit_code=1, ts_ms=123)
+    state = tmp_path / "state"
+    now = time.time()
+    sent: list[str] = []
+    ok = lambda t: sent.append(t) or {"ok": True}  # noqa: E731
+    m = HE.gather(var, now=now) | {"disk_free_gb": 50.0, "status_age_s": 1.0}
+    assert HE.alert(m, state, ok, now=now) == "sent"
+    assert HE.alert(m, state, ok, now=now + 300) == "throttled", "같은 확정 사실은 다시 보내지 않는다"
+    (var / "markers" / "LAST_PRUNE.txt").write_text("old")
+    m2 = m | {"prune_age_s": 9 * 86400.0}
+    assert HE.alert(m2, state, ok, now=now + 600) == "sent"
+    assert HE.alert(m2, state, ok, now=now + 900) == "throttled"
+    assert sum("비정상 종료" in t for t in sent) == 2, "두 번째 발송은 prune 사실 때문 — 문구에는 현재 문제 전부가 실린다"
+    assert HE.alert(m2, state, ok, now=now + 1200) == "throttled"
+
+
+def test_confirmed_facts_in_the_status_file_alert_daily_or_once(tmp_path):
+    """사용자 2026-09-16: restart_unrestored = 사람이 /start로 확인할 때까지 **하루 한 번** · dirty_previous_run = **한 번**."""
+    var = tmp_path / "var"
+    facts = [{"kind": "restart_unrestored", "id": "1", "daily": True, "text": "재기동 복원 불일치 root 1"},
+             {"kind": "dirty_previous_run", "id": "2026-09-15T20:34:15Z", "daily": False, "date": "2026-09-15",
+              "text": "직전 실행이 stop 없이 끝났다"}]
+    _status(var, confirmed_facts=facts)
+    day1 = time.time()
+    m = HE.gather(var, now=day1) | {"disk_free_gb": 50.0, "status_age_s": 1.0}
+    once = {k for k, _t, o in HE.problem_items(m) if o}
+    today = HE.dt.datetime.fromtimestamp(day1, HE.dt.UTC).date().isoformat()
+    assert once == {f"restart_unrestored:{today}:1", "dirty_previous_run:2026-09-15:2026-09-15T20:34:15Z"}
+    state = tmp_path / "state"
+    sent: list[str] = []
+    ok = lambda t: sent.append(t) or {"ok": True}  # noqa: E731
+    assert HE.alert(m, state, ok, now=day1) == "sent" and "root 1" in sent[0] and "stop 없이" in sent[0]
+    assert HE.alert(m, state, ok, now=day1 + 3600) == "throttled"
+    day2 = day1 + 86400
+    m2 = m | {"now": day2}
+    assert HE.alert(m2, state, ok, now=day2) == "sent", "확인 전이면 다음 날 다시"
+    assert HE.alert(m2, state, ok, now=day2 + 60) == "throttled"
 
 
 def test_alert_throttles_recurring_sends_once_facts_once_and_keeps_state_on_send_failure(tmp_path):

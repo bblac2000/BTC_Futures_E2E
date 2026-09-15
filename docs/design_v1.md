@@ -136,6 +136,8 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 - [ ] 레지스트리 #4 수수료 가정 판정 결과 기록 — **첫 라이브 진입부터**의 진입 후 검사 로그(레지스트리 #6: 페이퍼 포지션은 `positionRisk`에 없다). 그때까지 보수 가정(수수료가 격리 마진을 줄인다) 유지 · 테스트넷 프로브는 **폐기**(사용자 2026-09-15)
 - [ ] 레지스트리 #5 14일차 재평가 행 존재
 - [ ] **LIVE 거래소 읽기(positionRisk·계좌)를 루프 스레드 밖으로** — 타임아웃 있는 비동기/작업자 큐(Codex L8 #3 · 지금은 동기 · PAPER에서는 호출 없음)
+- [ ] **런타임 규칙 주기 재조회 ≥ 6시간마다 + 24시간 넘은 규칙으로는 진입 금지**(레지스트리 #15 ③ · `LiveChecklist.runtime_rules_refresh_6h_and_entries_need_rules_under_24h` — 페이퍼는 기동 때만)
+- [ ] **일시정지 사유를 집합으로**(레지스트리 #15 ④ · `LiveChecklist.pause_reasons_are_a_set` — 지금은 단일값이라 사유 문구가 덮인다)
 - [ ] LIVE `ExchangeReader` 실구현 — 계좌 응답 필드를 공식 문서 렌더링 + 실캡처로 확인(v6에는 가중치 표만) · 러너 LIVE 경로 + 기동 게이트 호출 · 재기동 시 거래소 포지션 처리 결정
 
 
@@ -280,6 +282,8 @@ Codex L8 1차 반영: 운영 이벤트·안전 상태 저장 실패도 보관·�
 - ~~페이퍼 포지션은 재기동 때 엔진에 복원되지 않는다~~ → **2026-09-16 (a) 구현**: 일치할 때만 복원(`ops/restore.py`).
 - 런타임 규칙은 **기동 때만** 읽는다(주기 재조회 없음) — `rules_from_snapshot` 차단은 재기동으로만 풀린다.
 - PAPER 러너는 기동 게이트(`run_startup_gate`)를 부르지 않는다 — 게이트는 계정을 **변경**(격리·레버리지 POST)하는데 PAPER는 POST 금지이고 읽기 전용 키로는 할 수도 없다. LIVE 배선 때 필수.
-- SIGKILL 뒤 shard 기록기의 미기록 버퍼(최대 한 롤 주기)는 사라지고 대장에는 `connect`만 남는다(`stop`·`stop_dirty` 없음) — health의 `stop_dirty` 검사로는 안 잡힌다(드라이런 2026-09-15: 약 17초). 짝 없는 `connect` 경보는 아직 없다(TODO 5h).
+- SIGKILL 뒤 shard 기록기의 미기록 버퍼(최대 한 롤 주기)는 사라진다 — **수용**(레지스트리 #15 ⑥ · E2E가 정본 수집기 · 드라이런 약 17초).
+  대장에 `stop` 없이 `start`/`connect`만 남은 직전 실행은 기동 때 `dirty_previous_run`으로 기록·한 번 알림(`ops/run_events.py` · #15 ⑤).
+- 확정 사실(`confirmed_facts`): `restart_unrestored`는 /start 확인 전까지 /status + health 하루 한 번 · `dirty_previous_run`은 한 번(#15 ①⑤).
 - LIVE `ExchangeReader`(positionRisk·계좌)는 **프로토콜과 가짜 구현 테스트만** 있다 — 계좌 응답 필드는 v6에 없어(가중치 표만) 공식 문서 렌더링·실캡처 확인이 먼저다.
 - `important_resend` 알림 재전송은 30초 롱폴링 중에는 늦을 수 있다(기본 꺼짐) — 확인 흐름 재전송은 안전 틱(1초)이 돌린다.

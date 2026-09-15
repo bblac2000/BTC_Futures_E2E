@@ -138,6 +138,7 @@ class BotRuntime:
         self.wallet_resync_due = False
         self.rules_blocker: str | None = None                     # 러너: 런타임 규칙 조회 실패 → "rules_from_snapshot"(/start로 안 풀림)
         self.rules_source: dict[str, Any] | None = None
+        self.run_facts: list[dict[str, Any]] = []                 # 러너: 최근 24시간 `dirty_previous_run`(health가 한 번 알림)
         self.last_reconcile_detail: str | None = None
         self._intent_tp: Decimal | None = None
         self._saved_state: str | None = None
@@ -535,8 +536,13 @@ class BotRuntime:
             "kill_switch": self.gate.kill_switch.to_state(),
             "db_errors": self.db_errors, "unrecorded": len(self.unrecorded) + len(self.unrecorded_ops),
             "state_save_failed": self.state_save_failed, "bar_conflicts": self.bar_conflicts, "rules": self.rules_source,
+            "confirmed_facts": self.confirmed_facts(),
             "counts": dict(self.counts),
         }
+
+    def confirmed_facts(self) -> list[dict[str, Any]]:
+        """확정 사실 — gate 알림(사람 /start 확인 전까지 · 하루 한 번) + 이번 기동이 본 직전 실행 dirty(한 번)."""
+        return [dict(n) | {"daily": True} for n in self.gate.notices] + [dict(f) for f in self.run_facts]
 
     def write_status(self, now_ms: int, extra: dict[str, Any] | None = None) -> None:
         if self.status_path is None:
@@ -567,6 +573,9 @@ class BotRuntime:
                      f" · 청산 {ks.liquidations} · 소실 {ks.vanished}")
         if self.db_errors or self.unrecorded:
             lines.append(f"DB 오류 {self.db_errors} · 미기록 {len(self.unrecorded)}")
+        for f in self.confirmed_facts():
+            lines.append(f"📌 확정 사실 {f['kind']} {f['id']}: {f.get('text', '')}"
+                         + (" — /start로 확인" if f.get("daily") else ""))
         return "\n".join(lines)
 
     def position_text(self) -> str:

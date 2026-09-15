@@ -1599,3 +1599,23 @@ Resume in Codex: codex resume 01a0a6c2-e7cf-7243-b4e5-a62bbec146fd
 | 텔레그램 | 2차 발송 5 · 배달 5(message_id) · poll_errors 0 · send_errors 0 · 1차 배달 수는 SIGKILL로 상태 파일이 덮여 기록 없음 |
 | 거래소 쓰기 | 없음 — `ReadOnlyClient`(키 있어도 POST 구조적 불가) · 체결은 `PaperSender` · positionRisk 미조회 |
 | 비밀값 | report.json·status.json에서 키·시크릿·봇 토큰 문자열 검색 0건 |
+
+## 2026-09-16 — 조건부 승인(#15) · dirty_previous_run · 배포 창 런북 준비
+
+**사용자 지시(2026-09-16)**: 복원 드라이런 수용 · 8커밋 푸시(`db13657..69a1757` 완료) · 선택 1–4 조건부 승인 · 배포 전 추가:
+stop 없는 start/connect → `dirty_previous_run` + 확정 사실 알림 한 번(테스트 먼저 · 배포 전 Codex 배치) · 배포 런북은 E2E Restart A/B 모양으로 준비만.
+
+**수용 기록(사용자)**: SIGKILL 때 봇 raw shard의 미기록 버퍼 유실(드라이런 2026-09-15 20:33:58–20:34:15 UTC, 약 17초)은
+**봇 자체 raw 저장소에 한해 수용** — E2E가 정본 수집기다(레지스트리 #15 ⑥).
+
+**구현**: 레지스트리 #15 · `ops/run_events.py`(러너가 기동마다 대장 `start` · 마지막 종결 이벤트 뒤 start/connect → `dirty_previous_run`
+대장 + `DirtyPreviousRun` 운영 이벤트 · 상태 파일 `confirmed_facts` 24시간) · `SafetyGate.notices`(`restart_unrestored` · /start 확인 · 저장) ·
+health `confirmed_facts`(daily = 오늘 날짜 키, 아니면 기록 날짜 키) · `LiveChecklist` 2항목 · 불일치 뒤 flat 엔진 스냅샷.
+
+**구현 중 발견(수정)**:
+- health once 키 보관 필터가 **날짜 없는 키(`dirty_shutdown:<ts>`)를 저장하지 않아** 발송 성공 뒤에도 5분마다 재발송할 상태였다(layer 8 이후 · 미배포라 영향 0).
+  → once 키 = `이름:YYYY-MM-DD[:id]` · 현재 문제 목록의 키는 날짜와 무관하게 보관 · 오래된 키만 40일 뒤 삭제.
+- 불일치 복원 뒤 마지막 엔진 스냅샷이 여전히 포지션을 가리켜 **두 번째 재기동이 같은 불일치를 다시 판정**했다 → 불일치 적용 직후 flat 스냅샷.
+- 봇 prune 타이머(일 03:30 UTC)가 E2E `e2e-integrity.timer`(일 03:30, 추적 사본 기준)와 겹친다 — prune은 미설치, 켜기 전 VPS 실측으로 결정(TODO 5l).
+- 로컬에서 캡처 `--dry-run`으로 `ipRestrict=true`를 확인할 수 없다(화이트리스트가 켜지면 로컬 조회 실패) → 런북 §9: VPS에서 확인.
+

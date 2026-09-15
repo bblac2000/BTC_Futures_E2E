@@ -133,6 +133,8 @@ def test_live_sender_requires_live_mode(rules, mode):
 def test_live_sender_requires_every_checklist_item(rules):
     names = [f.name for f in fields(LiveChecklist)]
     assert "usdm_only_account_no_coinm" in names and "user_approval" in names and "registry5_day14_row_exists" in names
+    #  사용자 2026-09-16: LIVE 필수 — 규칙 주기 재조회(≥6시간마다, 24시간 넘은 규칙으로는 진입 금지) · 일시정지 사유 집합화
+    assert "runtime_rules_refresh_6h_and_entries_need_rules_under_24h" in names and "pause_reasons_are_a_set" in names
     assert LiveChecklist().missing() == names, "기본값은 전부 미충족"
     for n in names:
         cl = LiveChecklist(**{f: f != n for f in names})

@@ -553,3 +553,44 @@ def test_safe_error_stays_linear_on_pathological_text(junk):
     t = time.perf_counter()
     RB.safe_error(RuntimeError(junk + " signature=deadbeef"), secrets=list(KEYS.values()))
     assert time.perf_counter() - t < 0.2
+
+
+# ── 직전 실행 비정상 종료(사용자 2026-09-16) ───────────────────────────────────────
+def _dirty_events(var: Path) -> list[tuple]:
+    con = sqlite3.connect(var / "manifest.sqlite")
+    return con.execute("SELECT source, kind FROM events WHERE kind IN ('start','stop','stop_dirty','dirty_previous_run') "
+                       "ORDER BY id").fetchall()
+
+
+def test_a_previous_run_with_start_or_connect_but_no_stop_is_recorded_as_dirty_exactly_once(tmp_path):
+    """SIGKILL은 대장에 `stop`도 `stop_dirty`도 남기지 않는다 — dirty-stop 검사가 공짜로 통과하면 안 된다."""
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    status = json.loads(cfg.status_path.read_text())
+    assert status["confirmed_facts"] == [], "첫 실행(대장 비어 있음)과 깨끗한 직전 실행은 dirty가 아니다"
+    manifest.log_event(RB.RUN_EVENT_SOURCE, "start", "run 2 (SIGKILL 흉내)")
+    manifest.log_event("feed", "connect", "wss://… (SIGKILL 흉내)")
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    status = json.loads(cfg.status_path.read_text())
+    facts = [f for f in status["confirmed_facts"] if f["kind"] == "dirty_previous_run"]
+    assert len(facts) == 1 and facts[0]["daily"] is False and facts[0]["date"]
+    con = sqlite3.connect(cfg.db_path)
+    assert con.execute("SELECT count(*) FROM engine_events WHERE kind='DirtyPreviousRun'").fetchone()[0] == 1
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    kinds = [k for _s, k in _dirty_events(cfg.var_dir)]
+    assert kinds.count("dirty_previous_run") == 1, "표시한 뒤의 재기동은 다시 dirty로 세지 않는다"
+    assert kinds[-2:] == ["start", "stop"]
+    status = json.loads(cfg.status_path.read_text())
+    assert [f["id"] for f in status["confirmed_facts"]] == [facts[0]["id"]], "24시간 안에는 같은 키로 남는다(health가 한 번만 보낸다)"
+
+
+def test_a_previous_stop_dirty_is_not_double_counted(tmp_path):
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    manifest.log_event(RB.RUN_EVENT_SOURCE, "start", "x")
+    manifest.log_event("feed", "stop_dirty", "writer 제한 시간 내 미완료")
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    assert "dirty_previous_run" not in [k for _s, k in _dirty_events(cfg.var_dir)], "stop_dirty는 이미 기록된 dirty다"

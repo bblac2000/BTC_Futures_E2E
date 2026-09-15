@@ -8,7 +8,8 @@
 ## 경보 규칙 (vps-ops §7 · E2E 2026-08-16 교훈)
 - **키는 고정 코드다**(문구·숫자·날짜가 아니다) — 숫자가 들어간 키는 스로틀이 안 걸리고, 날짜가 들어간 반복 키는 매일 리셋된다.
 - **반복형**(지금 벌어지는 일): 같은 키 집합이면 3시간 스로틀(`ALERT_THROTTLE_SEC`), 집합이 바뀌면 즉시.
-- **하루 한 번**(확정 사실: 비정상 종료·prune 정체): 키에 날짜를 넣어 **딱 한 번**.
+- **하루 한 번**(확정 사실: 비정상 종료·prune 정체·상태 파일 `confirmed_facts`): 키 = `이름:YYYY-MM-DD[:id]`로 **딱 한 번**
+  (`daily` 사실은 날짜 = 오늘 → 확인될 때까지 날마다 한 번 · 그 밖은 기록 날짜 → 한 번).
 - **발송 실패 시 상태를 갱신하지 않는다** — 다음 주기에 재시도. `sent: true`가 아니라 응답 `ok`로 판정(`notify(block=True)`).
 - 텔레그램이 죽은 사실은 텔레그램으로 알릴 수 없다 — 외부 heartbeat는 VPS 배포 논의 항목(런북).
 
@@ -37,6 +38,7 @@ PRUNE_MAX_AGE_S = 8 * 86400
 TELEGRAM_POLL_MAX_AGE_S = 600
 DISK_MIN_FREE_GB = 5.0
 ALERT_THROTTLE_SEC = 3 * 3600
+ONCE_KEY_RETENTION_DAYS = 40                                          # once 키 보관(날짜 기준) — 오래된 키만 지운다
 
 Item = tuple[str, str, bool]                                         # (고정 키, 문구, 하루 한 번)
 
@@ -78,7 +80,9 @@ def problem_items(m: dict[str, Any]) -> list[Item]:
         if st.get("shutdown") is not None:
             code = st.get("exit_code")
             if code not in (0, None):
-                out.append((f"dirty_shutdown:{st.get('ts_ms')}", f"봇 비정상 종료 코드 {code} · {st.get('shutdown_detail')}", True))
+                ts = st.get("ts_ms")
+                day = today if not isinstance(ts, int) else dt.datetime.fromtimestamp(ts / 1000, dt.UTC).date().isoformat()
+                out.append((f"dirty_shutdown:{day}:{ts}", f"봇 비정상 종료 코드 {code} · {st.get('shutdown_detail')}", True))
             if age > STATUS_MAX_AGE_S:
                 out.append(("bot_down", f"봇 정지 상태({st.get('shutdown')}) · 상태 {age:.0f}초 전", False))
         elif age > STATUS_MAX_AGE_S:
@@ -89,6 +93,10 @@ def problem_items(m: dict[str, Any]) -> list[Item]:
             out.append(("feed_stalled", "피드 정지(레지스트리 #1): " + ", ".join(st["stalled"]), False))
         if st.get("db_errors") or st.get("unrecorded"):
             out.append(("db_errors", f"DB 오류 {st.get('db_errors')} · 미기록 {st.get('unrecorded')}", False))
+        for f in st.get("confirmed_facts") or []:
+            #  확정 사실(사용자 2026-09-16): daily = 사람이 확인할 때까지 날마다 한 번 · 아니면 기록 날짜로 딱 한 번
+            day = today if f.get("daily") else str(f.get("date") or today)
+            out.append((f"{f.get('kind')}:{day}:{f.get('id')}", f"📌 {f.get('text')}", True))
         ok_ms = st.get("last_poll_ok_ms")
         if st.get("poll_errors") and (ok_ms is None or now - ok_ms / 1000 > TELEGRAM_POLL_MAX_AGE_S):
             out.append(("telegram_poll", f"텔레그램 폴 실패 {st.get('poll_errors')}회 · 마지막 오류 {st.get('last_poll_error')}",
@@ -102,6 +110,14 @@ def problem_items(m: dict[str, Any]) -> list[Item]:
     if m.get("disk_free_gb") is not None and m["disk_free_gb"] < DISK_MIN_FREE_GB:
         out.append(("disk_low", f"디스크 여유 {m['disk_free_gb']:.1f} GB < {DISK_MIN_FREE_GB} GB — 수집기 우선", False))
     return out
+
+
+def _key_date(key: str) -> dt.date | None:
+    parts = key.split(":")
+    try:
+        return dt.date.fromisoformat(parts[1]) if len(parts) > 1 else None
+    except ValueError:
+        return None
 
 
 def fmt(m: dict[str, Any], texts: list[str], *, title: str) -> str:
@@ -149,8 +165,12 @@ def alert(m: dict[str, Any], state_dir: Path, send: Callable[[str], dict | None]
     if repeat:
         state.write_text(f"{sig}\n{now}")
     if fresh_once:
-        month = dt.datetime.fromtimestamp(now, dt.UTC).strftime("%Y-%m")
-        keep = {k for k in sent_once | {k for k, _ in fresh_once} if month in k or ":" not in k}
+        #  발견(2026-09-16): 이전 필터(`월 문자열 포함`)는 날짜 없는 once 키를 저장하지 않아 5분마다 재발송했다 →
+        #  once 키는 모두 `이름:YYYY-MM-DD[:id]` · 날짜가 보관 기간 안이면 남긴다
+        today = dt.datetime.fromtimestamp(now, dt.UTC).date()
+        current = {k for k, _ in once}                                  # 지금 문제 목록에 있는 키는 날짜와 무관하게 남긴다
+        keep = current | {k for k in sent_once
+                          if (d := _key_date(k)) is not None and (today - d).days <= ONCE_KEY_RETENTION_DAYS}
         state_once.write_text("\n".join(sorted(keep)) + "\n")
     return "sent"
 

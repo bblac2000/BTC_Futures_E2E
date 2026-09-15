@@ -145,8 +145,14 @@ def apply_restore(rt: BotRuntime, decision: RestoreDecision, ts_ms: int) -> list
         d = decision.db
         rt.handle_events([PositionAbandoned(ts_ms, Direction(d["direction"]), Decimal(d["qty"]), Decimal(d["entry_price"]),
                                             f"재기동 복원 불일치 — {decision.detail}")], ts_ms)
+    if decision.db is not None:
+        d = decision.db
+        rt.gate.notices.append({"kind": UNRESTORED_REASON, "id": str(d["root_id"]), "since_ms": ts_ms,
+                                "text": f"재기동 복원 불일치로 DB 포지션 root {d['root_id']} {d['direction']} {d['qty']} @ "
+                                        f"{d['entry_price']}를 손익 없이 닫았다 — 확인 후 /start"})
     rt.gate.pause(MISMATCH_PAUSE)
     rt.record_ops("RestartRestoreMismatch", decision.detail, ts_ms, payload)
+    rt.snapshot(ts_ms, "restart_restore_mismatch")                   # 마지막 스냅샷 = flat 시작(다음 재기동이 같은 불일치를 다시 보지 않게)
     rt.save_state(ts_ms)
     db_side = "없음" if decision.db is None else f"{decision.db['direction']} {decision.db['qty']} @ {decision.db['entry_price']}"
     snap_side = "없음" if decision.position is None else \

@@ -61,6 +61,9 @@ class LiveChecklist:
     usdm_only_account_no_coinm: bool = False                     # B6
     registry4_post_entry_check_logging_ready: bool = False       # #6: 첫 라이브 진입부터 진입 후 검사 로그
     registry5_day14_row_exists: bool = False
+    #  사용자 2026-09-16(페이퍼는 기동 때만 읽음 · LIVE 필수): 런타임 규칙 주기 재조회 ≥ 6시간마다 + 24시간 넘은 규칙으로는 진입 금지
+    runtime_rules_refresh_6h_and_entries_need_rules_under_24h: bool = False
+    pause_reasons_are_a_set: bool = False                       # 사용자 2026-09-16: 일시정지 사유 단일값 → 집합(LIVE 전)
     user_approval: bool = False
 
     def missing(self) -> list[str]:
