@@ -1174,3 +1174,62 @@ E. health + systemd + runbook: MERGE. OnFailure placement, oneshot shape, `%h` p
 Codex session ID: 01a0a5ca-fee4-7482-8847-bbf7c4711c3d
 Resume in Codex: codex resume 01a0a5ca-fee4-7482-8847-bbf7c4711c3d
 ```
+
+### Codex 재검토 #1: layer 8 수정분 (`044cdcd..225a538`, read-only · `task-mu2v78yb-h5a24f`)
+판정: A engine/db FIX FIRST · B runtime MERGE(PAPER 한정) · C safety FIX FIRST · D prune MERGE · E health/systemd MERGE.
+
+| # | 상태 | 조치 |
+|---|---|---|
+| 1 | PARTIAL — DB 장애 중 재기동하면 메모리의 보관 이벤트·저장 실패 표시가 사라져 트립을 잃는다 | ✅ 동의 → **DB 밖 breadcrumb**(`var/run/safety_unsaved.json`, 원자적): 저장 실패·운영 이벤트 보관 중 게이트 상태·이벤트를 쓰고 DB에 다 들어간 뒤에만 삭제. 러너 기동 시 있으면 게이트를 그 상태로 복원 + `system:restart_with_unsaved_safety_state` 일시정지 + 이벤트 재기록 + 알림. 해석 불가면 일시정지하고 파일 보존(fail-closed) |
+| 2 | CLOSED | — |
+| 3 | CLOSED(PAPER 한정) — LIVE 배선 전 FIX FIRST | 설계서 §10 체크리스트 유지 |
+| 4 | CLOSED | — |
+
+```
+Codex session ID: `01a0a5d2-516f-7ff3-8ad8-a6dc6d072216`  
+Reviewed range: `044cdcd6d5b7..225a538a641c`  
+Verification: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python -m pytest -q -p no:cacheprovider tests/` passed.  
+Worktree remained clean.
+
+**Per-Finding Status**
+
+1. **PARTIAL** — transient DB outage handling is fixed, but restart durability is still not fixed.
+Evidence: retry queues/blockers now exist in [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:121), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:145), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:356), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:410), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:454). The regression test verifies retry/no duplicate insert after recovery in [tests/test_ops_runtime.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_runtime.py:371).
+
+Residual scenario: if sqlite is unavailable when a kill-switch trip happens and the process restarts before `_retry_unrecorded()`/`save_state()` succeeds, the in-memory `unrecorded_ops` and `state_save_failed` are lost. Startup restores only DB state: wallet at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:220), safety state at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:223), [safety/gate.py](/home/cms/project/BTC_Futures_E2E/safety/gate.py:87), and [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:462). There is no durable fallback for the failed trip before restart.
+
+Bar-close DB read failure is improved: it sets `db:read_failed` and returns from the feed callback at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:223), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:230), while existing sticky reconcile blockers are not overwritten by non-sticky success/failure paths in [safety/reconcile.py](/home/cms/project/BTC_Futures_E2E/safety/reconcile.py:65).
+
+Fix: persist a fail-closed restart breadcrumb outside the main failing DB path, or make startup refuse entries/start in a recoverable maintenance state after an unsaved safety-state/write-failure status.
+
+2. **CLOSED** — apply-mode prune now requires a non-empty remote md5 for every deletion target before unlinking.
+Evidence: `lsf` failure returns no hashes at [ops/prune.py](/home/cms/project/BTC_Futures_E2E/ops/prune.py:76); apply mode holds the whole day before deletion if any target lacks a hash at [ops/prune.py](/home/cms/project/BTC_Futures_E2E/ops/prune.py:120); deletion uses required hashes at [ops/prune.py](/home/cms/project/BTC_Futures_E2E/ops/prune.py:130). Ledger/marker health still fails on skipped/gapped runs at [ops/prune.py](/home/cms/project/BTC_Futures_E2E/ops/prune.py:164). Tests cover dry-run, ledger gap, lsf failure, and partial lsf listing in [tests/test_ops_vps.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_vps.py:141), [tests/test_ops_vps.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_vps.py:179), [tests/test_ops_vps.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_vps.py:320).
+
+3. **CLOSED for a PAPER-only merge** — LIVE synchronous exchange reads remain, but the scope-out is acceptable here because the runner refuses LIVE and PAPER cannot receive an `ExchangeReader`.
+Evidence: LIVE refusal at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:176), mode/exchange invariant at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:108), LIVE-only sync reads at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:207), and the LIVE checklist prerequisite at [docs/design_v1.md](/home/cms/project/BTC_Futures_E2E/docs/design_v1.md:131). This remains FIX FIRST before any LIVE wiring.
+
+4. **CLOSED** — poll thread no longer reads `CommandBot`/engine state.
+Evidence: loop-owned `threading.Event` at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:125), loop thread sets/clears it at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:311), runner passes only `rt.fast_poll.is_set` at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:237), and poll thread only calls `fast()` at [ops/telegram_link.py](/home/cms/project/BTC_Futures_E2E/ops/telegram_link.py:39). Test coverage: [tests/test_ops_runtime.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_runtime.py:393).
+
+**New Findings**
+
+No new findings beyond the residual restart-durability gap from previous finding #1.
+
+**Area Verdicts**
+
+A. engine/db: **FIX FIRST** due to the remaining restart-loss path for unsaved safety/ops state.
+
+B. runtime/runner/threading/telegram: **MERGE** for PAPER-only. LIVE sync reads are explicitly blocked/scoped before LIVE.
+
+C. safety #11-#13: **FIX FIRST** because a kill-switch trip can still be lost across restart if DB recovery has not happened yet.
+
+D. prune/sync/data stores: **MERGE**.
+
+E. health/systemd/runbook: **MERGE**.
+
+Codex session ID: `01a0a5d2-516f-7ff3-8ad8-a6dc6d072216`  
+Resume in Codex: `codex resume 01a0a5d2-516f-7ff3-8ad8-a6dc6d072216`
+
+Codex session ID: 01a0a5d2-516f-7ff3-8ad8-a6dc6d072216
+Resume in Codex: codex resume 01a0a5d2-516f-7ff3-8ad8-a6dc6d072216
+```

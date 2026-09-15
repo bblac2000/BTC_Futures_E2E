@@ -405,3 +405,21 @@ def test_fast_poll_flag_is_owned_by_the_loop_thread(rules):
         clock.t = t
         rt.safety_tick(t)
     assert rt.bot is not None and rt.bot.pending is None and not rt.fast_poll.is_set()
+
+
+# ── Codex L8 재검토 #1 잔여: DB가 안 되는 채로 재기동해도 트립을 잃지 않는다(DB 밖 breadcrumb) ─────────
+def test_unsaved_safety_state_leaves_a_breadcrumb_outside_the_db_until_durable(rules, tmp_path):
+    rt, counter, clock = build(rules, tmp=tmp_path)
+    crumb_path = rt.breadcrumb_path = tmp_path / "safety_unsaved.json"
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    real = rt.con
+    rt.con = sqlite3.connect(":memory:")
+    rt.engine.wallet = D("900")
+    feed(rt, counter, clock, DAY0 + 61_000, DAY0 + 121_000)
+    crumb = json.loads(crumb_path.read_text())
+    assert crumb["safety_gate"]["kill_switch"]["tripped"]["reason"] == "daily_loss"
+    assert [o["kind"] for o in crumb["ops"]] == ["KillSwitchTripped"]
+    rt.con = real
+    clock.t += 1000
+    rt.safety_tick(clock.t)
+    assert not crumb_path.exists(), "DB에 저장된 뒤에만 지운다"

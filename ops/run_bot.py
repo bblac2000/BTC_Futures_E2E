@@ -83,6 +83,10 @@ class RunConfig:
         return self.var_dir / "run" / "bot.lock"
 
     @property
+    def breadcrumb_path(self) -> Path:
+        return self.var_dir / "run" / "safety_unsaved.json"
+
+    @property
     def raw_root(self) -> Path:
         return self.var_dir / "raw" / "live" / self.symbol
 
@@ -221,8 +225,27 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
     wallet = last_engine_wallet(con, cfg.mode) or cfg.capital
     counter = DeliveryCounter(FED_STREAMS, start_ms=now)
     gate = SafetyGate.load(con, REGISTERED_KILL_SWITCH, StaleDataGuard(counter), mode=cfg.mode.value, wallet=wallet)
+    crumb_ops: list[dict[str, Any]] = []
+    crumb_note: str | None = None
+    if cfg.breadcrumb_path.exists():
+        #  Codex L8 재검토 #1: 지난 실행이 DB에 못 쓴 안전 상태 — DB보다 새롭다. 복원하고 진입을 멈춘다(fail-closed)
+        try:
+            crumb = json.loads(cfg.breadcrumb_path.read_text())
+            gate = SafetyGate.from_state(crumb["safety_gate"], REGISTERED_KILL_SWITCH, StaleDataGuard(counter), wallet=wallet)
+            crumb_ops = list(crumb.get("ops") or [])
+            crumb_note = f"복원(ops {len(crumb_ops)}건)"
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            crumb_note = f"해석 불가({type(e).__name__}) — 파일 보존, 사람 확인"
+        gate.pause("system:restart_with_unsaved_safety_state")
     engine = Engine(rules, PaperSender(rules), mode=cfg.mode, wallet=wallet, limits=SizingLimits())
     rt = BotRuntime(engine=engine, gate=gate, con=con, symbol=cfg.symbol, clock_ms=clock_ms, status_path=cfg.status_path)
+    if crumb_note is None or crumb_note.startswith("복원"):
+        rt.breadcrumb_path = cfg.breadcrumb_path                         # 해석 못 한 breadcrumb는 경로를 주지 않아 지우지 않는다
+    for o in crumb_ops:
+        rt.record_ops(str(o["kind"]), str(o["detail"]), int(o["ts_ms"]), o.get("payload"))
+    if crumb_note is not None:
+        rt.record_ops("RestartWithUnsavedSafetyState", crumb_note, now)
+        rt.save_state(now)                                               # 성공하면 breadcrumb 삭제(복원한 경우만)
 
     link: TelegramLink | None = None
     if cfg.telegram:
@@ -238,6 +261,9 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
         link.start()
         rt.status_extra = link.stats
 
+    if crumb_note is not None:
+        rt.alert(f"🛑 재기동: 지난 실행의 저장되지 않은 안전 상태 breadcrumb {crumb_note} · 신규 진입 일시정지 — 확인 후 /start",
+                 important=True)
     db_open = R.open_position_state(con, mode=cfg.mode.value, symbol=cfg.symbol)
     rt.alert(f"🟢 기동 [{cfg.mode.value}] {cfg.symbol} · 지갑 {wallet} · 규칙 {', '.join(sources)} · "
              f"킬스위치 {'발동 ' + gate.kill_switch.tripped.reason if gate.kill_switch.tripped else '정상'}")

@@ -20,7 +20,9 @@
 - 이벤트 처리 순서: 킬스위치 관측(기록 실패와 무관하게) → DB 기록(실패하면 보관 후 매 틱 재시도 + 진입 금지) → 알림 → 스냅샷.
 - 킬스위치·stale·차단 해제 같은 운영 사건은 `engine_events`에 `record_ops_event`로 남긴다. **운영 이벤트·안전 상태 저장도**
   실패하면 보관·재시도하고 저장될 때까지 진입 금지(`db:unrecorded_ops` · `db:unsaved_safety_state` · Codex L8 #1) —
-  DB가 잠긴 사이 킬스위치가 발동하고 재기동하면 트립이 사라지는 경로를 막는다.
+  DB가 잠긴 사이 킬스위치가 발동하고 재기동하면 트립이 사라지는 경로를 막는다. 저장되지 않은 동안에는 **DB 밖 breadcrumb**
+  (`var/run/safety_unsaved.json`, 원자적)에 게이트 상태·보관 이벤트를 남기고, DB에 다 들어간 뒤에만 지운다 — 러너가 재기동 때
+  읽어 트립을 복원하고 진입을 멈춘다(Codex L8 재검토 #1).
 
 ## 사용자 결정 반영 (레지스트리 #11·#12·#13 · 2026-09-16)
 - `/stop` = 진입 차단 + 전량 청산 · `/close` = 청산만 · `/pause` = 진입 차단, 포지션 유지.
@@ -122,6 +124,7 @@ class BotRuntime:
         self.unrecorded_ops: list[tuple[str, str, int, dict[str, Any] | None]] = []
         self.state_save_failed = False
         self.db_read_failed = False
+        self.breadcrumb_path: Path | None = None                  # 러너가 var/run/safety_unsaved.json으로 정한다
         self.fast_poll = threading.Event()                        # 루프 스레드가 세운다 · 폴 스레드는 읽기만
         self.db_errors = 0
         self.bar_conflicts = 0
@@ -363,6 +366,7 @@ class BotRuntime:
                 self.db_errors += 1
                 break
             self.unrecorded_ops.pop(0)
+        self._clear_breadcrumb_if_durable()
         while self.unrecorded:
             events, tp = self.unrecorded[0]
             try:
@@ -410,6 +414,7 @@ class BotRuntime:
     def record_ops(self, kind: str, detail: str, ts_ms: int, payload: dict[str, Any] | None = None) -> None:
         if self.unrecorded_ops:                               # 순서 보존 — 앞선 실패가 남아 있으면 뒤에 붙인다
             self.unrecorded_ops.append((kind, detail, ts_ms, payload))
+            self._write_breadcrumb(ts_ms)
             return
         try:
             R.record_ops_event(self.con, kind, detail, ts_ms=ts_ms, mode=self.mode.value, symbol=self.symbol,
@@ -417,6 +422,7 @@ class BotRuntime:
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1
             self.unrecorded_ops.append((kind, detail, ts_ms, payload))
+            self._write_breadcrumb(ts_ms)
             logger.error("운영 이벤트 기록 실패(보관·재시도) %s: %s", kind, e)
 
     # ── 스냅샷·상태 ─────────────────────────────────────────────────────────
@@ -452,21 +458,45 @@ class BotRuntime:
             logger.error("거래소 스냅샷 기록 실패: %s", ex)
 
     def save_state(self, ts_ms: int) -> None:
-        state = json.dumps({"paused_by": self.gate.paused_by, "kill_switch": self.gate.kill_switch.to_state(),
-                            "reconcile": self.gate.reconcile.to_state()}, sort_keys=True)
+        state = json.dumps(self.gate.to_state(), sort_keys=True)
         if state == self._saved_state:
             self.state_save_failed = False
+            self._clear_breadcrumb_if_durable()
             return
         try:
             self.gate.save(self.con, ts_ms=ts_ms, mode=self.mode.value)
             self._saved_state = state
             self.state_save_failed = False
+            self._clear_breadcrumb_if_durable()
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1
             if not self.state_save_failed:
                 self.alert(f"🔴 안전 상태 저장 실패 — 저장될 때까지 진입 금지 · 틱마다 재시도: {type(e).__name__}: {e}",
                            important=True)
             self.state_save_failed = True
+            self._write_breadcrumb(ts_ms)
+
+    def _write_breadcrumb(self, ts_ms: int) -> None:
+        """DB 밖 fail-closed 기록 — 원자적 · 실패하면 로그만(디스크까지 죽었으면 할 수 있는 게 없다)."""
+        if self.breadcrumb_path is None:
+            return
+        body = {"ts_ms": ts_ms, "safety_gate": self.gate.to_state(),
+                "ops": [{"kind": k, "detail": d, "ts_ms": t, "payload": p} for k, d, t, p in self.unrecorded_ops]}
+        tmp = self.breadcrumb_path.with_suffix(".tmp")
+        try:
+            self.breadcrumb_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps(body, ensure_ascii=False, default=str))
+            os.replace(tmp, self.breadcrumb_path)
+        except OSError as e:
+            logger.error("안전 상태 breadcrumb 쓰기 실패: %s", e)
+
+    def _clear_breadcrumb_if_durable(self) -> None:
+        if self.breadcrumb_path is None or self.state_save_failed or self.unrecorded_ops:
+            return
+        try:
+            self.breadcrumb_path.unlink(missing_ok=True)
+        except OSError as e:
+            logger.error("breadcrumb 삭제 실패: %s", e)
 
     def status(self, now_ms: int) -> dict[str, Any]:
         pos = self.engine.position

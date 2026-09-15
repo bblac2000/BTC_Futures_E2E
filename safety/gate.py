@@ -79,14 +79,21 @@ class SafetyGate:
         lines.append("신규 진입 허용" if not remaining else f"⚠️ 아직 진입 금지: {', '.join(remaining)}")
         return "\n".join(lines)
 
+    def to_state(self) -> dict:
+        return {"paused_by": self.paused_by, "kill_switch": self.kill_switch.to_state(),
+                "reconcile": self.reconcile.to_state()}
+
     def save(self, con: sqlite3.Connection, *, ts_ms: int, mode: str) -> None:
-        R.save_safety_state(con, STATE_NAME, {"paused_by": self.paused_by, "kill_switch": self.kill_switch.to_state(),
-                                              "reconcile": self.reconcile.to_state()}, ts_ms=ts_ms, mode=mode)
+        R.save_safety_state(con, STATE_NAME, self.to_state(), ts_ms=ts_ms, mode=mode)
 
     @classmethod
     def load(cls, con: sqlite3.Connection, limits: KillSwitchLimits, stale: StaleDataGuard, *, mode: str,
              wallet: Decimal) -> SafetyGate:
-        state = R.load_safety_state(con, STATE_NAME, mode=mode)
+        return cls.from_state(R.load_safety_state(con, STATE_NAME, mode=mode), limits, stale, wallet=wallet)
+
+    @classmethod
+    def from_state(cls, state: dict | None, limits: KillSwitchLimits, stale: StaleDataGuard, *,
+                   wallet: Decimal) -> SafetyGate:
         if state is None:
             return cls(KillSwitch(limits, wallet=wallet), stale, ReconcileGuard())
         rec = ReconcileGuard()

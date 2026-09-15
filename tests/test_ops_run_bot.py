@@ -246,3 +246,36 @@ def test_link_poll_thread_backs_off_on_errors_and_only_queues_updates():
     assert sleeps[:2] == [1.0, 2.0] and link.poll_errors == 2 and "down" in (link.last_poll_error or "")
     assert p.executed == ["a1"] and link.stats()["sent"] == 1 and p.fast_seen[0] is True
     assert link.stats()["delivered"] == 1 and link.stats()["last_message_id"] == 7
+
+
+def test_restart_with_a_breadcrumb_restores_the_trip_pauses_entries_and_persists_it(tmp_path):
+    cfg = config(tmp_path)
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    crumb.parent.mkdir(parents=True, exist_ok=True)
+    state = {"paused_by": None, "reconcile": {"blocker": None, "sticky": False},
+             "kill_switch": {"tripped": {"ts_ms": T0, "reason": "daily_loss", "detail": "x"}, "consecutive_losses": 0,
+                             "liquidations": 0, "vanished": 0, "last_flat_wallet": "1000", "day": "2026-09-15",
+                             "day_start_equity": "1000", "resumed_by": None}}
+    crumb.write_text(json.dumps({"ts_ms": T0, "safety_gate": state,
+                                 "ops": [{"kind": "KillSwitchTripped", "detail": "x", "ts_ms": T0, "payload": {"reason": "daily_loss"}}]}))
+    tg = FakeTelegram()
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    assert run(cfg, clock=clock, tg=tg, seconds=5) == 0
+    con = sqlite3.connect(cfg.db_path)
+    (latest,) = con.execute("SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()
+    body = json.loads(latest)
+    assert body["kill_switch"]["tripped"]["reason"] == "daily_loss" and body["paused_by"] == "system:restart_with_unsaved_safety_state"
+    assert con.execute("SELECT count(*) FROM engine_events WHERE kind='KillSwitchTripped'").fetchone()[0] == 1
+    assert not crumb.exists() and any("저장되지 않은 안전 상태" in t for t in tg.texts())
+
+
+def test_unreadable_breadcrumb_fails_closed(tmp_path):
+    cfg = config(tmp_path)
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    crumb.parent.mkdir(parents=True, exist_ok=True)
+    crumb.write_text("{broken")
+    tg = FakeTelegram()
+    assert run(cfg, clock=Clock(T0 + 10 * 60_000 + 1000), tg=tg, seconds=5) == 0
+    body = json.loads(sqlite3.connect(cfg.db_path).execute(
+        "SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
+    assert body["paused_by"] == "system:restart_with_unsaved_safety_state" and crumb.exists(), "해석 못 한 파일은 사람이 본다"
