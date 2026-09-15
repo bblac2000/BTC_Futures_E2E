@@ -285,14 +285,15 @@ def test_live_position_amount_mismatch_blocks_entries(rules):
 
 @dataclass
 class FlakyLive(SpySender):
-    """LIVE 흉내 — positionRisk 실패 주입, 거래소 보유 수량을 직접 지정."""
+    """LIVE 흉내 — positionRisk 실패 주입, 거래소 보유 수량·평균 진입가를 직접 지정."""
     fail_position_risk: bool = False
+    exchange_entry: Decimal = D("60000.5")
 
     def position_risk(self) -> PositionRisk | None:
         self.calls.append(("position_risk",))
         if self.fail_position_risk:
             raise OrderOutcomeUnknown("positionRisk timeout")
-        return PositionRisk(self.exchange_amt or D("0"), D("60000.5"), self.exchange_liq or D("0"))
+        return PositionRisk(self.exchange_amt or D("0"), self.exchange_entry, self.exchange_liq or D("0"))
 
 
 def test_live_post_fill_position_risk_failure_keeps_the_position_and_blocks(rules):
@@ -318,17 +319,67 @@ def test_live_entry_outcome_unknown_adopts_the_exchange_position(rules):
     assert c.reason is ExitReason.SL
 
 
-def test_live_exit_closes_what_the_exchange_holds(rules):
+def test_live_exit_syncs_to_the_exchange_quantity_and_average_entry_before_closing(rules):
+    """Codex L3 재검토 3: 거래소가 더 들고 있으면 그 수량을 닫되, 손익은 **거래소 평균 진입가** 기준 + 진입 차단."""
     s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
     probe = size_entry(D("60000"), intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
     s.exchange_amt = probe.qty
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
     e.on_tick(tick(DAY0 + 1000, "60000"))
-    s.exchange_amt = probe.qty + D("0.004")                    # 거래소가 더 들고 있다(부분 불명 조각 등)
-    e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000)
+    s.exchange_amt, s.exchange_entry = probe.qty + D("0.004"), D("59990")
+    ev = e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000)
     exits = [c[1] for c in s.calls if c[0] == "send" and c[1].get("reduceOnly") == "true"]
     assert sum(D(x["quantity"]) for x in exits) == probe.qty + D("0.004")
+    (c,) = of(ev, PositionClosed)
+    assert c.entry_price == D("59990") and c.qty == probe.qty + D("0.004") and c.exit_price is not None
+    assert c.realized_pnl_usdt == (c.exit_price - D("59990")) * c.qty
+    assert e.entries_blocked
+
+
+def test_live_malformed_position_read_never_raises_after_orders(rules):
+    """Codex L3 재검토 1: 진입 후·청산 전·청산 후 조회가 파서 예외를 내도 엔진은 예외 없이 막고 계속 간다."""
+    class Broken(FlakyLive):
+        def position_risk(self):
+            self.calls.append(("position_risk",))
+            raise OrderOutcomeUnknown("positionRisk 해석 불가")
+    s = Broken(PaperSender(rules), mode=Mode.LIVE)
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    assert of(ev, EntryFilled) and e.position is not None and e.entries_blocked
+    (c,) = of(e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000), PositionClosed)   # 조회 실패 → 내부 수량으로 청산
+    assert c.qty == of(ev, EntryFilled)[0].post_fill.qty
+
+
+def test_live_adoption_never_shrinks_below_confirmed_fills(rules):
+    """Codex L3 재검토 2: 거래소 수량이 확인된 체결보다 작으면 채택하지 않는다(지갑·포지션 불일치 방지) — 차단만."""
+    sr = replace(rules.symbol_rules, market_max_qty=D("0.010"))
+    r2 = replace(rules, symbol_rules=sr)
+    s = FlakyLive(PaperSender(r2), mode=Mode.LIVE, unknown_on_send=2, exchange_amt=D("0.005"))
+    e = Engine(r2, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent(sl="59820", risk="0.02"))
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    (fill,) = of(ev, EntryFilled)
+    assert len(fill.fills) == 1 and e.position is not None and e.position.qty == fill.fills[0].qty == D("0.010")
+    assert e.entries_blocked
+    assert e.wallet == W0 - fill.fills[0].commission
+
+
+def test_live_adoption_uses_the_exchange_average_entry_for_the_whole_quantity(rules):
+    sr = replace(rules.symbol_rules, market_max_qty=D("0.010"))
+    r2 = replace(rules, symbol_rules=sr)
+    s = FlakyLive(PaperSender(r2), mode=Mode.LIVE, unknown_on_send=2, exchange_amt=D("0.020"), exchange_entry=D("60001"))
+    e = Engine(r2, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent(sl="59820", risk="0.02"))
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    (fill,) = of(ev, EntryFilled)
+    pos = e.position
+    assert pos is not None and pos.qty == D("0.020") and pos.entry_price == D("60001")
+    known = fill.fills[0]
+    #  확인된 조각 수수료 + 응답 못 받은 수량(0.010)은 거래소 평균가 × 런타임 taker로 추정
+    assert pos.entry_commission == known.commission + D("0.010") * D("60001") * r2.commission.taker
+    assert e.wallet == W0 - pos.entry_commission and e.entries_blocked
 
 
 # ── 청산 우선순위 ─────────────────────────────────────────────────────────────

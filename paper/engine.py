@@ -212,7 +212,8 @@ class Engine:
     def _read_position(self, ts_ms: int) -> tuple[PositionRisk | None, list[object]]:
         try:
             return self.sender.position_risk(), []
-        except (OrderOutcomeUnknown, BinanceAPIError, TransportError) as e:
+        except (OrderOutcomeUnknown, BinanceAPIError, TransportError, KeyError, TypeError, ArithmeticError,
+                AttributeError) as e:
             return None, [self._block(ts_ms, f"positionRisk 조회 실패 {type(e).__name__}: {e} — 대사 필요")]
 
     def _execute_entry(self, ref_mark: Decimal, ts_ms: int) -> list[object]:
@@ -251,10 +252,14 @@ class Engine:
             pr, blocked = self._read_position(ts_ms)
             ev += blocked
             sign = 1 if d.direction is Direction.LONG else -1
-            if pr is not None and pr.amt * sign > 0 and abs(pr.amt) != qty:
+            #  🔴 Codex L3 재검토 2: 확인된 체결보다 **클 때만** 채택(줄이지 않는다) · 전 수량을 거래소 평균가로.
+            #  소유권은 구분할 수 없다 — LIVE 전제(USDⓈ-M 전용 계정·기동 시 flat)가 같은 방향 잔량을 이 봇 것으로 만든다.
+            if pr is not None and pr.amt * sign > 0 and abs(pr.amt) > qty and pr.entry_price > 0:
                 extra = abs(pr.amt) - qty
-                commission += max(extra, Decimal()) * pr.entry_price * self.rules.commission.taker
+                commission += extra * pr.entry_price * self.rules.commission.taker
                 qty, entry = abs(pr.amt), pr.entry_price
+            elif pr is not None and abs(pr.amt) != qty:
+                ev.append(self._block(ts_ms, f"진입 불명 후 거래소 수량 {pr.amt} ≠ 확인 체결 {qty} — 채택 안 함, 대사 필요"))
         if qty == 0:
             if failure is not None and not isinstance(failure, OrderOutcomeUnknown):
                 ev.append(EntrySkipped(ts_ms, d, SkipReason.SEND_FAILED, f"{type(failure).__name__}: {failure}"))
@@ -365,7 +370,13 @@ class Engine:
                     ev.append(ExitFailed(ts_ms, reason, f"거래소 수량 {pr.amt}이 내부 방향 {pos.direction}과 반대 — 청산 보류"))
                     ev.append(self._block(ts_ms, "대사 불일치(반대 부호)"))
                     return ev
-                signed = pr.amt
+                if pr.amt != signed:
+                    #  🔴 Codex L3 재검토 3: 거래소 기준으로 동기화한 뒤 닫는다(손익 기준 = 거래소 평균 진입가)
+                    ev.append(self._block(ts_ms, f"청산 전 대사 불일치: 내부 {signed} → 거래소 {pr.amt}(평균가 {pr.entry_price})로 동기화"))
+                    pos.qty = abs(pr.amt)
+                    if pr.entry_price > 0:
+                        pos.entry_price = pr.entry_price
+                    signed = pr.amt
         fills: list[Fill] = []
         failure: Exception | None = None
         try:

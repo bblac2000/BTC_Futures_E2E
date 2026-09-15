@@ -259,3 +259,17 @@ def test_live_unparseable_update_time_falls_back_to_local_ts(rules):
         return Response(200, r.data | {"updateTime": "soon"}, {}) if path == "/fapi/v1/order" else r
     c.post = post  # type: ignore[method-assign]
     assert s.send_market(params(rules), ref_mark=D("60000"), ts_ms=5).ts_ms == 5
+
+
+@pytest.mark.parametrize("rows", [
+    [{"symbol": "BTCUSDT", "positionSide": "BOTH", "entryPrice": "1", "liquidationPrice": "1"}],          # positionAmt 없음
+    [{"symbol": "BTCUSDT", "positionSide": "BOTH", "positionAmt": "abc", "entryPrice": "1", "liquidationPrice": "1"}],
+    {"not": "a list"},
+    [None],
+])
+def test_live_malformed_position_risk_is_outcome_unknown_not_a_parser_error(rules, rows):
+    """Codex L3 재검토 1: 주문 뒤 대사 조회의 모양 오류도 이름 있는 예외 하나로 — 엔진이 잡아 진입을 막는다."""
+    s, c = live(rules)
+    c.get = lambda path, params=None, *, signed=False: Response(200, rows, {})  # type: ignore[method-assign]
+    with pytest.raises(OrderOutcomeUnknown):
+        s.position_risk()

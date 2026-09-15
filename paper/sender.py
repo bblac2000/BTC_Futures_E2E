@@ -176,13 +176,19 @@ class LiveSender:
             return estimate
 
     def position_risk(self) -> PositionRisk:
-        rows = [r for r in self.client.get(POSITION_RISK, {"symbol": self.rules.symbol}, signed=True).data
-                if r.get("symbol") == self.rules.symbol and r.get("positionSide", "BOTH") == "BOTH"]
-        if len(rows) != 1:
-            raise OrderOutcomeUnknown(f"positionRisk {self.rules.symbol}/BOTH 행 {len(rows)}개")
-        r = rows[0]
-        return PositionRisk(Decimal(str(r["positionAmt"])), Decimal(str(r["entryPrice"])),
-                            Decimal(str(r["liquidationPrice"])), raw=r)
+        """BOTH 행 1개. 🔴 Codex L3 재검토 1: 응답 모양·숫자 해석 실패도 `OrderOutcomeUnknown` 하나로 올린다
+        (주문 뒤 대사 조회에서 파서 예외가 엔진 밖으로 새지 않게). 전송·HTTP 오류는 원래 예외 그대로."""
+        data = self.client.get(POSITION_RISK, {"symbol": self.rules.symbol}, signed=True).data
+        try:
+            rows = [r for r in data if isinstance(r, dict) and r.get("symbol") == self.rules.symbol
+                    and r.get("positionSide", "BOTH") == "BOTH"]
+            if len(rows) != 1:
+                raise OrderOutcomeUnknown(f"positionRisk {self.rules.symbol}/BOTH 행 {len(rows)}개")
+            r = rows[0]
+            return PositionRisk(Decimal(str(r["positionAmt"])), Decimal(str(r["entryPrice"])),
+                                Decimal(str(r["liquidationPrice"])), raw=r)
+        except (KeyError, TypeError, ArithmeticError, AttributeError) as e:
+            raise OrderOutcomeUnknown(f"positionRisk 해석 불가 {type(e).__name__}: {data!r}") from e
 
 
 def make_sender(mode: Mode, rules: RuntimeRules, *, client: RestClient | None = None,
