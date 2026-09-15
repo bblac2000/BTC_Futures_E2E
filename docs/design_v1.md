@@ -232,7 +232,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | `notify/poller.py` | getUpdates 롱폴링(offset = 최대 update_id + 1, 응답마다) · 처리 실패도 offset 넘김(재처리로 두 번 청산 방지) · 확인 대기 중 1초 폴링 · `setup()` = setMyCommands + MenuButtonCommands |
 
 - 확인 흐름(open-decisions #9): `/stop`·`/close` → 포지션·uPnL + [예/아니오] → +3·+6·+9초 재전송 → +12초 무응답 취소 "청산 안 됨" · **+12초 기한은 콜백에서도 검사**(tick이 멈춰도 늦은 '예' 불실행 · Codex L6·7 #1) · 콜백 nonce 60초 만료(마지막 방어선) · 모든 콜백에 answer.
-- 이 저장소의 해석(사용자 확인 필요 시 보고): `/stop` 예 = 진입 차단 + 전량 청산, `/close` 예 = 청산만 · 확인 대기는 하나 · flat이면 `/close`는 확인 없이 "포지션 없음" · 컨트롤러 예외는 "실패" 문구.
+- 레지스트리 #13(2026-09-16 확정): `/stop` 예 = 진입 차단 + 전량 청산, `/close` 예 = 청산만, `/pause` = 진입 차단·포지션 유지. 이 저장소의 해석: 확인 대기는 하나 · flat이면 `/close`는 확인 없이 "포지션 없음" · 컨트롤러 예외는 "실패" 문구.
 - 중요 이벤트 3회 규칙은 `important_resend` 설정(기본 꺼짐) — [확인] 버튼, 3초 간격 3회.
 - 아직 없음: `BotController` 구현(엔진·`SafetyGate`·DB 배선) · 폴링 스레드·백오프 — layer 8.
 
@@ -240,7 +240,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | 모듈 | 역할 |
 |---|---|
 | `safety/killswitch.py` | 일일 손실(UTC 날짜 첫 equity 기준) · 연속 순손실 n회(직전 flat 지갑 대비 — 수수료·펀딩 포함) · 청산 1회 → 발동(첫 사유 유지) · 사람 `resume`만 해제 · 상태 저장/복원 |
-| `safety/stale.py` | 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 미평가도 금지 · 포지션 있으면 `hold_and_alert`(자동 청산 안 함) · 정지 집합이 바뀔 때만 알림 |
+| `safety/stale.py` | 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 미평가도 금지 · 포지션 있으면 `hold_and_alert` · grace 초과 스트림이 있으면 `close`(레지스트리 #12, 2026-09-16) · 정지 집합이 바뀔 때만 알림 |
 | `safety/reconcile.py` | 부호 있는 수량 3자 대사(LIVE: 내부↔positionRisk↔DB · PAPER: 내부↔DB, 거래소 값 주면 오류) · 수량 불일치 sticky(사람 해제) · 조회 실패는 다음 성공으로 해제 · 사유 종류가 바뀔 때만 알림 |
 | `safety/rate_guard.py` | 어떤 한도든 사용량 ≥ 80% → `relax_polling` 신호(주문은 막지 않음) |
 | `safety/gate.py` | `SafetyGate` — 차단 사유 전부 나열 · `/pause` · `/start`(일시정지·킬스위치·sticky 대사 해제, 피드 정지는 못 풂 → 남은 사유 알림) · 저장/복원(`safety_state`) |

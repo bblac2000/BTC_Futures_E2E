@@ -1,8 +1,10 @@
 """layer 7 `safety/` — strategy-modules §6.
 
-- 킬스위치: 일일 손실 한도(equity x%) · 연속 손실 n회 · 청산 1회 → 신규 진입 중단 + 알림 · 재개는 **사람의 /start만**.
-  x·n은 사전확약 값 → **기본값 없음**(레지스트리 PENDING 행) · 트립 상태는 DB에 남아 재시작이 풀지 않는다
-- stale-data kill: 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 포지션은 보유 + 알림(자동 청산 안 함)
+- 킬스위치: 일일 손실 한도(equity x%) · 연속 손실 n회 · 청산 1회 · 소실 1회 → 신규 진입 중단 + 알림 · 재개는 **사람의 /start만**.
+  값은 레지스트리 #11(5% · 5회 · 청산 1 · 소실 1) · `KillSwitchLimits` 필드는 기본값 없음 · 트립 상태는 DB에 남아 재시작이 풀지 않는다
+  · 일일 손실 트립은 같은 UTC 날짜에 /start 무변경(#13)
+- stale-data kill: 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 포지션 있으면 grace(120초) 초과 스트림에서 자동 청산(#12) ·
+  분당 규칙만으로 정지면 보유 + 알림
 - 대사: 봇 내부 ↔ positionRisk(LIVE만, #6) ↔ DB positions — 불일치 → 진입 금지 + 알림
 - rate-limit: 사용량 ≥ 80% → 폴링 완화 신호
 """
