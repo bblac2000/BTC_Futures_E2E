@@ -145,7 +145,7 @@ def test_pending_entry_is_cancelled_and_recorded_when_the_gate_closes_before_exe
     assert rows(rt, "SELECT outcome, skip_reason FROM decisions") == [("skipped", "entries_blocked")]
 
 
-# ── stale (레지스트리 #12) ─────────────────────────────────────────────────────
+# ── stale (레지스트리 #12 → #14) ─────────────────────────────────────────────────────
 def test_stale_past_grace_closes_the_position_at_the_last_mark_alerts_and_blocks_until_healthy(rules):
     rt, counter, clock = build(rules)
     attach_bot(rt, clock)
@@ -167,9 +167,26 @@ def test_stale_past_grace_closes_the_position_at_the_last_mark_alerts_and_blocks
     (ref,) = rows(rt, "SELECT ref_mark FROM orders WHERE intent='exit'")[0]
     assert reason == "stale_data" and ref == "60050", "PAPER stale 청산 기준가 = 마지막으로 받은 mark"
     msgs = texts(rt)
-    assert any("stale 청산" in m and "레지스트리 #12" in m for m in msgs)
+    assert any("stale 청산" in m and "레지스트리 #14" in m for m in msgs)
     assert rows(rt, "SELECT kind FROM engine_events WHERE kind='StaleClose'") == [("StaleClose",)]
     assert any(b.startswith("stale") for b in rt.entry_blockers()), "청산 뒤에도 피드가 회복될 때까지 진입 금지"
+
+
+def test_registry_14_kline_streams_past_grace_block_entries_but_keep_the_position(rules):
+    rt, counter, clock = build(rules)
+    attach_bot(rt, clock)
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    rt.submit_entry(intent(decided_ms=DAY0 + 60_000))
+    feed(rt, counter, clock, DAY0 + 61_000, DAY0 + 63_000)
+    assert rt.engine.position is not None
+    for t in range(DAY0 + 63_000, DAY0 + 400_000, 1000):          # mark만 계속 — kline 두 스트림은 270초 넘게 무수신
+        clock.t = t
+        counter.observe("markprice", t)
+        rt.on_mark(tick(t, "60000"))
+        rt.safety_tick(t)
+    assert rt.engine.position is not None and rt.counts["stale_closes"] == 0, "kline 정지는 청산하지 않는다(#14)"
+    assert any(b.startswith("stale:") and "kline1m" in b for b in rt.entry_blockers())
+    assert any("피드 정지" in m for m in texts(rt))
 
 
 def test_stale_close_failure_retries_every_tick_and_alerts_once_per_distinct_failure(rules):

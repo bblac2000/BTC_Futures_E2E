@@ -14,7 +14,7 @@
 - **진입 게이트는 하나**: `entry_blockers()` = 엔진 차단 사유(`engine:`) ∪ `SafetyGate.entry_blockers()` ∪ 런타임 사유(`db:`).
   `submit_entry`만 `Engine.request_entry`를 부른다 · 결정 뒤 체결 전에 게이트가 닫히면 대기 진입을 버리고 기록한다.
 - **stale은 벽시계로 판정한다**(데이터가 안 오면 봉 콜백도 안 온다): `safety_tick` → `StaleDataGuard.update` →
-  레지스트리 #12 `close`면 마지막 mark로 `close_now(STALE_DATA)` · 정지가 계속되는 동안 틱마다 재시도 · 청산마다 알림.
+  레지스트리 #14(markprice grace 초과) `close`면 마지막 mark로 `close_now(STALE_DATA)` · 정지가 계속되는 동안 틱마다 재시도 · 청산마다 알림.
 - **봉마다**(마감 kline): 봉 기록 → (LIVE) positionRisk → 거래소 flat · 내부 보유면 `Engine.vanish`(주문 없음) + 거래소 지갑
   재동기화(`sync_wallet` + `KillSwitch.sync_flat_wallet`) → 3자 대사 → 일일 손실 equity → account_snapshots → 상태 저장(바뀔 때만).
 - 이벤트 처리 순서: 킬스위치 관측(기록 실패와 무관하게) → DB 기록(실패하면 보관 후 매 틱 재시도 + 진입 금지) → 알림 → 스냅샷.
@@ -25,7 +25,7 @@
   남기고, DB에 다 들어간 뒤에만 지운다 — 러너가 재기동 때 읽어 트립을 복원하고 진입을 멈춘다(Codex L8 재검토 #1·#3:
   신선도는 시각이 아니라 행 id로 판정한다 — 이벤트 시각과 벽시계가 섞인다).
 
-## 사용자 결정 반영 (레지스트리 #11·#12·#13 · 2026-09-16)
+## 사용자 결정 반영 (레지스트리 #11·#12·#13·#14 · 2026-09-16)
 - `/stop` = 진입 차단 + 전량 청산 · `/close` = 청산만 · `/pause` = 진입 차단, 포지션 유지.
 - `/start`는 일일 손실 트립 날짜에 아무것도 바꾸지 않는다("blocked by daily-loss limit until 00:00 UTC").
 - LIVE 소실 손익은 추정하지 않는다 — 거래소 지갑으로 재동기화하고 그 차이가 `WalletResynced`·account_snapshots에 남는다.
@@ -305,7 +305,7 @@ class BotRuntime:
         self.record_ops("StaleClose", detail, now_ms, {"streams": list(streams), "closed": bool(closed)})
         if closed:
             c = closed[0]
-            self.alert(f"🛑 stale 청산(레지스트리 #12) {c.direction} {c.qty} @ {c.exit_price} · 손익 {_fmt(c.realized_pnl_usdt)}"
+            self.alert(f"🛑 stale 청산(레지스트리 #14) {c.direction} {c.qty} @ {c.exit_price} · 손익 {_fmt(c.realized_pnl_usdt)}"
                        f" · 지갑 {_fmt(c.wallet_after)} · {detail}", important=True)
             self._last_exit_failure = None
             return

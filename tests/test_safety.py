@@ -3,8 +3,8 @@
 - 킬스위치: 일일 손실 한도(equity x%) · 연속 손실 n회 · 청산 1회 · 소실 1회 → 신규 진입 중단 + 알림 · 재개는 **사람의 /start만**.
   값은 레지스트리 #11(5% · 5회 · 청산 1 · 소실 1) · `KillSwitchLimits` 필드는 기본값 없음 · 트립 상태는 DB에 남아 재시작이 풀지 않는다
   · 일일 손실 트립은 같은 UTC 날짜에 /start 무변경(#13)
-- stale-data kill: 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 포지션 있으면 grace(120초) 초과 스트림에서 자동 청산(#12) ·
-  분당 규칙만으로 정지면 보유 + 알림
+- stale-data kill: 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 포지션 있으면 **markprice** grace(120초) 초과에서만
+  자동 청산(#14 — #12 ② 대체) · kline 정지·분당 규칙 위반은 보유 + 알림
 - 대사: 봇 내부 ↔ positionRisk(LIVE만, #6) ↔ DB positions — 불일치 → 진입 금지 + 알림
 - rate-limit: 사용량 ≥ 80% → 폴링 완화 신호
 """
@@ -339,3 +339,20 @@ def test_stale_within_grace_holds_and_past_grace_closes():
     v, _ = g.update(DAY0 + 179_001, has_position=True)                           # 나이 120.001초 > grace
     assert v.position_action == "close" and "markprice" in v.close_streams
     assert g.update(DAY0 + 179_001, has_position=False)[0].position_action == "none"
+
+
+def test_registry_14_only_a_markprice_stall_past_grace_closes_kline_stalls_hold():
+    """레지스트리 #14(#12 ② 대체): SL은 mark로 평가한다 → **markprice** 무수신 > grace만 청산.
+    kline update/close가 grace를 넘겨도 진입 금지 + 보유 · 분당 규칙 위반은 어느 스트림이든 진입 금지만."""
+    import safety.stale as S
+    assert S.CLOSE_STREAMS == ("markprice",)
+    counter = DeliveryCounter(("kline1m_update", "kline1m_close", "markprice"), start_ms=DAY0)
+    g = StaleDataGuard(counter)
+    for t in range(0, 300_001, 1000):
+        counter.observe("markprice", DAY0 + t)                                   # mark는 계속 온다
+    v, _ = g.update(DAY0 + 300_500, has_position=True)                           # kline 두 스트림 한 번도 안 옴 · 300초
+    assert set(v.stalled) == {"kline1m_update", "kline1m_close"} and not v.entries_allowed
+    assert v.position_action == "hold_and_alert" and v.close_streams == ()
+    assert set(g.past_grace(DAY0 + 300_500)) == {"kline1m_update", "kline1m_close"}, "나이 판정은 세 스트림 모두 유지(차단 문구)"
+    v, _ = g.update(DAY0 + 420_001, has_position=True)                           # mark 마지막 300초 → 나이 120.001초
+    assert v.position_action == "close" and v.close_streams == ("markprice",)

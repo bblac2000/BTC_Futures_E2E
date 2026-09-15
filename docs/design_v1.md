@@ -240,19 +240,19 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | 모듈 | 역할 |
 |---|---|
 | `safety/killswitch.py` | 일일 손실(UTC 날짜 첫 equity 기준) · 연속 순손실 n회(직전 flat 지갑 대비 — 수수료·펀딩 포함) · 청산 1회 → 발동(첫 사유 유지) · 사람 `resume`만 해제 · 상태 저장/복원 |
-| `safety/stale.py` | 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 미평가도 금지 · 포지션 있으면 `hold_and_alert` · grace 초과 스트림이 있으면 `close`(레지스트리 #12, 2026-09-16) · 정지 집합이 바뀔 때만 알림 |
+| `safety/stale.py` | 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 미평가도 금지 · 포지션 있으면 `hold_and_alert` · **markprice**가 grace 초과면 `close`(레지스트리 #14가 #12 ② 대체, 2026-09-16 · kline 정지는 보유) · 정지 집합이 바뀔 때만 알림 |
 | `safety/reconcile.py` | 부호 있는 수량 3자 대사(LIVE: 내부↔positionRisk↔DB · PAPER: 내부↔DB, 거래소 값 주면 오류) · 수량 불일치 sticky(사람 해제) · 조회 실패는 다음 성공으로 해제 · 사유 종류가 바뀔 때만 알림 |
 | `safety/rate_guard.py` | 어떤 한도든 사용량 ≥ 80% → `relax_polling` 신호(주문은 막지 않음) |
 | `safety/gate.py` | `SafetyGate` — 차단 사유 전부 나열 · `/pause` · `/start`(일시정지·킬스위치·sticky 대사 해제, 피드 정지는 못 풂 → 남은 사유 알림) · 저장/복원(`safety_state`) |
 
 - LIVE 청산 감지: 거래소 청산은 `PositionClosed(LIQUIDATION)`로 오지 않는다 → `PositionVanished`(청산 경로) · 봉마다 대사에서 내부≠0·거래소=0(`SafetyGate.observe_reconcile`)을 청산 1회로 보고 발동(Codex L6·7 #2).
-- ~~사용자 결정 대기~~ → **2026-09-16 확정**: 킬스위치 값 레지스트리 #11(5%·5회·청산 1·소실 1) · stale 자동 청산 #12(#1 grace 초과 → MARKET reduceOnly) · 운영 통제 #13(`/stop`·`/close`·`/pause` 의미 · 대사 수량 불일치 사람만 해제 · 일일 손실 날 `/start` 무변경 "blocked by daily-loss limit until 00:00 UTC").
+- ~~사용자 결정 대기~~ → **2026-09-16 확정**: 킬스위치 값 레지스트리 #11(5%·5회·청산 1·소실 1) · stale 자동 청산 #12(#1 grace 초과 → MARKET reduceOnly) → **#14로 정정: markprice grace 초과만 청산, kline 정지·분당 규칙은 진입 금지만** · 운영 통제 #13(`/stop`·`/close`·`/pause` 의미 · 대사 수량 불일치 사람만 해제 · 일일 손실 날 `/start` 무변경 "blocked by daily-loss limit until 00:00 UTC").
 - 배선은 §17(layer 8).
 
 ## 17. layer 8 `ops/` + 기동 배선 (2026-09-16)
 | 모듈 | 역할 |
 |---|---|
-| `ops/runtime.py` | `BotRuntime` — 피드·엔진·`SafetyGate`·DB·`CommandBot`의 **단일 소유자**(asyncio 루프 스레드). 진입 게이트 하나(엔진 ∪ 안전 ∪ DB·지갑 재동기화) · 벽시계 1초 `safety_tick`(stale #12 청산·텔레그램 inbox 처리·상태 파일) · 봉마다(기록·LIVE 소실/지갑 재동기화·3자 대사·일일 손실 equity·account_snapshots·상태 저장은 바뀔 때만) · `BotController` 구현 |
+| `ops/runtime.py` | `BotRuntime` — 피드·엔진·`SafetyGate`·DB·`CommandBot`의 **단일 소유자**(asyncio 루프 스레드). 진입 게이트 하나(엔진 ∪ 안전 ∪ DB·지갑 재동기화) · 벽시계 1초 `safety_tick`(stale #14 청산(markprice)·텔레그램 inbox 처리·상태 파일) · 봉마다(기록·LIVE 소실/지갑 재동기화·3자 대사·일일 손실 equity·account_snapshots·상태 저장은 바뀔 때만) · `BotController` 구현 |
 | `ops/run_bot.py` | PAPER 전용 기동(LIVE → 종료 코드 4) · 인스턴스 락 · 규칙 = 공개 GET(exchangeInfo·fundingInfo) + 캡처 스냅샷(leverageBracket·commissionRate) → `runtime_rules` 기록 · 지갑·안전 상태 복원 · REST 백필 · shard 기록기 · 텔레그램 스레드 · SIGTERM 정상 종료(clean/dirty) |
 | `ops/telegram_link.py` | 폴 스레드(`fetch` → inbox, 백오프 1·2·5·10·30·60초) · 발송 스레드(outbox → API, `message_id`로 배달 집계) — 엔진 상태를 만지지 않는다 |
 | `ops/data_stores.py` | 저장소 표(allowlist): `raw_live` shard만 `drive_verified_prune` · sqlite(봇 DB·manifest)는 `never` · 원격 = `BTCFUT_DRIVE_REMOTE`(E2E 폴더 거부) |
