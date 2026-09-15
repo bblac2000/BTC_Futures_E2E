@@ -30,6 +30,8 @@ class FakeAccount:
     hedge_short_amt: str = "0"
     other_rows: list = field(default_factory=list)          # 다른 심볼 positionRisk 행
     other_open_orders: list = field(default_factory=list)   # 다른 심볼 미체결
+    open_algo_orders: list = field(default_factory=list)          # BTCUSDT 조건부(algo) 미체결
+    other_open_algo_orders: list = field(default_factory=list)    # 다른 심볼 조건부(algo) 미체결
     bad_leverage_response: bool = False
     calls: list = field(default_factory=list)
 
@@ -56,6 +58,11 @@ class FakeAccount:
             data = list(self.open_orders)
             if not (params or {}).get("symbol"):
                 data = data + list(self.other_open_orders)
+        elif path == "/fapi/v1/openAlgoOrders":
+            #  공식 문서(2026-09-15 확인): symbol 선택 — 없으면 전 심볼 배열
+            data = list(self.open_algo_orders)
+            if not (params or {}).get("symbol"):
+                data = data + list(self.other_open_algo_orders)
         elif path == "/fapi/v1/positionSide/dual":
             data = {"dualSidePosition": self.dual}
         elif path == "/fapi/v1/multiAssetsMargin":
@@ -170,6 +177,24 @@ def test_live_hedge_switch_preflight_is_account_wide_not_just_btc(rules):
     with pytest.raises(StartupAbort):
         run_startup_gate(acct2, rules, Mode.LIVE, leverage=50)
     assert acct2.posts == []
+
+
+def test_live_hedge_switch_preflight_sees_algo_open_orders_on_any_symbol(rules):
+    """🔴 Codex 재검토 F1-b — 일반 openOrders는 조건부(algo) 주문을 보여주지 않는다.
+    공식 문서 `GET /fapi/v1/openAlgoOrders`(symbol 생략 = 전 심볼)로 POST 전에 본다(-4067 거부에 기대지 않는다)."""
+    algo = {"algoId": 1, "symbol": "ETHUSDT", "algoType": "CONDITIONAL", "algoStatus": "NEW"}
+    acct = FakeAccount(margin_type="isolated", dual=True, other_open_algo_orders=[algo])
+    e = _abort(acct, rules)
+    assert acct.posts == [] and "algo" in e.reason and "ETHUSDT" in e.reason
+    assert ("GET", "/fapi/v1/openAlgoOrders", {}) in acct.calls, "계정 전역 조회는 symbol 없이"
+
+
+def test_live_margin_switch_preflight_sees_btc_algo_open_orders(rules):
+    algo = {"algoId": 2, "symbol": "BTCUSDT", "algoType": "CONDITIONAL", "algoStatus": "NEW"}
+    acct = FakeAccount(margin_type="cross", open_algo_orders=[algo])
+    _abort(acct, rules)
+    assert acct.posts == []
+    assert ("GET", "/fapi/v1/openAlgoOrders", {"symbol": "BTCUSDT"}) in acct.calls
 
 
 def test_live_account_preflight_row_without_position_amt_aborts_before_post(rules):

@@ -27,6 +27,8 @@ from exchange.errors import BinanceAPIError, CredentialsMissing, StartupAbort, T
 from exchange.rules import RuntimeRules
 
 NO_NEED_TO_CHANGE_MARGIN = -4046
+#  공식 문서 "Current All Algo Open Orders (USER_DATA)" — 2026-09-15 렌더링 페이지에서 경로·파라미터 확인
+ALGO_OPEN_ORDERS = "/fapi/v1/openAlgoOrders"
 
 
 class Mode(StrEnum):
@@ -96,6 +98,11 @@ def _account_flat(client: RestClient) -> tuple[bool, str]:
     orders = client.get("/fapi/v1/openOrders", signed=True).data
     if orders:
         return False, f"미체결 {len(orders)}건({', '.join(sorted({str(o.get('symbol')) for o in orders}))})"
+    #  조건부(algo) 주문은 openOrders에 안 나온다(2025-12 algo 서비스 이관). 공식 문서 확인(2026-09-15):
+    #  `GET /fapi/v1/openAlgoOrders` · symbol 생략 = 전 심볼 · IP weight 40(기동 시 1회)
+    algos = client.get(ALGO_OPEN_ORDERS, signed=True).data
+    if algos:
+        return False, f"algo 미체결 {len(algos)}건({', '.join(sorted({str(o.get('symbol')) for o in algos}))})"
     return True, ""
 
 
@@ -108,6 +115,9 @@ def _flat(client: RestClient, symbol: str, rows: list[dict]) -> tuple[bool, str]
     orders = client.get("/fapi/v1/openOrders", {"symbol": symbol}, signed=True).data
     if orders:
         return False, f"미체결 {len(orders)}건"
+    algos = client.get(ALGO_OPEN_ORDERS, {"symbol": symbol}, signed=True).data
+    if algos:
+        return False, f"algo 미체결 {len(algos)}건"
     return True, ""
 
 
