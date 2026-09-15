@@ -204,6 +204,11 @@ def parse_brackets(resp: Any, symbol: str) -> tuple[Bracket, ...]:
         if b.maint_margin_ratio < a.maint_margin_ratio:
             raise RulesError(f"{symbol}: 브라켓 {a.bracket}→{b.bracket} MMR이 감소한다 "
                              f"({a.maint_margin_ratio}→{b.maint_margin_ratio})")
+        #  🔴 Codex L2 전체검토 Q2: 바이낸스 cum은 유지증거금이 경계에서 **연속**이 되도록 정의된다.
+        #     불연속이면 청산가 티어 탐색이 두 티어 사이를 진동할 수 있다(고정점 없음).
+        if b.cum != a.cum + b.notional_floor * (b.maint_margin_ratio - a.maint_margin_ratio):
+            raise RulesError(f"{symbol}: 브라켓 {a.bracket}→{b.bracket} cum 불연속 "
+                             f"({a.cum} + {b.notional_floor}×({b.maint_margin_ratio}−{a.maint_margin_ratio}) ≠ {b.cum})")
         if b.initial_leverage > a.initial_leverage:
             raise RulesError(f"{symbol}: 브라켓 {a.bracket}→{b.bracket} 최대 레버리지가 증가한다 "
                              f"({a.initial_leverage}→{b.initial_leverage})")

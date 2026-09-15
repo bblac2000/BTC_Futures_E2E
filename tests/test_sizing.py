@@ -133,6 +133,42 @@ def test_closed_form_matches_the_official_formula(rules, direction, qty, L):
     assert abs(est.dist_pct - official_dist(rules, direction, entry, qty, L)) < D("1e-24")
 
 
+def test_parser_rejects_discontinuous_cum():
+    """Codex L2 전체검토 Q2 — cum 연속성(cum_i = cum_{i−1} + floor_i × (MMR_i − MMR_{i−1}))이 없으면
+    유지증거금이 경계에서 불연속이 되고 티어 탐색이 진동할 수 있다. 실제 5심볼 fixture는 정확히 만족한다."""
+    from exchange.rules import parse_brackets
+    resp = [{"symbol": "BTCUSDT", "brackets": [
+        {"bracket": 1, "initialLeverage": 100, "notionalFloor": 0, "notionalCap": 100, "maintMarginRatio": "0.004", "cum": 0},
+        {"bracket": 2, "initialLeverage": 100, "notionalFloor": 100, "notionalCap": 1000000, "maintMarginRatio": "0.005",
+         "cum": 0}]}]
+    with pytest.raises(RulesError, match="cum"):
+        parse_brackets(resp, "BTCUSDT")
+
+
+def test_no_tier_fixed_point_fails_closed(rules):
+    """파서를 우회해 불연속 브라켓을 주입하면(Codex 입력) 티어가 진동한다 → 추정하지 않고 RulesError(사이징은 거부)."""
+    b1 = Bracket(1, 100, D("0"), D("100"), D("0.004"), D("0"))
+    b2 = Bracket(2, 100, D("100"), D("1000000"), D("0.005"), D("0"))
+    bad = replace(rules, brackets=(b1, b2))
+    with pytest.raises(RulesError, match="고정점"):
+        liquidation_estimate(SHORT, D("1"), D("99.5"), 100, bad)
+
+
+@settings(max_examples=400, deadline=None)
+@given(exp=st.floats(min_value=1.0, max_value=8.9), long_=st.booleans(), L=st.integers(min_value=1, max_value=100))
+def test_property_chosen_tier_is_a_fixed_point_on_real_brackets(rules, exp, long_, L):
+    """구현의 탐색 방식과 **독립적인** 성질: 선택된 티어는 자신의 기준 명목 max(진입, 청산가 명목)을 실제로 포함한다."""
+    notional = D(str(round(10 ** exp, 2)))
+    direction = LONG if long_ else SHORT
+    try:
+        est = liquidation_estimate(direction, D("60000"), notional, L, rules)
+    except RulesError:
+        return                                                               # 청산가 명목이 브라켓 밖 — 추정 없음
+    assert rules.bracket_for_notional(est.tier_basis_notional).bracket == est.bracket
+    expected = max(notional, notional * est.price / D("60000"))
+    assert abs(est.tier_basis_notional - expected) <= expected * D("1e-26")
+
+
 def test_short_uses_the_tier_of_the_notional_at_the_liquidation_price(rules):
     """진입 명목 299,400(tier1)인 SHORT 100x → 청산가 명목 ≈ 301,039(tier2) → MMR 0.5%·cum 300으로 계산."""
     est = liquidation_estimate(SHORT, D("60000"), D("299400"), 100, rules)
@@ -256,6 +292,14 @@ def test_loss_over_budget_after_final_qty_is_refused(rules, monkeypatch):
 
 
 # ── 브라켓 ──────────────────────────────────────────────────────────────
+def test_b3_highest_leverage_is_chosen_on_the_target_bracket_before_the_pos_pct_cap(rules):
+    """B3(사용자 확인 · 보수적 유지) — Codex 반례를 문서로 고정: LONG entry 60,000·SL 0.1%·equity 10,000·risk 50%
+    → 목표 5,000,000은 tier4(최대 50x) → L=50 → 캡 후 명목 199,980. 캡 뒤 명목(tier1)이면 100x도 통과하지만
+    레지스트리 #2 ③ 순서대로 목표 명목 티어로 고른다."""
+    d = size_entry(D("60000"), D("59940"), LONG, D("10000"), regime(risk_pct=D("0.5")), rules, limits())
+    assert d.ok and lev(d) == 50 and d.pos_pct_capped and d.notional == D("199980")
+
+
 def test_notional_beyond_every_bracket_is_notional_cap(rules):
     d = size_entry(D("60000"), D("59940"), LONG, D("1000000000"), regime(risk_pct=D("0.5")), rules, limits())
     assert not d.ok and d.reason is RejectReason.NOTIONAL_CAP
@@ -325,6 +369,16 @@ def test_post_entry_ok_when_exchange_liq_matches_estimate(rules):
     assert d.liq_price_est is not None
     c = P.post_entry_liquidation_check(d, rules, entry_price=D("60000"), qty=d.qty, exchange_liq_price=d.liq_price_est)
     assert c.status == "OK" and c.closer_model == "fee"
+
+
+def test_closer_model_reports_a_tie_instead_of_defaulting_to_fee(rules):
+    """Codex Q5 — 진단 필드다. 두 모델과 똑같이 떨어져 있으면 'fee'로 기울이지 않고 'tie'."""
+    d = _long(rules)
+    fee = liquidation_estimate(LONG, D("60000"), d.notional, lev(d), rules)
+    nofee = liquidation_estimate(LONG, D("60000"), d.notional, lev(d), rules, taker=ZERO)
+    mid = (fee.price + nofee.price) / 2
+    c = P.post_entry_liquidation_check(d, rules, entry_price=D("60000"), qty=d.qty, exchange_liq_price=mid)
+    assert c.closer_model == "tie"
 
 
 def test_post_entry_check_when_exchange_liq_is_closer_than_estimate_by_more_than_buffer(rules):

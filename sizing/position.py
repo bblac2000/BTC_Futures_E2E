@@ -91,7 +91,7 @@ class LiquidationCheck:
     estimate_no_fee_dist_pct: Decimal     # 수수료 미차감 모델 — 가정 검증용
     gap_vs_fee_pct: Decimal | None        # exchange − estimate(부호 있음)
     gap_vs_no_fee_pct: Decimal | None
-    closer_model: Literal["fee", "no_fee"] | None
+    closer_model: Literal["fee", "no_fee", "tie"] | None   # 진단 전용 — 이것으로 자동 결정하지 않는다
     bracket: int
     buffer_rel: Decimal
     detail: str
@@ -109,7 +109,8 @@ def liquidation_estimate(direction: Direction, entry: Decimal, notional: Decimal
 
     티어: 진입 명목의 브라켓으로 시작 → 청산가 명목과 비교해 max 쪽 브라켓이 다르면 그 브라켓으로 재계산
     (바이낸스 FAQ: "position notional (determined by the liquidation price calculation)이 다른 티어면 재계산").
-    이미 거친 티어로 되돌아가면 거기서 멈춘다. 모든 브라켓 밖이면 `RulesError`.
+    🔴 이미 거친 티어로 되돌아가면(진동 · 고정점 없음) **추정하지 않고** `RulesError` — cum 연속성을 파서가
+       강제하므로 실제 브라켓에서는 나오지 않는다(Codex L2 전체검토 Q2). 모든 브라켓 밖이어도 `RulesError`.
     """
     with decimal.localcontext() as ctx:
         ctx.prec = DECIMAL_PREC
@@ -123,8 +124,10 @@ def liquidation_estimate(direction: Direction, entry: Decimal, notional: Decimal
             price = entry * (1 - side * dist)
             basis = max(notional, notional * price / entry)
             nb = rules.bracket_for_notional(basis)
-            if nb == b or nb in seen:
+            if nb == b:
                 return LiqEstimate(price, dist, b.bracket, b.maint_margin_ratio, b.cum, me, t, basis)
+            if nb in seen:
+                raise RulesError(f"청산가 티어 고정점 없음: 브라켓 {b.bracket}↔{nb.bracket} 진동(명목 {notional}·L {leverage})")
             seen.append(b)
             b = nb
 
@@ -280,9 +283,13 @@ def post_entry_liquidation_check(decision: SizingDecision, rules: RuntimeRules, 
         def result(status: Literal["OK", "CHECK"], dist: Decimal | None, detail: str) -> LiquidationCheck:
             g_fee = None if dist is None else dist - est.dist_pct
             g_nofee = None if dist is None else dist - nofee.dist_pct
-            closer: Literal["fee", "no_fee"] | None = None
+            closer: Literal["fee", "no_fee", "tie"] | None = None
             if g_fee is not None and g_nofee is not None:
-                closer = "fee" if abs(g_fee) <= abs(g_nofee) else "no_fee"
+                #  거래소 청산가는 tick 단위다 → 두 모델 가격이 거래소 값에서 **몇 tick** 떨어졌는지로 비교(같으면 tie)
+                tick = rules.symbol_rules.tick_size
+                t_fee = (abs(exchange_liq_price - est.price) / tick).to_integral_value(rounding=decimal.ROUND_HALF_UP)
+                t_nofee = (abs(exchange_liq_price - nofee.price) / tick).to_integral_value(rounding=decimal.ROUND_HALF_UP)
+                closer = "tie" if t_fee == t_nofee else ("fee" if t_fee < t_nofee else "no_fee")
             return LiquidationCheck(status=status, exchange_dist_pct=dist, estimate_dist_pct=est.dist_pct,
                                     estimate_no_fee_dist_pct=nofee.dist_pct, gap_vs_fee_pct=g_fee,
                                     gap_vs_no_fee_pct=g_nofee, closer_model=closer, bracket=est.bracket,
