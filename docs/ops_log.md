@@ -1627,3 +1627,49 @@ MERGE 전·Restart B 게이트 종료(09-18 00:16 UTC) 전 배포 단계 금지.
 
 **구현**: 직전 실행 판정을 기동 알림 **앞**으로 옮기고 새로 판정한 기동에서만 🟢 알림에 `dirty_previous_run` 한 줄 · 런북 §9 날짜·화이트리스트 순서·§9.6 prune 시각 절차 · 레지스트리 #16.
 
+### Codex 배포 전 배치 (`69a1757..29e52f2`, read-only · `task-mu37ggqz-h3ya7l`)
+판정: A run_events MERGE · B notices/restore **FIX FIRST** · C health MERGE · D LiveChecklist MERGE · E runbook §9 **FIX FIRST**.
+| # | Codex | 동의 | 조치(`25f08cb`) |
+|---|---|---|---|
+| 1 MEDIUM | 고아 close 행 기록 뒤 notice·safety_state 저장 전에 죽으면 확인 요청이 사라진다 | ✅ | notice 원천 = DB `restart_unrestored` close 행: 기동 때 확인 이벤트 없는 행마다 되살림 · /start가 `NoticeAcknowledged` 운영 이벤트를 남긴다 · 일일 손실 거부 /start는 확인 아님 |
+| 2 MEDIUM | 봇 유닛 명령이 `sudo -iu btcfut` 셸의 사용자 버스에 기댄다 | ✅ | `bsc`/`bjc` 함수(`sudo -u btcfut XDG_RUNTIME_DIR=/run/user/<uid> systemctl/journalctl --user`)로 설치·show·정지·롤백 전부 · `/run/user/<uid>` 없으면 STOP · cgroup 경로도 btcfut uid |
+Codex가 남긴 잔여(동의 · 기록만): `log_start()` 전에 SIGKILL이면 이 방식으로는 보이지 않는다 · 대장 자체가 죽으면 알림만 가능.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+
+1. [MEDIUM] `restart_unrestored` notice can be lost if the runner dies between orphan close and notice persistence  
+Evidence: [ops/restore.py:144](/home/cms/project/BTC_Futures_E2E/ops/restore.py:144), [ops/restore.py:150](/home/cms/project/BTC_Futures_E2E/ops/restore.py:150), [ops/restore.py:156](/home/cms/project/BTC_Futures_E2E/ops/restore.py:156), [ops/runtime.py:543](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:543)  
+Scenario: On restore mismatch, the DB orphan position is closed via `PositionAbandoned` before the `restart_unrestored` notice is appended and before `save_state()` persists it. A SIGKILL after the close row is durable but before the notice/state save leaves the DB flat on the next start, so `decide_paper_restore()` returns `none` or a DB-flat mismatch and the human-confirmation notice is not shown until `/start`.  
+Suggested fix: Make the notice durable atomically with, or derivable from, the `restart_unrestored` close row. A robust shape is: load unacknowledged `restart_unrestored` close rows into `SafetyGate.notices`, and persist an acknowledgement key on `/start` so they do not reappear after human confirmation.
+
+2. [MEDIUM] D2 user-unit commands rely on an ambient `systemctl --user` session for `btcfut`  
+Evidence: [docs/runbook_vps.md:15](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:15), [docs/runbook_vps.md:46](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:46), [docs/runbook_vps.md:151](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:151), [docs/runbook_vps.md:173](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:173)  
+Scenario: The E2E checks correctly use `sudo -u ubuntu XDG_RUNTIME_DIR=... systemctl --user`, but the bot install/enable/show/rollback steps assume `sudo -iu btcfut` provides a working user bus. On some Ubuntu/sudo setups it will not, even with linger enabled, and D2 can fail mid-run or invite ad hoc retries.  
+Suggested fix: Define and use an explicit bot-user systemctl form everywhere, e.g. `sudo -u btcfut XDG_RUNTIME_DIR=/run/user/$(id -u btcfut) systemctl --user ...` for daemon-reload, enable/start, show, stop, and rollback.
+
+**Area Verdicts**
+
+A. `ops/run_events.py` + `ops/run_bot.py`: MERGE  
+No blocking issue found. False positives are limited by the bot-local manifest and current event writers. Double counting is prevented by `dirty_previous_run` as a terminal event. Known residual: SIGKILL before `log_start()` is inherently invisible to this scheme, and total manifest failure can only alert, not record.
+
+B. `safety/gate.py` + `ops/restore.py`: FIX FIRST  
+Finding #1.
+
+C. `ops/health.py`: MERGE  
+Once keys are date-bearing, send failure does not advance state, current problem keys are retained, recurring keys remain stable.
+
+D. `paper/sender.py`: MERGE  
+Confirmed: the new `LiveChecklist` fields are included in `fields(LiveChecklist)`, default to false, and `LiveSender` rejects construction unless every field is exactly `True`.
+
+E. `docs/runbook_vps.md` §9: FIX FIRST  
+Finding #2. Otherwise the deploy window ordering, whitelist order, prune deferral, E2E read-only posture, and rollback scope look coherent.
+
+Tests: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider` passed. I did not read `.env`, did not modify files, did not use the network, and did not SSH.
+
+Codex session ID: 01a0a70c-6ed0-71e3-b825-527c979b66cc
+Resume in Codex: codex resume 01a0a70c-6ed0-71e3-b825-527c979b66cc
+```
+</details>
