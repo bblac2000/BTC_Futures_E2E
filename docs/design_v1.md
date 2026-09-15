@@ -28,8 +28,8 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 1 | `exchange/` 런타임 규칙 로더·정규화·주문 매트릭스·기동 게이트·rate-limit 카운터·서버 시각 오프셋 | ✅ 구현·테스트 (Codex 검토: 아래 §7) |
 | 2 | `sizing/` 위험 예산 → 목표 명목 → 최고 정수 L(브라켓·거래소 공식 청산 거리) → pos_pct 캡 → 수량 → 최종 재검증·손실 예산 (레지스트리 #2) | ✅ B1·B2로 재작업·테스트 — Codex 재검토 §7 · buffer 값 대기(#3) |
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ✅ 구현·테스트(351) · Codex LiveSender MERGE · 엔진 MERGE(검토 4회) — **사용자 확인 대기**(§12) |
-| 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ⏸ (`runtime_rules` DDL은 임시로 `exchange/store.py`) |
-| 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | 🔶 ccxt.pro 피드(`data/feed.py`)·REST 백필(`data/backfill.py`)·전달 감시 연결 · 라이브 프로브 통과 · Codex MERGE — **ShardWriter·manifest 기록 미이식**(§13) |
+| 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ✅ 구현·테스트(§14) · `runtime_rules` DDL을 v1로 흡수 — Codex 검토 대상 아님(자금·삭제·라이브 무관) · 기록 배선은 layer 8 |
+| 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex 검토 중(`task-mu2kq6ib-uro1pe`) |
 | 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ⏸ (`notify/sender.py` 복사 완료) |
 | 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ⏸ |
 | 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
@@ -199,3 +199,18 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 - 게이트·로더·송신기는 코드 변경 없이 ccxt 전송 위에서 테스트한다(`tests/test_ccxt_rest.py`).
 - layer 5 완료(2026-09-15): shard 이식·#138 · 소켓별 connect/disconnect/reconnect 이벤트 · **소켓별 23h 선제 재연결**(`client.on_error(ProactiveRefresh)` → 백오프 없이 재watch) · 기록 `recorder.put`(kline1m_update·kline1m_close·markprice, 경계 열 = `TS_COLUMN`) · klines limit 렌더링 확인. 기동 배선(피드 + Recorder + 엔진)은 layer 8.
 - LIVE 예상 체결가 = #7(레지스트리 #9, `paper.sender.adverse_fill_estimate` 공용).
+
+
+## 14. layer 4 `db/` (2026-09-15)
+| 모듈 | 역할 |
+|---|---|
+| `db/schema.py` | 단계 목록(append-only). v1 = §5 테이블 + `engine_events`·`feature_definitions` + `runtime_rules`(layer 1 DDL 글자 그대로) |
+| `db/migrate.py` | 유일한 스키마 경로 · `python -m db.migrate <db> [--status] [--target N]` · 체크섬 불일치·DB가 더 새 버전·다운그레이드·열린 트랜잭션 → `SchemaError` · 단계 = 한 트랜잭션 · schema_version 없이 있던 테이블은 열 모양이 같을 때만 흡수 |
+| `db/record.py` | layer 3 이벤트 → 행(한 호출 = 한 트랜잭션) · `record_bar`(inserted/duplicate/conflict — 덮어쓰지 않음) · 피처 등록·기록 |
+
+- 모든 데이터 테이블 `mode` CHECK(paper|live) · 가격·수량·비율 TEXT(Decimal 원문, float → `TypeError`) · bool 0/1 CHECK.
+- 테스트가 **이벤트 필드 ⊆ 열**을 잠근다(`SizingDecision`→decisions · `PostFillCheck`→`positions.pf_*` · `LiquidationCheck`→`positions.lc_*` · `Fill`→orders · `PositionClosed`→positions · `FundingSettled`→funding_events). 필드를 추가하면 새 마이그레이션 단계가 필요하다.
+- 피처: 긴 형식 `(name, params_version, value)` + `feature_definitions`(같은 이름·버전에 다른 파라미터 → `FeatureDefinitionConflict`). 스킬 §5의 "넓은 열" 대신 고른 이유: 피처마다 마이그레이션이 필요 없고 `(name, params_version)` 추적이 행 단위로 강제된다.
+- `orders.slippage_vs_mark_bps` = 불리한 방향 양수(BUY `(체결−mark)/mark`, SELL 반대) × 10⁴ — 레지스트리 #7·#9 14일차 재평가의 원천.
+- ⚠️ 알려진 공백: LIVE 채택(주문 결과 불명 후 거래소 수량 채택)은 layer 3이 open 이벤트를 내지 않는다 → 그 포지션의 close 행은 `position_id` NULL + 사유로 기록(버리지 않음). 채택 이벤트 추가는 layer 3 변경이라 별도(LiveSender·엔진 → Codex).
+- 아직 없음: 엔진·피드 → DB 배선, 봉 기록 경로(WS 마감봉·REST 백필), account_snapshots 생산자 — layer 8 기동 배선.
