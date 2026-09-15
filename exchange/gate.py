@@ -23,12 +23,19 @@ from typing import NoReturn
 
 from exchange.client import ReadOnlyClient
 from exchange.client_types import RestClient
-from exchange.errors import BinanceAPIError, CredentialsMissing, StartupAbort, TransportError
+from exchange.errors import (
+    BinanceAPIError,
+    CredentialsMissing,
+    LeverageNotConfirmed,
+    StartupAbort,
+    TransportError,
+)
 from exchange.rules import RuntimeRules
 
 NO_NEED_TO_CHANGE_MARGIN = -4046
 #  공식 문서 "Current All Algo Open Orders (USER_DATA)" — 2026-09-15 렌더링 페이지에서 경로·파라미터 확인
 ALGO_OPEN_ORDERS = "/fapi/v1/openAlgoOrders"
+LEVERAGE = "/fapi/v1/leverage"
 
 
 class Mode(StrEnum):
@@ -119,6 +126,17 @@ def _flat(client: RestClient, symbol: str, rows: list[dict]) -> tuple[bool, str]
     if algos:
         return False, f"algo 미체결 {len(algos)}건"
     return True, ""
+
+
+def set_leverage_confirmed(client: RestClient, symbol: str, leverage: int) -> int:
+    """`POST /fapi/v1/leverage` → 응답 레버리지 == 요청일 때만 반환. 기동 게이트와 layer 3 LIVE 송신기가 공유한다.
+    🔴 POST 성공 ≠ 적용 — 응답 모양이 다르거나 값이 다르면 `LeverageNotConfirmed`(그 레버리지로 진입 금지)."""
+    echo = client.post(LEVERAGE, {"symbol": symbol, "leverage": str(leverage)}).data
+    if not isinstance(echo, dict) or "leverage" not in echo:
+        raise LeverageNotConfirmed(f"레버리지 응답 모양 해석 불가: {echo!r}")
+    if int(echo["leverage"]) != leverage:
+        raise LeverageNotConfirmed(f"레버리지 {leverage}x 요청했으나 응답 {echo['leverage']}x")
+    return leverage
 
 
 def run_startup_gate(client: RestClient, rules: RuntimeRules, mode: Mode, *, leverage: int) -> GateResult:
@@ -213,12 +231,10 @@ def _live(client: RestClient, rules: RuntimeRules, leverage: int) -> GateResult:
             abort(f"재조회 marginType={row.get('marginType')} — ISOLATED 확정 실패")
 
         # 4. 레버리지
-        echo = client.post("/fapi/v1/leverage", {"symbol": sym, "leverage": str(leverage)}).data
-        if not isinstance(echo, dict) or "leverage" not in echo:
-            abort(f"레버리지 응답 모양 해석 불가: {echo!r}")
-        if int(echo["leverage"]) != leverage:
-            abort(f"레버리지 {leverage}x 요청했으나 응답 {echo['leverage']}x")
-        res.leverage_set = leverage
+        try:
+            res.leverage_set = set_leverage_confirmed(client, sym, leverage)
+        except LeverageNotConfirmed as e:
+            abort(str(e))
         res.actions.append(f"leverage → {leverage}x")
     except (CredentialsMissing, BinanceAPIError) as e:
         abort(f"계정 조회/설정 실패: {e}")

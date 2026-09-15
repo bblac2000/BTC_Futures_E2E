@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 from exchange.client import BinanceRestClient  # noqa: E402
 from exchange.client_types import RestClient  # noqa: E402
 from exchange.errors import BinanceAPIError, RulesError, StartupAbort, TransportError  # noqa: E402
-from exchange.gate import Mode, run_startup_gate  # noqa: E402
+from exchange.gate import ALGO_OPEN_ORDERS, Mode, run_startup_gate  # noqa: E402
 from exchange.loader import load_runtime_rules  # noqa: E402
 from exchange.normalize import ceil_to_step  # noqa: E402
 from exchange.orders import (  # noqa: E402
@@ -53,6 +53,7 @@ SYMBOL = "BTCUSDT"
 ORDER = "/fapi/v1/order"
 POSITION_V2 = "/fapi/v2/positionRisk"
 POSITION_V3 = "/fapi/v3/positionRisk"
+OPEN_ORDERS = "/fapi/v1/openOrders"
 USER_TRADES = "/fapi/v1/userTrades"
 PREMIUM_INDEX = "/fapi/v1/premiumIndex"
 
@@ -61,6 +62,8 @@ PROBE_LEVERAGE = 100
 NOTIONAL_HEADROOM = Decimal("1.1")
 TRADES_RETRIES = 5
 TRADES_RETRY_SEC = 1
+CLOSE_ATTEMPTS = 3
+CLOSE_RETRY_SEC = 1
 DISPLAY_ROUNDING = Decimal("0.00000002")
 RULE_REF = "설계서 §11 (사전확약 622794c · 보충 79880d1)"
 SCOPE = "testnet mechanism only — testnet MMR/fee values are not used anywhere else"
@@ -83,9 +86,26 @@ class CloseFailed(RuntimeError):
 
 # ── 호스트 가드 ─────────────────────────────────────────────────────────────
 def require_testnet(url: str) -> None:
+    """https · 허용 호스트 · **포트 명시 금지(기본 443만)** · userinfo 금지. hostname은 urlsplit이 소문자로 만든다."""
     u = urllib.parse.urlsplit(url or "")
-    if u.scheme != "https" or u.hostname not in TESTNET_HOSTS:
-        raise NotTestnet(f"테스트넷 호스트가 아니다: scheme={u.scheme!r} host={u.hostname!r} — 허용 {sorted(TESTNET_HOSTS)}")
+    try:
+        port = u.port
+    except ValueError as e:
+        raise NotTestnet(f"URL 포트 해석 불가: {url!r}") from e
+    if u.scheme != "https" or u.hostname not in TESTNET_HOSTS or port is not None or u.username or u.password:
+        raise NotTestnet(f"테스트넷 URL이 아니다: scheme={u.scheme!r} host={u.hostname!r} port={port!r} "
+                         f"userinfo={'있음' if (u.username or u.password) else '없음'} — 허용 {sorted(TESTNET_HOSTS)}")
+
+
+class RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """🔴 Codex 검토 Q1: urllib 기본 opener는 3xx를 따라가며 가드를 다시 거치지 않는다 → 리다이렉트는 **전부** 거부."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        raise NotTestnet(f"리다이렉트 거부 HTTP {code} → {newurl!r} (주문·서명 요청은 다른 URL로 가지 않는다)")
+
+
+#  build_opener는 기본 HTTPRedirectHandler 대신 이 하위 클래스를 쓴다(기본 핸들러가 추가되지 않는다)
+DEFAULT_OPENER = urllib.request.build_opener(RefuseRedirects())
 
 
 def guarded_opener(inner: Callable[..., Any]) -> Callable[..., Any]:
@@ -100,7 +120,7 @@ def _wall_ms() -> int:
     return int(time.time() * 1000)
 
 
-def make_client(base_url: str, key: str, secret: str, *, opener: Callable[..., Any] = urllib.request.urlopen,
+def make_client(base_url: str, key: str, secret: str, *, opener: Callable[..., Any] = DEFAULT_OPENER.open,
                 clock_ms: Callable[[], int] = _wall_ms) -> BinanceRestClient:
     require_testnet(base_url)
     return BinanceRestClient(base_url, key, secret, time_sync=TimeSync(), opener=guarded_opener(opener),
@@ -201,19 +221,43 @@ def overall_verdict(legs: list[dict]) -> str:
 
 
 # ── 실행 ─────────────────────────────────────────────────────────────────────
-def close_all(client: RestClient, rules: RuntimeRules) -> list:
+def close_all(client: RestClient, rules: RuntimeRules, *, sleep: Callable[[float], Any]) -> list:
+    """재조회 → 0이 아니면 reduceOnly 전량 청산 → 다음 시도에서 재조회. 최대 `CLOSE_ATTEMPTS`회, 끝에 마지막 재조회.
+    🔴 Codex 검토 Q3: 첫 조회 실패·청산 POST 전송 실패도 재시도한다. 끝내 flat을 확인 못 하면 `CloseFailed`."""
     sent: list = []
-    try:
-        amt = Decimal(str(_both_row(client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data)["positionAmt"]))
-        if amt != 0:
+    last: Any = "조회 전"
+    for _ in range(CLOSE_ATTEMPTS):
+        try:
+            row = _both_row(client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data)
+            last = row
+            amt = Decimal(str(row["positionAmt"]))
+            if amt == 0:
+                return sent
             for p in close_position_orders(amt, rules.symbol_rules):
                 sent.append(client.post(ORDER, p).data)
+        except (BinanceAPIError, TransportError, RulesError, ValueError, KeyError, InvalidOperation) as e:
+            last = f"{type(e).__name__}: {e}"
+        sleep(CLOSE_RETRY_SEC)
+    try:
         row = _both_row(client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data)
-    except (BinanceAPIError, TransportError, RulesError, ValueError, KeyError, InvalidOperation) as e:
-        raise CloseFailed(f"청산·재조회 실패 {type(e).__name__}: {e} — positionAmt 확인 불가 · 테스트넷 계정에서 수동 정리") from e
+        if Decimal(str(row["positionAmt"])) == 0:
+            return sent
+        last = row
+    except (BinanceAPIError, TransportError, ValueError, KeyError, InvalidOperation) as e:
+        last = f"{type(e).__name__}: {e}"
+    raise CloseFailed(f"{CLOSE_ATTEMPTS}회 청산 시도 후에도 flat 확인 실패 — 테스트넷 계정에서 수동 정리 · "
+                      f"마지막 positionAmt/행: {last}")
+
+
+def require_flat(client: RestClient) -> None:
+    """🔴 Codex 검토 Q3 추가 결함: 이미 ISOLATED면 기동 게이트가 flat을 보지 않는다 → 첫 주문 **전** 무조건 확인."""
+    row = _both_row(client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data)
     if Decimal(str(row["positionAmt"])) != 0:
-        raise CloseFailed(f"청산 후에도 positionAmt={row['positionAmt']} — 테스트넷 계정에서 수동 정리 · 행 {row}")
-    return sent
+        raise ProbeAbort(f"{SYMBOL} 포지션 보유 중 positionAmt={row['positionAmt']} — 프로브는 flat 계정에서만")
+    if client.get(OPEN_ORDERS, {"symbol": SYMBOL}, signed=True).data:
+        raise ProbeAbort(f"{SYMBOL} 미체결 주문 있음 — 프로브는 미체결 0에서만")
+    if client.get(ALGO_OPEN_ORDERS, {"symbol": SYMBOL}, signed=True).data:
+        raise ProbeAbort(f"{SYMBOL} algo 미체결 있음 — 프로브는 미체결 0에서만")
 
 
 def run_leg(client: RestClient, rules: RuntimeRules, direction: Direction, *, leverage: int,
@@ -232,9 +276,13 @@ def run_leg(client: RestClient, rules: RuntimeRules, direction: Direction, *, le
         validate_order_params(order)
         resp = client.post(ORDER, order).data
         leg["entry_response"] = resp
+        if not isinstance(resp, dict) or resp.get("status") != "FILLED" or Decimal(str(resp.get("executedQty"))) != qty:
+            raise ValueError(f"진입 응답이 FILLED·executedQty={qty}가 아니다: {resp!r}")
         oid = int(resp["orderId"])
         row = _both_row(client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data)
         leg["position_v2"] = row
+        if abs(Decimal(str(row["positionAmt"]))) != qty:
+            raise ValueError(f"positionRisk positionAmt {row['positionAmt']} ≠ 체결 수량 {qty}")
         try:
             leg["position_v3"] = _both_row(client.get(POSITION_V3, {"symbol": SYMBOL}, signed=True).data)
         except (BinanceAPIError, TransportError, ValueError) as e:
@@ -249,12 +297,15 @@ def run_leg(client: RestClient, rules: RuntimeRules, direction: Direction, *, le
             if i < TRADES_RETRIES - 1:
                 sleep(TRADES_RETRY_SEC)
         leg["trades"] = trades
+        trades = [t for t in trades if str(t.get("orderId")) == str(oid) and t.get("symbol", SYMBOL) == SYMBOL]
+        if trades and sum((Decimal(str(t["qty"])) for t in trades), Decimal(0)) != qty:
+            raise ValueError(f"userTrades(orderId {oid}) 수량 합이 체결 수량 {qty}와 다르다")
         leg.update(evaluate_leg(direction, row, trades, rules, gate_leverage=leverage))
     except Exception as e:  # noqa: BLE001 — 어떤 실패든 청산은 finally에서 반드시 시도하고, 판정 미도달로 기록
         leg["error"] = f"{type(e).__name__}: {e}"
         leg["verdict"] = "INCONCLUSIVE"
     finally:
-        leg["close_responses"] = close_all(client, rules)
+        leg["close_responses"] = close_all(client, rules, sleep=sleep)
         leg["closed_flat"] = True
     return leg
 
@@ -275,6 +326,7 @@ def run_probe(client: RestClient, *, sleep: Callable[[float], Any] = time.sleep,
     if b.initial_leverage < PROBE_LEVERAGE:
         raise ProbeAbort(f"테스트넷 브라켓 {b.bracket} 최대 {b.initial_leverage}x < {PROBE_LEVERAGE}x — "
                          "§11은 L을 자동으로 낮추지 않는다(주문 없이 중단)")
+    require_flat(client)
     gate = run_startup_gate(client, rules, Mode.LIVE, leverage=PROBE_LEVERAGE)
     legs = [run_leg(client, rules, d, leverage=PROBE_LEVERAGE, sleep=sleep) for d in (Direction.LONG, Direction.SHORT)]
     return {"started_at_utc": started, "finished_at_utc": clock(), "scope": SCOPE, "rule": RULE_REF,
@@ -314,13 +366,15 @@ def registry_row(result: dict, number: int, *, raw_file: str = "") -> str:
 
 
 def append_registry(path: Path, result: dict, *, raw_file: str = "") -> int:
+    """append-only(파일 끝에 **추가 모드**로 한 행). 판정 미도달 결과는 거부."""
+    if result.get("verdict_reached") is not True:
+        raise ValueError("판정에 도달하지 않은 실행은 레지스트리에 쓰지 않는다(§11 재실행 규칙)")
     text = path.read_text(encoding="utf-8")
     nums = [int(cell) for line in text.splitlines() if line.startswith("| ")
             for cell in [line.split("|")[1].strip()] if cell.isdigit()]
     n = max(nums, default=0) + 1
-    if not text.endswith("\n"):
-        text += "\n"
-    path.write_text(text + registry_row(result, n, raw_file=raw_file) + "\n", encoding="utf-8")
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(("" if not text or text.endswith("\n") else "\n") + registry_row(result, n, raw_file=raw_file) + "\n")
     return n
 
 

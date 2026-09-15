@@ -132,8 +132,12 @@ def liquidation_estimate(direction: Direction, entry: Decimal, notional: Decimal
             b = nb
 
 
-def _gate(sl_dist: Decimal, dist: Decimal, limits: SizingLimits) -> bool:
+def sl_gate_passes(sl_dist: Decimal, dist: Decimal, limits: SizingLimits) -> bool:
+    """레지스트리 #5 게이트 — 진입 전 사이징과 layer 3 체결 후 재검증이 **같은 함수**를 쓴다."""
     return sl_dist * limits.buffer_rel < dist and dist - sl_dist >= limits.min_gap
+
+
+_gate = sl_gate_passes
 
 
 def size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decimal, regime: RegimeSizing,

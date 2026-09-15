@@ -27,6 +27,10 @@ class ReadOnlyViolation(RuntimeError):
     """PAPER(읽기 전용) 클라이언트로 계정 변경 요청을 보내려 했다."""
 
 
+class LeverageNotConfirmed(RuntimeError):
+    """`POST /fapi/v1/leverage` 응답이 요청 레버리지와 다르거나 해석할 수 없다 — 그 레버리지로 진입하지 않는다."""
+
+
 class TransportError(RuntimeError):
     """HTTP 응답을 받지 못한 전송 실패(타임아웃·연결 끊김·DNS). 🔴 **요청이 거래소에 닿아 처리됐는지 모른다** —
     POST였다면 계정 상태가 바뀌었을 수 있으므로 호출자는 재조회 전까지 상태를 '불명'으로 다룬다."""

@@ -442,3 +442,154 @@ def test_source_posts_only_to_allowlisted_endpoints():
     assert P.ORDER == "/fapi/v1/order"
     assert P.TESTNET_HOSTS == frozenset({"demo-fapi.binance.com", "testnet.binancefuture.com"})
     assert "fapi.binance.com" not in P.TESTNET_HOSTS
+
+
+# ── Codex 검토(task-mu2ajp02-0vqtbd) FIX FIRST 항목 ─────────────────────────────
+@pytest.mark.parametrize("url", ["https://demo-fapi.binance.com:8443", "https://demo-fapi.binance.com.:443",
+                                 "https://demo-fapi.binance.com.", "https://user@demo-fapi.binance.com",
+                                 "https://demo-fapi.binance.com@fapi.binance.com", "https://u:p@demo-fapi.binance.com"])
+def test_ports_userinfo_and_trailing_dot_are_refused(url):
+    with pytest.raises(P.NotTestnet):
+        P.require_testnet(url)
+
+
+def test_uppercase_testnet_host_is_the_same_host():
+    P.require_testnet("https://DEMO-FAPI.binance.com/fapi/v1/time")
+
+
+@pytest.mark.parametrize("target", ["https://fapi.binance.com/fapi/v1/order", "https://demo-fapi.binance.com/fapi/v1/order"])
+def test_redirects_are_refused_even_to_testnet(target):
+    """Q1: urllib 기본 opener는 3xx를 따라간다 → 우리 opener는 **모든** 리다이렉트를 거부한다(주문 POST가 다른 곳으로 가지 않게)."""
+    h = P.RefuseRedirects()
+    req = urllib.request.Request("https://demo-fapi.binance.com/fapi/v1/order", method="POST")
+    with pytest.raises(P.NotTestnet):
+        h.redirect_request(req, None, 307, "Temporary Redirect", {}, target)
+
+
+def test_default_opener_is_built_with_the_redirect_refusal_and_no_default_redirect_handler():
+    handlers = P.DEFAULT_OPENER.handlers
+    assert any(isinstance(h, P.RefuseRedirects) for h in handlers)
+    assert not any(type(h) is urllib.request.HTTPRedirectHandler for h in handlers)
+
+
+def _orders(f):
+    return [c[2] for c in f.posts if c[1] == "/fapi/v1/order"]
+
+
+def test_existing_position_on_an_already_isolated_account_aborts_before_any_order(fake_factory):
+    """Q3 추가 결함: 이미 ISOLATED면 게이트가 flat을 보지 않는다 → 프로브가 첫 다리 전에 무조건 확인."""
+    f = fake_factory()
+    f.amt, f.entry, f.leverage = Decimal("0.005"), Decimal("59000"), 100
+    with pytest.raises(P.ProbeAbort):
+        _run(f)
+    assert _orders(f) == []
+
+
+def test_existing_open_order_aborts_before_any_order(fake_factory, monkeypatch):
+    f = fake_factory()
+    real_get = f.get
+
+    def get(path, params=None, *, signed=False):
+        if path == "/fapi/v1/openOrders":
+            return Response(200, [{"symbol": "BTCUSDT", "orderId": 1}], {})
+        return real_get(path, params, signed=signed)
+    monkeypatch.setattr(f, "get", get)
+    with pytest.raises(P.ProbeAbort):
+        _run(f)
+    assert _orders(f) == []
+
+
+def test_entry_transport_error_still_closes_and_is_not_a_verdict(fake_factory, monkeypatch):
+    """전송 불명 — 실제로는 체결됐을 수 있다. finally가 재조회·청산하고 판정 미도달로 남긴다."""
+    from exchange.errors import TransportError
+    f = fake_factory()
+    real_post = f.post
+    state = {"n": 0}
+
+    def post(path, params=None, *, signed=True):
+        r = real_post(path, params, signed=signed)
+        if path == "/fapi/v1/order" and params and "reduceOnly" not in params and state["n"] == 0:
+            state["n"] += 1
+            raise TransportError("POST /fapi/v1/order: read timed out")      # 체결은 됐는데 응답을 못 받음
+        return r
+    monkeypatch.setattr(f, "post", post)
+    r = _run(f)
+    assert f.amt == 0 and r["verdict_reached"] is False
+    assert "TransportError" in r["legs"][0]["error"] and r["legs"][0]["closed_flat"]
+
+
+def test_close_post_transport_error_is_retried_until_flat(fake_factory, monkeypatch):
+    from exchange.errors import TransportError
+    f = fake_factory()
+    real_post = f.post
+    state = {"fails": 1}
+
+    def post(path, params=None, *, signed=True):
+        if path == "/fapi/v1/order" and params and params.get("reduceOnly") == "true" and state["fails"] > 0:
+            state["fails"] -= 1
+            raise TransportError("POST /fapi/v1/order: connection reset")   # 전송 안 됨
+        return real_post(path, params, signed=signed)
+    monkeypatch.setattr(f, "post", post)
+    r = _run(f)
+    assert f.amt == 0 and r["verdict"] == "CONFIRMED_FEE" and r["verdict_reached"]
+
+
+def test_no_short_leg_after_long_close_failure(fake_factory):
+    f = fake_factory(ignore_close=True)
+    with pytest.raises(P.CloseFailed):
+        _run(f)
+    entries = [o for o in _orders(f) if "reduceOnly" not in o]
+    assert [o["side"] for o in entries] == ["BUY"], "LONG이 flat이 아니면 SHORT 진입은 없다"
+    assert len([o for o in _orders(f) if o.get("reduceOnly") == "true"]) == P.CLOSE_ATTEMPTS
+
+
+def test_non_filled_entry_response_is_an_error_and_closes(fake_factory, monkeypatch):
+    f = fake_factory()
+    real_post = f.post
+
+    def post(path, params=None, *, signed=True):
+        r = real_post(path, params, signed=signed)
+        if path == "/fapi/v1/order" and params and "reduceOnly" not in params:
+            return Response(200, r.data | {"status": "PARTIALLY_FILLED"}, {})
+        return r
+    monkeypatch.setattr(f, "post", post)
+    r = _run(f)
+    assert r["verdict_reached"] is False and all("FILLED" in leg["error"] for leg in r["legs"]) and f.amt == 0
+
+
+def test_trades_not_matching_the_order_are_an_error(fake_factory, monkeypatch):
+    f = fake_factory()
+    real_get = f.get
+
+    def get(path, params=None, *, signed=False):
+        r = real_get(path, params, signed=signed)
+        if path == "/fapi/v1/userTrades" and r.data:
+            return Response(200, [t | {"qty": "0.500"} for t in r.data], {})
+        return r
+    monkeypatch.setattr(f, "get", get)
+    r = _run(f)
+    assert r["verdict_reached"] is False and all("userTrades" in leg["error"] for leg in r["legs"])
+
+
+def test_b_tie_counts_as_not_contradicting(fake_factory, rules, monkeypatch):
+    """§11: 'A=FEE 이고 B≠no_fee' — tie는 no_fee가 아니므로 FEE(Codex Q4 확인)."""
+    _f, row, trades = _leg_inputs(fake_factory)
+    real = P.liquidation_estimate
+
+    def same_price(direction, entry, notional, leverage, rules_, *, taker=None):
+        return real(direction, entry, notional, leverage, rules_, taker=Decimal(0))
+    monkeypatch.setattr(P, "liquidation_estimate", same_price)
+    ev = P.evaluate_leg(Direction.LONG, row, trades, rules, gate_leverage=100)
+    assert ev["B"] == "tie" and ev["A"] == "FEE" and ev["verdict"] == "FEE"
+
+
+def test_append_registry_refuses_a_result_without_a_reached_verdict(fake_factory, tmp_path):
+    reg = tmp_path / "r.md"
+    reg.write_text("| 1 | x |", encoding="utf-8")                 # 마지막 줄바꿈 없음
+    r = _run(fake_factory())
+    with pytest.raises(ValueError):
+        P.append_registry(reg, r | {"verdict_reached": False})
+    assert reg.read_text(encoding="utf-8") == "| 1 | x |"
+    P.append_registry(reg, r)
+    lines = reg.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "| 1 | x |" and lines[1].startswith("| 2 |")
