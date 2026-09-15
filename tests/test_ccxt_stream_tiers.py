@@ -131,10 +131,17 @@ def test_the_pinned_version_is_what_is_installed():
     assert ccxt.__version__ == PINNED_CCXT, "업그레이드 = 레지스트리 새 행 + 이 파일 재검증(#8)"
 
 
-def test_ccxt_pro_opens_only_tier_correct_endpoints_for_every_stream_we_use(monkeypatch, capsys):
-    got = capture(monkeypatch, ccxtpro.binanceusdm, list(WATCHES))
+def _tee(config):
+    from data.feed import TeeBinanceUsdm
+    return TeeBinanceUsdm(config, sink=lambda kind, message: None)
+
+
+@pytest.mark.parametrize("factory, label", [(ccxtpro.binanceusdm, "ccxt.pro.binanceusdm"),
+                                            (_tee, "data.feed.TeeBinanceUsdm")])
+def test_ccxt_pro_opens_only_tier_correct_endpoints_for_every_stream_we_use(monkeypatch, capsys, factory, label):
+    got = capture(monkeypatch, factory, list(WATCHES))
     with capsys.disabled():
-        print(f"\n[ccxt {ccxt.__version__}] ccxt.pro.binanceusdm 가 연 소켓")
+        print(f"\n[ccxt {ccxt.__version__}] {label} 가 연 소켓")
         for name, (url, params) in got.items():
             print(f"  {name:20s} {url}  SUBSCRIBE {params}")
     for name, (url, params) in got.items():

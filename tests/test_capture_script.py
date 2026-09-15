@@ -129,3 +129,23 @@ def test_captured_mode_files_still_load_as_runtime_rules(tmp_path, snap):
                           for n in ("positionSideDual", "multiAssetsMargin")}
     r = rules_from_snapshots(merged, "BTCUSDT")
     assert r.account_modes is not None and r.account_modes.dual_side_position is False
+
+
+def test_main_uses_the_ccxt_transport_read_only_and_never_posts(tmp_path, monkeypatch):
+    """레지스트리 #8: 캡처 스크립트도 ccxt 전송. 키는 가짜 env, 네트워크·POST 없음."""
+    made: list = []
+
+    class FakeCcxt(FakeBinance):
+        def __init__(self, **kw):
+            super().__init__(READ_ONLY)
+            self.kw = kw
+            made.append(self)
+
+        def sync_time(self):
+            return 42
+
+    monkeypatch.setattr(CAP, "CcxtRestClient", FakeCcxt)
+    monkeypatch.setattr(CAP, "load_env", lambda path: {"BINANCE_API_KEY": "K", "BINANCE_API_SECRET": "S"})
+    assert CAP.main(["--dry-run", "--out", str(tmp_path)]) == 0
+    assert len(made) == 1 and made[0].kw["api_key"] == "K"
+    assert all(c[0] == "GET" for c in made[0].calls) and list(tmp_path.iterdir()) == []

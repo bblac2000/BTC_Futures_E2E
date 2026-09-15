@@ -1,5 +1,9 @@
 """Binance USDⓈ-M REST 클라이언트 — 서명 · 에러 원문 보존 · rate-limit 헤더 · 시계 오프셋.
 
+⛔ 2026-09-15 레지스트리 #8: 운영 전송은 `exchange/ccxt_rest.py`(ccxt)다. `BinanceRestClient`(urllib)는 미사용 테스트넷 프로브와
+   자기 테스트만 쓴다 — 새 코드에서 쓰지 않는다(`tests/test_ccxt_rest.py::test_no_production_module_uses_the_urllib_client`).
+   `ReadOnlyClient`는 전송과 무관한 PAPER 방어막으로 계속 쓴다.
+
 🔴 이 저장소는 결국 라이브로 간다. 그래서 **계정 변경(POST) 경로의 문을 둘로** 둔다:
    ① PAPER는 `ReadOnlyClient`로 감싸 POST 자체를 예외로 만든다(이 모듈).
    ② 주문 전송은 layer 3에서 LIVE 모드 + 라이브 체크리스트 통과 시에만 연결된다.

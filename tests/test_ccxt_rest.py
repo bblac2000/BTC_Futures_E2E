@@ -261,3 +261,42 @@ def test_paper_gate_over_ccxt_sends_no_posts(snap, rules):
     c, http = make(account_route(FakeAccount(margin_type="cross", dual=True), snap))
     run_startup_gate(c, rules, Mode.PAPER, leverage=75)
     assert all(s.method == "GET" for s in http.sent)
+
+
+def test_live_sender_over_ccxt_sends_one_validated_market_order_and_reads_raw_trades(rules):
+    """LiveSender(검토된 게이트 그대로) + CcxtRestClient: wire body는 검증된 MARKET, 수수료는 원시 userTrades."""
+    from dataclasses import fields
+
+    from paper.sender import LiveChecklist, LiveSender
+
+    def route(m, p, q):
+        if p.endswith("/userTrades"):
+            return 200, [{"symbol": "BTCUSDT", "orderId": 7, "qty": q.get("x", "0.033"), "commission": "0.99003300",
+                          "commissionAsset": "USDT"}]
+        return order_route(m, p, q)
+    c, http = make(route)
+    s = LiveSender(c, rules, mode=Mode.LIVE, checklist=LiveChecklist(**{f.name: True for f in fields(LiveChecklist)}))
+    p = market_order_params("BTCUSDT", Direction.LONG, Intent.EXIT, Decimal("0.033"), rules.symbol_rules)
+    f = s.send_market(p, ref_mark=Decimal("60000"), ts_ms=1)
+    posts = [x for x in http.sent if x.method == "POST"]
+    assert len(posts) == 1 and posts[0].all_params()["reduceOnly"] == "true" and posts[0].all_params()["type"] == "MARKET"
+    assert f.qty == Decimal("0.033") and f.price == Decimal("60000.10") and f.commission == Decimal("0.99003300")
+    assert not f.commission_estimated and f.reduce_only
+
+
+def test_no_production_module_uses_the_urllib_client():
+    """레지스트리 #8: 운영 경로의 REST 전송은 ccxt 하나. urllib `BinanceRestClient`는 미사용 프로브·자기 테스트만."""
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    allowed = {"exchange/client.py", "scripts/testnet_fee_probe.py"}
+    users = []
+    for d in ("exchange", "sizing", "paper", "db", "data", "notify", "safety", "ops", "strategies", "scripts"):
+        for py in sorted((root / d).rglob("*.py")) if (root / d).is_dir() else []:
+            rel = py.relative_to(root).as_posix()
+            names = {n.id for n in ast.walk(ast.parse(py.read_text(encoding="utf-8"))) if isinstance(n, ast.Name)}
+            names |= {a.name for n in ast.walk(ast.parse(py.read_text(encoding="utf-8")))
+                      if isinstance(n, ast.ImportFrom) for a in n.names}
+            if "BinanceRestClient" in names and rel not in allowed:
+                users.append(rel)
+    assert users == []

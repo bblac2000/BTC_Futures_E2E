@@ -34,13 +34,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from exchange.client import BinanceRestClient, ReadOnlyClient  # noqa: E402
+from exchange.ccxt_rest import CcxtRestClient  # noqa: E402
+from exchange.client import ReadOnlyClient  # noqa: E402
 from exchange.client_types import RestClient  # noqa: E402
 from exchange.errors import BinanceAPIError, TransportError  # noqa: E402
-from exchange.timesync import TimeSync  # noqa: E402
 
-FAPI_BASE = "https://fapi.binance.com"
-SAPI_BASE = "https://api.binance.com"
 SYMBOL = "BTCUSDT"
 OUT_DIR = ROOT / "tests" / "fixtures" / "snapshots"
 PROV_START = "<!-- account-capture:start -->"
@@ -184,14 +182,12 @@ def main(argv: list[str] | None = None) -> int:
     if not key or not secret:
         print("BINANCE_API_KEY / BINANCE_API_SECRET이 .env에 없다", file=sys.stderr)
         return 1
-    ts = TimeSync()
     wall: Callable[[], int] = lambda: int(time.time() * 1000)  # noqa: E731
-    public = BinanceRestClient(FAPI_BASE, clock_ms=wall)
-    ts.measure(public, wall)
-    fapi = BinanceRestClient(FAPI_BASE, key, secret, time_sync=ts, clock_ms=wall)
-    sapi = BinanceRestClient(SAPI_BASE, key, secret, time_sync=ts, clock_ms=wall)
+    #  전송 = ccxt(레지스트리 #8). 한 클라이언트가 /fapi·/sapi 경로를 모두 받는다 — capture()가 ReadOnlyClient로 감싼다.
+    client = CcxtRestClient(api_key=key, secret=secret, clock_ms=wall)
+    offset = client.sync_time()
     try:
-        s = capture(fapi, sapi, a.out, clock_ms=wall, server_ms=ts.server_now_ms(wall()), dry_run=a.dry_run)
+        s = capture(client, client, a.out, clock_ms=wall, server_ms=wall() + offset, dry_run=a.dry_run)
     except NotReadOnlyKey as e:
         print(f"🚫 {e}", file=sys.stderr)
         return 2
