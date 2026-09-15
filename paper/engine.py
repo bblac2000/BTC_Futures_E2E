@@ -373,6 +373,12 @@ class Engine:
                 if pr.amt != signed:
                     #  🔴 Codex L3 재검토 3: 거래소 기준으로 동기화한 뒤 닫는다(손익 기준 = 거래소 평균 진입가)
                     ev.append(self._block(ts_ms, f"청산 전 대사 불일치: 내부 {signed} → 거래소 {pr.amt}(평균가 {pr.entry_price})로 동기화"))
+                    if abs(pr.amt) > pos.qty:
+                        #  처음 드러난 추가 수량의 진입 수수료 — 거래소 평균가 × 런타임 taker로 추정해 지갑에 반영(Codex 재검토 #2)
+                        extra_fee = (abs(pr.amt) - pos.qty) * (pr.entry_price if pr.entry_price > 0 else ref_mark) \
+                            * self.rules.commission.taker
+                        self.wallet -= extra_fee
+                        pos.entry_commission += extra_fee
                     pos.qty = abs(pr.amt)
                     if pr.entry_price > 0:
                         pos.entry_price = pr.entry_price

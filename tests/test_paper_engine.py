@@ -326,7 +326,8 @@ def test_live_exit_syncs_to_the_exchange_quantity_and_average_entry_before_closi
     s.exchange_amt = probe.qty
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
-    e.on_tick(tick(DAY0 + 1000, "60000"))
+    (entry_fill,) = of(e.on_tick(tick(DAY0 + 1000, "60000")), EntryFilled)
+    probe_fill_commission = sum(f.commission for f in entry_fill.fills)
     s.exchange_amt, s.exchange_entry = probe.qty + D("0.004"), D("59990")
     ev = e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000)
     exits = [c[1] for c in s.calls if c[0] == "send" and c[1].get("reduceOnly") == "true"]
@@ -335,6 +336,9 @@ def test_live_exit_syncs_to_the_exchange_quantity_and_average_entry_before_closi
     assert c.entry_price == D("59990") and c.qty == probe.qty + D("0.004") and c.exit_price is not None
     assert c.realized_pnl_usdt == (c.exit_price - D("59990")) * c.qty
     assert e.entries_blocked
+    #  Codex L3 재검토 #2: 청산 때 처음 드러난 추가 수량의 진입 수수료(거래소 평균가 × taker 추정)도 지갑에서 빠진다
+    entry_comm = probe_fill_commission + D("0.004") * D("59990") * rules.commission.taker
+    assert e.wallet == W0 - entry_comm - c.exit_commission_usdt + c.realized_pnl_usdt
 
 
 def test_live_malformed_position_read_never_raises_after_orders(rules):
