@@ -37,7 +37,7 @@ cp .env.example .env && chmod 600 .env    # 값은 사용자가 채운다(에이
   읽기 외 권한이 하나라도 켜져 있으면 **기동 거부(종료 코드 4)**. 키가 없거나 조회가 실패하면 캡처 스냅샷으로 기동하되
   진입 차단 `rules_from_snapshot`(상태 파일 `rules.fallback_reason` · /start로 안 풀림 → 원인 해결 후 `bsc restart btcfut-bot`).
 - 봇 토큰은 이 봇 전용. 다른 프로세스가 같은 토큰으로 `getUpdates`를 하면 409 — 상태 파일 `poll_errors`로 드러난다.
-- rclone: btcfut 사용자 자신의 `~/.config/rclone/rclone.conf`. `BTCFUT_DRIVE_REMOTE=<remote>:BTC_Futures_E2E` — **E2E 폴더를 가리키면 sync·prune이 거부**한다.
+- rclone: btcfut 사용자 자신의 `~/.config/rclone/rclone.conf`(만드는 절차는 §9.3 3단계 — 사용자 생성 뒤에만 가능). `BTCFUT_DRIVE_REMOTE=<remote>:BTC_Futures_E2E` — **E2E 폴더를 가리키면 sync·prune이 거부**한다.
 
 사전 검사(전부 통과해야 다음 단계):
 ```bash
@@ -112,7 +112,8 @@ free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 ### 9.0 전제 — 하나라도 아니면 창을 열지 않는다
 - E2E Restart B 24h 게이트 판정이 닫혔다(E2E 쪽 보고로 확인 — 이 봇은 판정하지 않는다).
 - Codex 배포 전 배치 MERGE · 배포 커밋 해시 `D` 고정(브랜치가 아니라 해시).
-- 사용자 측 완료(D1 전): 봇 사용자 rclone remote · `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
+- 사용자 측 완료(D1 전): `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
+- btcfut의 rclone remote는 **D1 전에는 만들 수 없다**(사용자가 D1에 생긴다) → §9.3 3단계(사용자 정정 2026-09-16).
 - 키 IP 화이트리스트는 **마지막 — §9.1 로컬 점검이 끝난 뒤** 켠다(사용자 2026-09-16).
 - ⚠️ 화이트리스트가 켜지면 로컬(WSL) 키 조회는 실패한다 → 로컬 키 드라이런은 화이트리스트 **전**에 끝낸다.
   `ipRestrict=true` 확인은 **VPS에서** 캡처 `--dry-run`으로(로컬에서는 -2015로 실패하는 것이 정상).
@@ -148,10 +149,20 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 02:30 UTC 전 종료(일요일 E2E prune). 판정이 늦거나 FAIL이면 그날 창은 열지 않는다.
 1. §0 호스트 확인 → 9.2 E2E 기준선 **재기록**(창 시작 시점).
 2. §1 사용자 생성 · linger · 수집기 홈 읽기 불가 확인.
-3. §2 `git clone` → `git checkout D` · `uv sync --frozen` · `.env`(사용자가 채움 · `chmod 600`) · rclone(사용자).
-4. VPS에서 캡처 `--dry-run` → 사용자가 `ipRestrict=true`·읽기 외 권한 없음 확인.
-5. VPS 드라이런 240초(§2 사전 검사 · 유닛 없이) → 9.1과 같은 기준 + `confirmed_facts []`.
-6. 9.5 보고 → **멈춘다**(유닛 설치는 다음 날).
+3. **btcfut rclone remote**(사용자 생성 직후 · 사용자와 함께 · E2E의 rclone 설정은 읽지도 복사하지도 않는다):
+   - `command -v rclone`(시스템 바이너리) · `sudo -u btcfut rclone config` → new remote(예: `btcfut-drive`) · storage `drive` ·
+     client_id/secret = 기존 **vcb-rclone** OAuth 클라이언트(사용자가 입력 — 에이전트는 값을 출력·기록하지 않는다) · scope **`drive.file`** ·
+     root_folder_id·service_account 비움 · advanced 없음 · **auto config = No**(headless).
+   - rclone이 출력한 `rclone authorize …` 명령을 **사용자가 로컬에서** 그대로 실행 → 토큰을 VPS 프롬프트에 붙여 넣는다.
+   - 확인: `sudo -u btcfut rclone lsd btcfut-drive:` 가 exit 0(`drive.file`이라 rclone이 만든 폴더만 보인다 — 비어 있어도 정상) ·
+     `sudo -u btcfut ls -l /home/btcfut/.config/rclone/rclone.conf` 권한 600 · E2E 사용자의 rclone.conf mtime이 기준선과 같다.
+   - `.env`에 `BTCFUT_DRIVE_REMOTE=btcfut-drive:BTC_Futures_E2E`(4단계에서 파일을 만들 때 함께).
+   - STOP: `lsd` 실패 · remote가 E2E 폴더를 가리킴 · scope가 `drive.file`이 아님.
+4. §2 `git clone` → `git checkout D` · `uv sync --frozen` · `.env`(사용자가 채움 · `chmod 600` · `BTCFUT_DRIVE_REMOTE` 포함).
+   원격 이름 검사(E2E 폴더 거부 · 값만 출력): `sudo -u btcfut bash -c 'cd /home/btcfut/BTC_Futures_E2E && .venv/bin/python -c "from ops.run_bot import load_env_file; from ops.data_stores import remote_root; from pathlib import Path; print(remote_root(load_env_file(Path(\".env\"))))"'` → `btcfut-drive:BTC_Futures_E2E` — 실제 복사는 D2 타이머부터.
+5. VPS에서 캡처 `--dry-run` → 사용자가 `ipRestrict=true`·읽기 외 권한 없음 확인.
+6. VPS 드라이런 240초(§2 사전 검사 · 유닛 없이) → 9.1과 같은 기준 + `confirmed_facts []`.
+7. 9.5 보고 → **멈춘다**(유닛 설치는 다음 날).
 
 ### 9.4 창 D2 (2026-09-19) — 유닛 설치·기동 (두 번째 변경)
 시각: 9.3과 같은 규칙.

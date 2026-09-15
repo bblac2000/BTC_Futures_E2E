@@ -1758,3 +1758,10 @@ Resume in Codex: codex resume 01a0a717-1974-7462-bb39-40fb61b76ede
 D1 창 09-18 00:35–02:30 UTC · 여기서 멈춤(사용자 항목: rclone remote·TELEGRAM_OWNER_IDS·캡처 스크립트 → D1 전 확인 · 화이트리스트는 §9.1 뒤).
 **백로그(설계 메모만, D2 전 금지)**: breadcrumb → DB journal 테이블 대체를 페이퍼 첫 주 뒤 평가(TODO 5o).
 
+## 2026-09-16 — 순서 정정: btcfut rclone remote는 D1 안에서
+
+**사용자 정정(2026-09-16)**: btcfut 사용자는 D1에 생기므로 rclone remote를 D1 전에 만들 수 없다 → 런북 §9.3 3단계(사용자 생성 직후):
+`sudo -u btcfut rclone config`(drive · 기존 vcb-rclone OAuth 클라이언트 · scope `drive.file` · headless — 사용자가 로컬에서 `rclone authorize` 후 토큰 붙여 넣기) →
+`rclone lsd` 확인 → `BTCFUT_DRIVE_REMOTE`. §9.0 사용자 선행 항목에서 rclone 제거.
+사용자 확인: `TELEGRAM_OWNER_IDS`가 `.env`에 있음(개인 ID = 채팅 ID) · 계정에 열린 포지션 없음.
+
