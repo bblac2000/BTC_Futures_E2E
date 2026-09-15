@@ -9,6 +9,13 @@ SSH 키가 공유돼 있다. 명령 전에 **`hostname`·`whoami`·`df -h /`를 
 E2E 수집기 유닛이 살아 있는지 먼저 본다: `sudo -u <수집기 사용자> XDG_RUNTIME_DIR=/run/user/$(id -u <수집기 사용자>) systemctl --user list-units 'e2e-*'`.
 
 ## 1. 봇 전용 사용자
+> 🔧 **봇 사용자의 user 유닛 명령 형식(Codex 배포 전 #2)** — `sudo -iu btcfut` 셸의 사용자 버스에 기대지 않는다. 이 런북의 모든
+> 봇 `systemctl --user`·`journalctl --user`는 운영자(sudo 가능) 셸에서 아래 두 함수로 실행한다(E2E 점검과 같은 모양):
+> ```bash
+> bsc() { sudo -u btcfut XDG_RUNTIME_DIR=/run/user/$(id -u btcfut) systemctl --user "$@"; }
+> bjc() { sudo -u btcfut XDG_RUNTIME_DIR=/run/user/$(id -u btcfut) journalctl --user "$@"; }
+> ```
+> `loginctl enable-linger btcfut` 뒤 `ls -d /run/user/$(id -u btcfut)`가 있어야 한다(없으면 STOP — 사용자 버스 없음).
 ```bash
 sudo adduser --disabled-password --gecos "" btcfut
 sudo loginctl enable-linger btcfut          # 로그아웃해도 user 유닛 유지
@@ -27,7 +34,7 @@ cp .env.example .env && chmod 600 .env    # 값은 사용자가 채운다(에이
 `.env`(페이퍼): `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID` · `TELEGRAM_OWNER_IDS` · `BTCFUT_DRIVE_REMOTE` · `BINANCE_API_KEY`/`BINANCE_API_SECRET`.
 - 바이낸스 키 = **읽기 전용 키**(거래·출금 권한 끔 · VPS IP 화이트리스트, 사용자 2026-09-16 (ii)). 러너가 기동 때 권한을 실측하고
   읽기 외 권한이 하나라도 켜져 있으면 **기동 거부(종료 코드 4)**. 키가 없거나 조회가 실패하면 캡처 스냅샷으로 기동하되
-  진입 차단 `rules_from_snapshot`(상태 파일 `rules.fallback_reason` · /start로 안 풀림 → 원인 해결 후 `systemctl --user restart btcfut-bot`).
+  진입 차단 `rules_from_snapshot`(상태 파일 `rules.fallback_reason` · /start로 안 풀림 → 원인 해결 후 `bsc restart btcfut-bot`).
 - 봇 토큰은 이 봇 전용. 다른 프로세스가 같은 토큰으로 `getUpdates`를 하면 409 — 상태 파일 `poll_errors`로 드러난다.
 - rclone: btcfut 사용자 자신의 `~/.config/rclone/rclone.conf`. `BTCFUT_DRIVE_REMOTE=<remote>:BTC_Futures_E2E` — **E2E 폴더를 가리키면 sync·prune이 거부**한다.
 
@@ -41,19 +48,21 @@ cat var/dryrun/run/status.json          # shutdown=stop · exit_code=0 · delive
 
 ## 3. 유닛 설치 (user 유닛)
 ```bash
-mkdir -p ~/.config/systemd/user
-cp ops/systemd/btcfut-{bot,failed@,health-alert,health-digest,sync}.service ops/systemd/btcfut-{health-alert,health-digest,sync}.timer ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer
+B=/home/btcfut/BTC_Futures_E2E
+sudo -u btcfut mkdir -p /home/btcfut/.config/systemd/user
+sudo -u btcfut cp $B/ops/systemd/btcfut-{bot,failed@,health-alert,health-digest,sync}.service \
+  $B/ops/systemd/btcfut-{health-alert,health-digest,sync}.timer /home/btcfut/.config/systemd/user/
+bsc daemon-reload
+bsc enable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer
 ```
 - ⚠️ **prune은 이 단계에서 설치·enable하지 않는다** — §6.
-- 수동 실행은 `systemctl --user start <unit>`(저널에 남게). `OnFailure=` 검증은 러너 직접 호출로(오경보 방지).
+- 수동 실행은 `bsc start <unit>`(저널에 남게). `OnFailure=` 검증은 러너 직접 호출로(오경보 방지).
 
 ## 4. 수집기 우선 확인
 ```bash
-systemctl --user show btcfut-bot -p MemoryMax -p Nice -p IOSchedulingClass -p CPUWeight
-cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.controllers   # memory가 있어야 MemoryMax가 적용된다
-free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
+bsc show btcfut-bot -p MemoryMax -p Nice -p IOSchedulingClass -p CPUWeight
+U=$(id -u btcfut); cat /sys/fs/cgroup/user.slice/user-$U.slice/user@$U.service/cgroup.controllers   # memory가 있어야 MemoryMax가 적용된다
+free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 ```
 `memory` 위임이 없으면 MemoryMax는 **적용되지 않는다** — 사용자에게 보고하고 system 유닛(`User=btcfut`) 전환 여부를 결정받는다.
 
@@ -67,7 +76,7 @@ free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
 | DB | `sqlite3 var/bot.sqlite "select source,count(*) from bars_1m group by 1"` 가 늘어난다 · `db_errors: 0` |
 | shard | `var/raw/live/BTCUSDT/<오늘>/{kline1m_update,kline1m_close,markprice}/` 파일 증가 · 대장 `stop_dirty` 없음 · `confirmed_facts`에 `dirty_previous_run` 없음(SIGKILL은 `stop`을 안 남긴다 — #15 ⑤) |
 | sync | `var/markers/LAST_SYNC.txt` 시간당 갱신 · 원격 폴더가 **E2E 폴더가 아님** |
-| health | `journalctl --user -u btcfut-health-alert -n 20` 에 `alert none/throttled/sent` · `send_failed` 없음 |
+| health | `bjc -u btcfut-health-alert -n 20` 에 `alert none/throttled/sent` · `send_failed` 없음 |
 | 경보 설계 | 반복형 키에 숫자·날짜 없음(테스트 잠금) · 확정 사실은 하루 1통 · 상시 발화 경보가 없는지 첫 24시간 관찰 |
 | 수집기 | E2E 유닛 상태·최신 shard 시각이 배포 전과 같다 · 디스크 증가율 store별로 분리 기록 |
 
@@ -77,11 +86,11 @@ free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
 ## 6. prune 켜기 (사람 확인 후)
 1. 최소 1주기 무삭제 관측: sync 성공 마커가 계속 갱신되고 원격에 shard가 쌓인다.
 2. dry-run: `.venv/bin/python -m ops.prune --var-dir ~/BTC_Futures_E2E/var` → 날짜별 삭제 예정 수·보류 사유를 사용자에게 보인다.
-3. 사용자 확인 후에만: `cp ops/systemd/btcfut-prune.{service,timer} ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now btcfut-prune.timer`.
+3. 사용자 확인 후에만: `sudo -u btcfut cp $B/ops/systemd/btcfut-prune.{service,timer} /home/btcfut/.config/systemd/user/ && bsc daemon-reload && bsc enable --now btcfut-prune.timer`.
 4. 첫 `--apply` 뒤: 저널의 `deleted` == `manifest_marked`, `LAST_PRUNE.txt` 갱신, sqlite 파일 그대로.
 
 ## 7. 정지·재기동
-- 정지: `systemctl --user stop btcfut-bot` → 러너가 shard 종료 플러시·상태 저장·정지 알림. 알림의 `stop`/`stop_dirty` 확인.
+- 정지: `bsc stop btcfut-bot` → 러너가 shard 종료 플러시·상태 저장·정지 알림. 알림의 `stop`/`stop_dirty` 확인.
 - 페이퍼 포지션은 재기동 때 **DB 열린 행과 마지막 엔진 스냅샷이 일치할 때만** 복원된다(알림 `♻️ 재기동: 포지션 복원`).
   불일치면 flat으로 시작 · `paused:system:restart_position_mismatch` · 알림(양쪽 값) · DB 행은 `restart_unrestored`로 닫힌다 → 확인 후 /start.
   정지 중 펀딩 경계(00/08/16 UTC)를 지나면 첫 틱에 `FundingMissed` + 엔진 진입 차단(율 불명) → /start.
@@ -148,7 +157,7 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 1. §0 호스트 확인 · E2E 기준선 재기록 · `git -C ~/BTC_Futures_E2E rev-parse HEAD` == `D`.
 2. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
 3. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
-4. `systemctl --user enable --now` → §5 기동 후 대조표 전체.
+4. `bsc enable --now …`(§3 명령 그대로) → `bsc is-active btcfut-bot` · §5 기동 후 대조표 전체.
 5. 9.5 보고.
 
 ### 9.5 배포 후 보고 항목 (D1·D2 각각 · 24시간 뒤 한 번 더)
@@ -170,5 +179,5 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
   (추적 파일 금지) → **모든 E2E 타이머에서 30분 이상 떨어진** 시각을 고른다(봇 타이머와도 겹치지 않게).
 - 시각 변경은 템플릿 커밋 + Codex → §6 절차(dry-run 출력 사용자 확인) → 별도 날의 라이브 호스트 변경.
 
-롤백(봇만): btcfut 사용자로 `systemctl --user disable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer`.
+롤백(봇만): `bsc disable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer` → `bsc list-units 'btcfut-*' --all`로 비활성 확인.
 E2E에 닿는 명령은 롤백에도 없다. 봇 사용자·데이터 삭제는 사람 확인 + Codex(삭제) 후.

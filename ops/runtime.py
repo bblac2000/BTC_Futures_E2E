@@ -618,7 +618,11 @@ class BotRuntime:
         if self.gate.resume_refused(now):
             self.record_ops("ResumeRefused", actor, now, {"reason": "daily_loss"})
             return self.gate.resume(actor, ts_ms=now)
+        notices = [dict(n) for n in self.gate.notices]
         lines = self.gate.resume(actor, ts_ms=now).splitlines()[:-1]
+        for n in notices:                                          # 확인은 DB에도 남긴다(notice는 close 행에서 되살아나므로)
+            self.record_ops("NoticeAcknowledged", f"{n.get('kind')} {n.get('id')} ({actor})", now,
+                            {"kind": n.get("kind"), "id": str(n.get("id")), "actor": actor})
         cleared = self.engine.clear_blocks()
         lines += [f"엔진 차단 해제: {c}" for c in cleared]
         self.record_ops("Resumed", actor, now, {"engine_cleared": cleared})

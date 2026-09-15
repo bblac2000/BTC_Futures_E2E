@@ -271,3 +271,36 @@ def test_restart_unrestored_stays_in_status_until_start_and_survives_a_restart(r
     rt2.con.close()
     rt3, _c3, _k3, _d3, _m3 = restart(rules, db, t0=t + 30_000)
     assert rt3.status(t + 30_000)["confirmed_facts"] == [], "확인도 저장된다"
+
+
+def test_notice_is_rebuilt_from_the_orphan_close_row_if_the_process_died_before_saving_it(rules, tmp_path):
+    """Codex 배포 전 #1: close 행은 들어갔는데 notice·safety_state 저장 전에 죽으면 확인 요청이 사라졌다 → DB close 행에서 복원."""
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    _tamper_snapshot(db, qty="0.001")
+    rt, _c, _k, decision, _m = restart(rules, db, t0=t + 5000)
+    assert decision.action == "mismatch"
+    rt.con.execute("DELETE FROM safety_state")                       # notice 저장 전 SIGKILL과 같은 DB
+    rt.con.commit()
+    rt.con.close()
+    rt2, _c2, _k2, decision2, _m2 = restart(rules, db, t0=t + 20_000)
+    assert decision2.action == "none"
+    assert [(f["kind"], f["id"]) for f in rt2.status(t + 20_000)["confirmed_facts"]] == [("restart_unrestored", "1")]
+    rt2.resume("telegram:111")
+    assert rt2.con.execute("SELECT count(*) FROM engine_events WHERE kind='NoticeAcknowledged'").fetchone()[0] == 1
+    rt2.con.execute("DELETE FROM safety_state")                      # 확인 뒤 상태 저장이 없어도 확인 이벤트로 끝난다
+    rt2.con.commit()
+    rt2.con.close()
+    rt3, _c3, _k3, _d3, _m3 = restart(rules, db, t0=t + 30_000)
+    assert rt3.status(t + 30_000)["confirmed_facts"] == []
+
+
+def test_daily_loss_refused_start_does_not_acknowledge_the_notice(rules, tmp_path):
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    _tamper_snapshot(db, qty="0.001")
+    rt, _c, _k, _d, _m = restart(rules, db, t0=t + 5000)
+    rt.gate.kill_switch.trip(t + 5000, "daily_loss", "test")
+    rt.resume("telegram:111")
+    assert [f["kind"] for f in rt.confirmed_facts()] == ["restart_unrestored"]
+    assert rt.con.execute("SELECT count(*) FROM engine_events WHERE kind='NoticeAcknowledged'").fetchone()[0] == 0

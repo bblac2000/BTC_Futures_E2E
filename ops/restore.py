@@ -120,8 +120,42 @@ def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> 
                            snapshot_id=snap_id)
 
 
+ACK_KIND = "NoticeAcknowledged"
+
+
+def _unrestored_notice(root_id: int, direction: str, qty: str, entry_price: str, ts_ms: int) -> dict[str, Any]:
+    return {"kind": UNRESTORED_REASON, "id": str(root_id), "since_ms": ts_ms,
+            "text": f"재기동 복원 불일치로 DB 포지션 root {root_id} {direction} {qty} @ {entry_price}를 손익 없이 닫았다 — 확인 후 /start"}
+
+
+def sync_unrestored_notices(rt: BotRuntime) -> int:
+    """Codex 배포 전 #1: notice의 원천은 **DB의 `restart_unrestored` close 행**이다 — 확인 이벤트(`NoticeAcknowledged`)가 없는
+    close 행마다 notice를 되살린다(close 행 기록 뒤 notice 저장 전에 죽어도 사라지지 않게). 추가한 수를 돌려준다."""
+    acked = set()
+    for (payload,) in rt.con.execute("SELECT payload_json FROM engine_events WHERE mode=? AND kind=?", (rt.mode.value, ACK_KIND)):
+        try:
+            p = json.loads(payload or "{}")
+        except ValueError:
+            continue
+        if p.get("kind") == UNRESTORED_REASON:
+            acked.add(str(p.get("id")))
+    have = {(n.get("kind"), str(n.get("id"))) for n in rt.gate.notices}
+    added = 0
+    for root, direction, qty, entry_price, ts in rt.con.execute(
+            "SELECT position_id, direction, qty, entry_price, ts_ms FROM positions WHERE mode=? AND symbol=? AND event='close' "
+            "AND reason=? ORDER BY id", (rt.mode.value, rt.symbol, UNRESTORED_REASON)).fetchall():
+        if root is None or str(root) in acked or (UNRESTORED_REASON, str(root)) in have:
+            continue
+        rt.gate.notices.append(_unrestored_notice(int(root), direction, qty, entry_price, int(ts)))
+        have.add((UNRESTORED_REASON, str(root)))
+        added += 1
+    return added
+
+
 def apply_restore(rt: BotRuntime, decision: RestoreDecision, ts_ms: int) -> list[str]:
     """판단을 엔진·게이트·DB에 적용한다. 돌려준 문구는 호출자가 텔레그램이 붙은 뒤 알린다(러너 순서)."""
+    if sync_unrestored_notices(rt):
+        rt.save_state(ts_ms)
     if decision.action == "none":
         return []
     payload = {"action": decision.action, "snapshot_id": decision.snapshot_id, "db": decision.db,
@@ -147,9 +181,7 @@ def apply_restore(rt: BotRuntime, decision: RestoreDecision, ts_ms: int) -> list
                                             f"재기동 복원 불일치 — {decision.detail}")], ts_ms)
     if decision.db is not None:
         d = decision.db
-        rt.gate.notices.append({"kind": UNRESTORED_REASON, "id": str(d["root_id"]), "since_ms": ts_ms,
-                                "text": f"재기동 복원 불일치로 DB 포지션 root {d['root_id']} {d['direction']} {d['qty']} @ "
-                                        f"{d['entry_price']}를 손익 없이 닫았다 — 확인 후 /start"})
+        rt.gate.notices.append(_unrestored_notice(int(d["root_id"]), d["direction"], d["qty"], d["entry_price"], ts_ms))
     rt.gate.pause(MISMATCH_PAUSE)
     rt.record_ops("RestartRestoreMismatch", decision.detail, ts_ms, payload)
     rt.snapshot(ts_ms, "restart_restore_mismatch")                   # 마지막 스냅샷 = flat 시작(다음 재기동이 같은 불일치를 다시 보지 않게)
