@@ -112,8 +112,10 @@ uv sync --frozen
 uv run pytest -q && uv run ruff check . && uv run pyright && uv run python -m ops.stream_tiers --scan
 V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 240 --var-dir $V --db $V/bot.sqlite
 ```
-- 기록: `D` · 테스트 수 · `status.json` = `exit_code 0` · `shutdown stop` · `delivered == sent` · `blockers []` ·
-  `rules.source runtime:signed` · `rules.fallback_reason null` · `confirmed_facts []`.
+- 기록: `D` · 테스트 수 · `status.json` = `exit_code 0` · `shutdown stop` · `delivered == sent` · `confirmed_facts []`.
+- 규칙 출처: 키 화이트리스트 **전**이면 `rules.source runtime:signed` · `blockers []`.
+  화이트리스트 **뒤**면 로컬은 `fallback:public+snapshot` + `blockers ["rules_from_snapshot"]`이 **정상** —
+  `runtime:signed`는 VPS에서만 확인한다(§9.3 5단계).
 - 유닛 파일: `git diff <마지막 Codex 검토 커밋>..D -- ops/systemd/` 가 비어 있다(아니면 검토부터).
 - STOP: 하나라도 실패 · worktree는 창이 끝난 뒤 `git worktree remove`.
 
