@@ -38,6 +38,7 @@ import os
 import queue
 import sqlite3
 import threading
+import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -121,7 +122,7 @@ class BotRuntime:
         self.last_mark_ms: int | None = None
         self.last_bar_open_ms: int | None = None
         self.unrecorded: list[tuple[list[object], Decimal | None]] = []
-        self.unrecorded_ops: list[tuple[str, str, int, dict[str, Any] | None]] = []
+        self.unrecorded_ops: list[tuple[str, str, int, dict[str, Any] | None, str]] = []   # (kind, detail, ts, payload, op_id)
         self.state_save_failed = False
         self.db_read_failed = False
         self.breadcrumb_path: Path | None = None                  # 러너가 var/run/safety_unsaved.json으로 정한다
@@ -358,14 +359,16 @@ class BotRuntime:
 
     def _retry_unrecorded(self, now_ms: int) -> None:
         while self.unrecorded_ops:
-            kind, detail, ts, payload = self.unrecorded_ops[0]
+            kind, detail, ts, payload, op_id = self.unrecorded_ops[0]
             try:
                 R.record_ops_event(self.con, kind, detail, ts_ms=ts, mode=self.mode.value, symbol=self.symbol,
-                                   payload=payload)
+                                   payload=payload, op_id=op_id)             # 멱등 — 삽입 뒤 죽었어도 두 번 쓰지 않는다
             except (sqlite3.Error, R.TransactionOpen):
                 self.db_errors += 1
                 break
             self.unrecorded_ops.pop(0)
+            if self.unrecorded_ops or self.state_save_failed:
+                self._write_breadcrumb(now_ms)                                # 진행 상황을 파일에도
         self._clear_breadcrumb_if_durable()
         while self.unrecorded:
             events, tp = self.unrecorded[0]
@@ -412,16 +415,17 @@ class BotRuntime:
                        important=True)
 
     def record_ops(self, kind: str, detail: str, ts_ms: int, payload: dict[str, Any] | None = None) -> None:
+        op_id = uuid.uuid4().hex
         if self.unrecorded_ops:                               # 순서 보존 — 앞선 실패가 남아 있으면 뒤에 붙인다
-            self.unrecorded_ops.append((kind, detail, ts_ms, payload))
+            self.unrecorded_ops.append((kind, detail, ts_ms, payload, op_id))
             self._write_breadcrumb(ts_ms)
             return
         try:
             R.record_ops_event(self.con, kind, detail, ts_ms=ts_ms, mode=self.mode.value, symbol=self.symbol,
-                               payload=payload)
+                               payload=payload, op_id=op_id)
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1
-            self.unrecorded_ops.append((kind, detail, ts_ms, payload))
+            self.unrecorded_ops.append((kind, detail, ts_ms, payload, op_id))
             self._write_breadcrumb(ts_ms)
             logger.error("운영 이벤트 기록 실패(보관·재시도) %s: %s", kind, e)
 
@@ -481,7 +485,7 @@ class BotRuntime:
         if self.breadcrumb_path is None:
             return
         body = {"ts_ms": ts_ms, "safety_gate": self.gate.to_state(),
-                "ops": [{"kind": k, "detail": d, "ts_ms": t, "payload": p} for k, d, t, p in self.unrecorded_ops]}
+                "ops": [{"kind": k, "detail": d, "ts_ms": t, "payload": p, "op_id": i} for k, d, t, p, i in self.unrecorded_ops]}
         tmp = self.breadcrumb_path.with_suffix(".tmp")
         try:
             self.breadcrumb_path.parent.mkdir(parents=True, exist_ok=True)

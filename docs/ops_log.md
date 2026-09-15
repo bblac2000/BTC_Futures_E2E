@@ -1233,3 +1233,54 @@ Resume in Codex: `codex resume 01a0a5d2-516f-7ff3-8ad8-a6dc6d072216`
 Codex session ID: 01a0a5d2-516f-7ff3-8ad8-a6dc6d072216
 Resume in Codex: codex resume 01a0a5d2-516f-7ff3-8ad8-a6dc6d072216
 ```
+
+### Codex 재검토 #2: breadcrumb (`225a538..231122a`, read-only · 세션 `01a0a5d8-b770-7220-92dc-97963b2f6188`)
+판정: A MERGE · B FIX FIRST · C FIX FIRST · D MERGE · E MERGE.
+
+| # | 지적 | 동의 | 조치 |
+|---|---|---|---|
+| 1 PARTIAL | 원래 재기동 손실 경로는 닫힘 · breadcrumb 수명 주기 엣지 2건 | ✅ | 아래 |
+| 새 1 MEDIUM | 읽을 수 있는 **오래된** breadcrumb가 더 새로운 DB 상태를 무조건 덮는다(삭제 실패·잔존 시) | ✅ | 기동 시 breadcrumb `ts_ms` ≤ DB `safety_state` 최신 `ts_ms`면 복원하지 않고 `safety_unsaved.stale-<ts>.json`으로 격리 · 진입 일시정지·알림은 유지 |
+| 새 2 LOW | 재생 중 삽입 후 breadcrumb 갱신 전에 죽으면 운영 이벤트 이중 기록 | ✅ | 운영 이벤트마다 `op_id`(uuid) · `record_ops_event(op_id=)` 멱등(같은 mode·kind·op_id 있으면 건너뜀, `payload_json.op_id`) · 재시도 진행마다 breadcrumb 재기록 |
+
+```
+Codex session ID: `01a0a5d8-b770-7220-92dc-97963b2f6188`
+
+**Per-Finding Status**
+
+1. **PARTIAL**: the original restart-loss path is closed, but the breadcrumb lifecycle still has edge-case regressions.
+
+Evidence for closed part: trip handling observes before DB recording at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:339), records the kill-switch op and saves state at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:381), writes a breadcrumb on ops-record failure at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:422), writes on safety-state save failure at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:471), and startup restores it before entries can run at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:230).
+
+Edge checks:
+- Breadcrumb before crash on trip path: **OK** via [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:383) -> [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:425) / [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:477).
+- Breadcrumb deletion vs later failure: **OK in the single runtime thread**; later ops failures rewrite it at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:414).
+- Pause cannot be silently cleared except by human `/start`: **OK**; pause is restored at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:239), and clear goes through resume at [safety/gate.py](/home/cms/project/BTC_Futures_E2E/safety/gate.py:64).
+- Daily-loss day `/start` no-op after restore: **OK** via [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:587) and [safety/killswitch.py](/home/cms/project/BTC_Futures_E2E/safety/killswitch.py:96).
+- `SafetyGate.load` behavior unchanged: **OK**; it delegates to equivalent `from_state` at [safety/gate.py](/home/cms/project/BTC_Futures_E2E/safety/gate.py:90).
+- Ops events not double-recorded: **PARTIAL**, see new finding #2.
+
+**New Findings**
+
+1. **MEDIUM**: stale readable breadcrumb unconditionally overrides newer DB safety state.
+Scenario: if breadcrumb deletion fails after DB durability, or an old breadcrumb is left behind, startup loads DB state at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:227) but then always replaces it from the file at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:233). `_clear_breadcrumb_if_durable` only logs unlink failure at [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:493). Fix: compare breadcrumb `ts_ms` or generation against latest `safety_state` and quarantine older breadcrumbs instead of restoring them.
+
+2. **LOW**: ops events can be duplicated if the process crashes during breadcrumb replay/retry after the DB insert but before breadcrumb rewrite/delete.
+Scenario: startup replays every breadcrumb op at [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:244), but the file is not cleared until [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:248). `engine_events` has no uniqueness key at [db/schema.py](/home/cms/project/BTC_Futures_E2E/db/schema.py:202), and `record_ops_event` always inserts at [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:332). Fix: add a stable idempotency key for queued ops, or rewrite breadcrumb progress after each successful replay.
+
+**Verification**
+
+Ran requested command read-only with temp/cache outside repo:
+
+`TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python3 -Bc "import pytest,sys; sys.exit(pytest.main(['-q','-p','no:cacheprovider','tests/']))"`
+
+Result: passed. Worktree remained clean.
+
+**Area Verdicts**
+
+A. engine/db: **MERGE**
+B. runtime/runner/threading/telegram: **FIX FIRST**
+C. safety #11-#13: **FIX FIRST**
+D. prune/sync/data stores: **MERGE**
+E. health/systemd/runbook: **MERGE**
+```

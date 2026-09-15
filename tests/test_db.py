@@ -566,3 +566,12 @@ def test_ops_events_are_recorded_beside_engine_events(con):
                        payload={"reason": "daily_loss"})
     assert con.execute("SELECT kind, payload_json FROM engine_events").fetchone() == ("KillSwitchTripped",
                                                                                       '{"reason": "daily_loss"}')
+
+
+def test_ops_event_with_an_op_id_is_idempotent(con):
+    for _ in range(2):
+        R.record_ops_event(con, "KillSwitchTripped", "x", ts_ms=DAY0, mode="paper", symbol="BTCUSDT",
+                           payload={"reason": "daily_loss"}, op_id="abc123")
+    R.record_ops_event(con, "KillSwitchTripped", "x", ts_ms=DAY0, mode="paper", symbol="BTCUSDT", payload=None, op_id="def")
+    rows = con.execute("SELECT json_extract(payload_json, '$.op_id') FROM engine_events ORDER BY id").fetchall()
+    assert rows == [("abc123",), ("def",)]

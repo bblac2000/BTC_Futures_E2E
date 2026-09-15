@@ -51,6 +51,7 @@ from ops.telegram_link import TelegramLink
 from paper.engine import Engine
 from paper.sender import PaperSender
 from safety.config import REGISTERED_KILL_SWITCH
+from safety.gate import STATE_NAME as SAFETY_GATE_STATE
 from safety.gate import SafetyGate
 from safety.stale import StaleDataGuard
 from sizing.config import SizingLimits
@@ -225,27 +226,40 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
     wallet = last_engine_wallet(con, cfg.mode) or cfg.capital
     counter = DeliveryCounter(FED_STREAMS, start_ms=now)
     gate = SafetyGate.load(con, REGISTERED_KILL_SWITCH, StaleDataGuard(counter), mode=cfg.mode.value, wallet=wallet)
-    crumb_ops: list[dict[str, Any]] = []
+    crumb_ops: list[tuple[str, str, int, dict[str, Any] | None, str]] = []
     crumb_note: str | None = None
+    keep_crumb = False
     if cfg.breadcrumb_path.exists():
-        #  Codex L8 재검토 #1: 지난 실행이 DB에 못 쓴 안전 상태 — DB보다 새롭다. 복원하고 진입을 멈춘다(fail-closed)
+        #  Codex L8 재검토 #1·#2: 지난 실행이 DB에 못 쓴 안전 상태. **DB 최신 행보다 새로울 때만** 복원하고, 오래됐으면 격리한다.
+        #  어느 경우든 진입을 멈춘다(fail-closed · 해제는 사람의 /start).
         try:
             crumb = json.loads(cfg.breadcrumb_path.read_text())
-            gate = SafetyGate.from_state(crumb["safety_gate"], REGISTERED_KILL_SWITCH, StaleDataGuard(counter), wallet=wallet)
-            crumb_ops = list(crumb.get("ops") or [])
-            crumb_note = f"복원(ops {len(crumb_ops)}건)"
+            crumb_ts = int(crumb["ts_ms"])
+            db_ts = con.execute("SELECT max(ts_ms) FROM safety_state WHERE mode=? AND name=?",
+                                (cfg.mode.value, SAFETY_GATE_STATE)).fetchone()[0]
+            if db_ts is not None and db_ts >= crumb_ts:
+                stale = cfg.breadcrumb_path.with_name(f"safety_unsaved.stale-{crumb_ts}.json")
+                cfg.breadcrumb_path.replace(stale)
+                crumb_note = f"오래된 breadcrumb(ts {crumb_ts} ≤ DB {db_ts}) — 복원 안 함 · {stale.name}로 격리"
+            else:
+                gate = SafetyGate.from_state(crumb["safety_gate"], REGISTERED_KILL_SWITCH, StaleDataGuard(counter),
+                                             wallet=wallet)
+                crumb_ops = [(str(o["kind"]), str(o["detail"]), int(o["ts_ms"]), o.get("payload"),
+                              str(o.get("op_id") or f"crumb:{crumb_ts}:{i}")) for i, o in enumerate(crumb.get("ops") or [])]
+                crumb_note = f"복원(ops {len(crumb_ops)}건)"
         except (OSError, ValueError, KeyError, TypeError) as e:
+            keep_crumb = True
             crumb_note = f"해석 불가({type(e).__name__}) — 파일 보존, 사람 확인"
         gate.pause("system:restart_with_unsaved_safety_state")
     engine = Engine(rules, PaperSender(rules), mode=cfg.mode, wallet=wallet, limits=SizingLimits())
     rt = BotRuntime(engine=engine, gate=gate, con=con, symbol=cfg.symbol, clock_ms=clock_ms, status_path=cfg.status_path)
-    if crumb_note is None or crumb_note.startswith("복원"):
+    if not keep_crumb:
         rt.breadcrumb_path = cfg.breadcrumb_path                         # 해석 못 한 breadcrumb는 경로를 주지 않아 지우지 않는다
-    for o in crumb_ops:
-        rt.record_ops(str(o["kind"]), str(o["detail"]), int(o["ts_ms"]), o.get("payload"))
     if crumb_note is not None:
+        rt.unrecorded_ops = list(crumb_ops)                              # 멱등 op_id로 재생 — 이미 들어간 것은 건너뛴다
+        rt.save_state(now)
+        rt._retry_unrecorded(now)
         rt.record_ops("RestartWithUnsavedSafetyState", crumb_note, now)
-        rt.save_state(now)                                               # 성공하면 breadcrumb 삭제(복원한 경우만)
 
     link: TelegramLink | None = None
     if cfg.telegram:

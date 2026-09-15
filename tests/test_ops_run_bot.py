@@ -279,3 +279,44 @@ def test_unreadable_breadcrumb_fails_closed(tmp_path):
     body = json.loads(sqlite3.connect(cfg.db_path).execute(
         "SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
     assert body["paused_by"] == "system:restart_with_unsaved_safety_state" and crumb.exists(), "해석 못 한 파일은 사람이 본다"
+
+
+def test_a_breadcrumb_older_than_the_db_state_is_quarantined_not_restored(tmp_path):
+    cfg = config(tmp_path)
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=65) == 0          # DB에 safety_state 행이 생긴다
+    con = sqlite3.connect(cfg.db_path)
+    (db_ts,) = con.execute("SELECT max(ts_ms) FROM safety_state").fetchone()
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    old = {"paused_by": None, "reconcile": {"blocker": None, "sticky": False},
+           "kill_switch": {"tripped": {"ts_ms": 1, "reason": "liquidation", "detail": "old"}, "consecutive_losses": 0,
+                           "liquidations": 1, "vanished": 0, "last_flat_wallet": "1000", "day": None,
+                           "day_start_equity": None, "resumed_by": None}}
+    crumb.write_text(json.dumps({"ts_ms": db_ts - 1, "safety_gate": old, "ops": []}))
+    tg = FakeTelegram()
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=tg, seconds=5) == 0
+    body = json.loads(con.execute("SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
+    assert body["kill_switch"]["tripped"] is None, "DB가 더 새롭다 — 옛 breadcrumb로 덮지 않는다"
+    assert body["paused_by"] == "system:restart_with_unsaved_safety_state"
+    assert not crumb.exists() and list((cfg.var_dir / "run").glob("safety_unsaved.stale-*.json"))
+    assert any("오래된" in t for t in tg.texts())
+
+
+def test_breadcrumb_replay_does_not_duplicate_events_already_in_the_db(tmp_path):
+    cfg = config(tmp_path)
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    con = sqlite3.connect(cfg.db_path)
+    from db import record as R
+    R.record_ops_event(con, "KillSwitchTripped", "x", ts_ms=T0, mode="paper", symbol="BTCUSDT",
+                       payload={"reason": "daily_loss"}, op_id="op-1")                # 삽입 뒤 breadcrumb 갱신 전에 죽었다
+    con.commit()
+    state = json.loads(con.execute("SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    crumb.write_text(json.dumps({"ts_ms": clock.t + 10_000, "safety_gate": state, "ops": [
+        {"kind": "KillSwitchTripped", "detail": "x", "ts_ms": T0, "payload": {"reason": "daily_loss"}, "op_id": "op-1"}]}))
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    assert con.execute("SELECT count(*) FROM engine_events WHERE kind='KillSwitchTripped'").fetchone()[0] == 1
+    assert not crumb.exists()

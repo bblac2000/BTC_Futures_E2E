@@ -330,12 +330,22 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
 
 
 def record_ops_event(con: sqlite3.Connection, kind: str, detail: str, *, ts_ms: int, mode: str, symbol: str,
-                     payload: Mapping[str, Any] | None = None) -> None:
-    """layer 8 운영 이벤트(킬스위치 발동·stale 청산·재개·차단 해제) — 엔진 이벤트와 같은 표에 나란히."""
+                     payload: Mapping[str, Any] | None = None, op_id: str | None = None) -> bool:
+    """layer 8 운영 이벤트(킬스위치 발동·stale 청산·재개·차단 해제) — 엔진 이벤트와 같은 표에 나란히.
+    `op_id`가 있으면 **멱등**: 같은 (mode, kind, op_id)가 이미 있으면 쓰지 않고 False(재기동 재생·재시도의 이중 기록 방지 ·
+    Codex L8 재검토 #2). `op_id`는 `payload_json.op_id`에 남는다."""
     mode = _mode(mode)
+    body = dict(payload) if payload is not None else None
+    if op_id is not None:
+        body = (body or {}) | {"op_id": op_id}
     with _tx(con):
+        if op_id is not None and con.execute(
+                "SELECT 1 FROM engine_events WHERE mode=? AND kind=? AND json_extract(payload_json, '$.op_id')=? LIMIT 1",
+                (mode, kind, op_id)).fetchone() is not None:
+            return False
         _insert(con, "engine_events", {"mode": mode, "symbol": symbol, "ts_ms": ts_ms, "kind": kind, "detail": detail,
-                                       "payload_json": _json(dict(payload)) if payload is not None else None})
+                                       "payload_json": _json(body) if body is not None else None})
+    return True
 
 
 def record_account_snapshot(con: sqlite3.Connection, *, mode: str, symbol: str | None, ts_ms: int, source: str,
