@@ -786,3 +786,29 @@ FIX FIRST for the whole ccxt REST adapter. The original partial finding is only 
 Codex session ID: 01a0a4a8-f3fb-7932-93fb-606eee26c526
 Resume in Codex: codex resume 01a0a4a8-f3fb-7932-93fb-606eee26c526
 ```
+
+## 2026-09-15 — Codex 재검토 #3 ccxt 어댑터 (`7fee6f6`, read-only · `task-mu2jp5u0-4op9hx`)
+판정: **MERGE** — 발견 없음(Codex가 로컬 venv로 `tests/test_ccxt_rest.py` 56 passed 확인).
+**ccxt 전환 최종: REST 어댑터(주문 경로 포함) MERGE · 피드 MERGE · 백필 MERGE.**
+
+### Codex 재검토 #3 원문 (verbatim)
+```
+No findings.
+
+CLOSED: `-1021` failed resync `/time` headers are now observed. The `finally` path at [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:170) calls `_headers()` after `load_time_difference()` whether that resync succeeds or raises, and the regression test at [tests/test_ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/tests/test_ccxt_rest.py:385) covers the `429 + X-MBX-USED-WEIGHT-1M` case.
+
+OPEN: none.
+
+Regression check: none observed for the ccxt REST adapter, including the order path. Order validation, `create_order`, raw `info` response handling, unknown-execution mapping, and rate-limit header paths remain covered.
+
+Verified:
+`PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -s tests/test_ccxt_rest.py -p no:cacheprovider`  
+Result: `56 passed`
+
+No network, no `.env`, no changes. Worktree clean at `7fee6f6cb05622f8f05e033443d3f1cced2e8885`.
+
+Final verdict: **MERGE**.
+
+Codex session ID: 01a0a4ab-8632-7b13-896a-a279415a704e
+Resume in Codex: codex resume 01a0a4ab-8632-7b13-896a-a279415a704e
+```
