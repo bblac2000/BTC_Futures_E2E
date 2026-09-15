@@ -136,3 +136,28 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 - [ ] 레지스트리 #4 수수료 가정 판정 결과 기록 — **첫 라이브 진입부터**의 진입 후 검사 로그(레지스트리 #6: 페이퍼 포지션은 `positionRisk`에 없다). 테스트넷·최소 명목 프로브로 앞당길지는 사용자 결정 대기
 - [ ] 레지스트리 #5 14일차 재평가 행 존재
 
+
+## 11. 테스트넷 수수료 가정 프로브 — 해석 규칙 사전확약 (2026-09-15 · 스크립트 작성·실행 **전**)
+사용자 결정 2026-09-15: 레지스트리 #4의 "진입 taker 수수료가 격리 마진을 줄이는가"를 **Binance Futures 테스트넷에서 먼저** 판정한다.
+테스트넷은 **메커니즘 전용** — 테스트넷의 MMR·수수료 **값**은 어디에도 쓰지 않는다(값은 항상 메인넷 런타임 조회). 결과는 스크립트가 레지스트리에 새 행(#7 예정)으로 쓴다.
+실계정 최소 명목 프로브는 테스트넷이 INCONCLUSIVE일 때만, **Codex 검토 + 사용자 명시 승인** 후.
+
+**고정 파라미터**: BTCUSDT · ISOLATED · 원웨이 · **L = 100**(테스트넷 브라켓 최대가 100 미만이면 중단 — 자동으로 낮추지 않는다) · MARKET ·
+수량 = `ceil_to_step(MIN_NOTIONAL × 1.1 / mark)`(런타임 규칙) · **LONG 한 번 → 청산·flat 확인 → SHORT 한 번 → 청산·flat 확인**.
+기동은 `run_startup_gate(Mode.LIVE)`(테스트넷 계정에서 layer 1 LIVE 경로를 그대로 탄다).
+
+**읽는 값**(체결 직후, 청산 전): `positionRisk` v2·v3의 BOTH 행 전 필드(`positionAmt`·`entryPrice`·`leverage`·`isolatedWallet`·`isolatedMargin`·`unRealizedProfit`·`liquidationPrice`·`markPrice`·`marginType`, `isolated` 필드 존재 여부) ·
+`GET /fapi/v1/userTrades?orderId=`의 체결별 `commission`·`commissionAsset`.
+
+**정의**: Q = |positionAmt| · E = entryPrice · N = Q×E · L = 행의 leverage(게이트 응답과 다르면 INCONCLUSIVE) · C = Σ commission(USDT, 아니면 INCONCLUSIVE) ·
+tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올림 두 번) · **W_fee = N/L − C** · **W_nofee = N/L**.
+사전조건: C > 2×tol(두 모델이 구별 가능) — 아니면 INCONCLUSIVE.
+
+**판정(다리별)**
+- A(1차 · 거래소가 잠근 마진 직접 관측): |isolatedWallet − W_fee| ≤ tol 이고 |isolatedWallet − W_nofee| > tol → **FEE** · 반대 → **NO_FEE** · 그 밖 → **A_NEITHER**
+- B(2차 · 청산가): `liquidation_estimate(E, N, L, 테스트넷 규칙, taker=C/N)`과 `taker=0`의 가격을 `liquidationPrice`에서 **tick 수**로 비교 → fee / no_fee / tie
+- 다리 판정: A=FEE 이고 B≠no_fee → **FEE** · A=NO_FEE 이고 B≠fee → **NO_FEE** · 그 밖 → **INCONCLUSIVE**
+
+**전체 판정**: 두 다리 모두 FEE → **CONFIRMED_FEE**(#4 가정이 메커니즘상 맞다) · 두 다리 모두 NO_FEE → **CONFIRMED_NO_FEE**(#4는 보수적이나 사실과 다르다 — 게이트를 바꾸려면 **새 행**, 자동 완화 없음) · 그 밖 → **INCONCLUSIVE** → 실계정 프로브 경로(Codex + 사용자 승인).
+부가 기록(판정에 쓰지 않음): `isolatedMargin − isolatedWallet`와 `unRealizedProfit`의 차 · v2/v3 `isolated` 필드 존재(테스트넷 모양일 뿐 — 메인넷 `_is_isolated`는 메인넷 캡처로 확정).
+**재실행 규칙**: 운영 실패(주문 거부·청산 실패·전송 오류)로 판정까지 못 간 실행은 시도로만 기록하고 재실행 가능. **판정까지 간 첫 실행의 결과가 확정** — 결과를 보고 재실행해 다른 판정을 고르지 않는다.

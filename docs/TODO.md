@@ -22,6 +22,7 @@
 3i. [ ] 백로그: COIN-M(dapi) 포지션·미체결·algo 읽기 사전검사 — **엔드포인트 공식 문서 원문 확인 먼저**
 3j. [ ] 페이퍼 14일차: 레지스트리 #5 재평가 새 행(체결 슬리피지 p99 · 모니터 주기 mark 이동 p99)
 3k. [ ] ~~첫 페이퍼 주~~ → **첫 라이브 진입부터**: 진입 후 검사 로그로 #4 수수료 가정 판정(레지스트리 #6) · 테스트넷/최소 명목 프로브로 앞당길지 사용자 결정 대기
+3l. [ ] **테스트넷 수수료 프로브** `scripts/testnet_fee_probe.py` — 해석 규칙 설계서 §11(사전확약) · 사용자 실행(테스트넷 키) → 레지스트리 #7 · INCONCLUSIVE면 실계정 프로브(Codex+승인)
 3h. [ ] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
 3c. [ ] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
