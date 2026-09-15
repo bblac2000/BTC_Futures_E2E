@@ -38,10 +38,10 @@ def all_checked() -> LiveChecklist:
 
 
 # ── PAPER ────────────────────────────────────────────────────────────────────
-def test_slippage_constant_is_the_tagged_measured_value():
-    """스킬 exchange-rules §6: 실측 왕복 슬리피지 0.016 bps(2026-08 레짐) — 꼬리표 유지. 편도마다 왕복값 전체를 적용(보수)."""
-    assert PAPER_SLIPPAGE_RATE == D("0.0000016")
-    assert "2026-08" in PAPER_SLIPPAGE_TAG
+def test_slippage_constant_is_the_pre_committed_registry_7_value():
+    """레지스트리 #7(사용자 2026-09-15): 편도 2 bps + 불리 tick — 7일 |mark−mid|/mid p99 1.835 bps 근거. 0.016 bps 대체."""
+    assert PAPER_SLIPPAGE_RATE == D("0.0002")
+    assert "#7" in PAPER_SLIPPAGE_TAG
 
 
 def test_paper_buy_fills_above_mark_and_sell_below_on_tick_grid(rules):
@@ -52,7 +52,7 @@ def test_paper_buy_fills_above_mark_and_sell_below_on_tick_grid(rules):
     sell = s.send_market(params(rules, Direction.LONG, Intent.EXIT), ref_mark=mark, ts_ms=2)
     assert buy.price > mark and buy.price % tick == 0
     assert sell.price < mark and sell.price % tick == 0
-    assert buy.price == D("60000.20") and sell.price == D("59999.90")    # 60000.03×(1±1.6e-6) → 불리한 tick
+    assert buy.price == D("60012.1") and sell.price == D("59988.0")      # 60000.03×(1±0.0002) → 불리한 tick
     assert buy.commission == buy.qty * buy.price * rules.commission.taker
     assert sell.reduce_only and not buy.reduce_only
     assert buy.side.value == "BUY" and sell.side.value == "SELL"

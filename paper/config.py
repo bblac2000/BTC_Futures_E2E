@@ -1,4 +1,4 @@
-"""페이퍼 체결 모델 설정 — 거래소 값이 아니라 **측정값·정책 값**이다(tests/test_no_exchange_literals.py 허용 목록).
+"""페이퍼 체결 모델 설정 — 거래소 값이 아니라 **사전확약 정책 값**이다(tests/test_no_exchange_literals.py 허용 목록).
 
 수수료는 여기 없다 — 항상 런타임 `commissionRate`의 taker(RuntimeRules.commission.taker).
 """
@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-#  스킬 exchange-rules §6 · strategy-modules §6 "페이퍼 체결 모델": 실측 왕복 슬리피지 0.016 bps(E2E Phase 1-A, 50~1,000 USDT, 2026-08 레짐).
-#  보수: **편도마다 왕복값 전체**를 불리한 방향으로 적용하고, 가격은 불리한 쪽 tick으로 반올림한다.
-PAPER_SLIPPAGE_RATE = Decimal("0.0000016")
-PAPER_SLIPPAGE_TAG = "0.016 bps round-trip measured E2E Phase 1-A 2026-08 regime (50~1,000 USDT) · applied per side · recalibrate"
+#  레지스트리 #7(사용자 2026-09-15): mark 기준 체결에 **편도 2 bps**를 불리한 방향으로, 가격은 불리한 tick으로 반올림.
+#  근거 = 이 저장소 7일 측정 |mark − mid|/mid p99 1.835 bps(ops_log 2026-09-15). 스킬의 0.016 bps를 페이퍼에 한해 대체.
+#  재평가는 페이퍼 14일차 새 행에서만.
+PAPER_SLIPPAGE_RATE = Decimal("0.0002")
+PAPER_SLIPPAGE_TAG = "registry #7 · 2 bps per side (7-day |mark-mid|/mid p99 1.835 bps) · adverse tick · re-evaluate paper day 14"

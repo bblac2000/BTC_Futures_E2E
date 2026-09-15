@@ -633,3 +633,11 @@ I could not run the test suite because `pytest` is not installed in this environ
 Codex session ID: 01a0a3e4-9e32-7113-a247-9cbcc72edc54
 Resume in Codex: codex resume 01a0a3e4-9e32-7113-a247-9cbcc72edc54
 ```
+
+## 2026-09-15 — 사용자 방향 전환: 테스트넷 폐기 · ccxt/ccxt.pro 채택 · layer 3 결정 3건
+- **테스트넷 폐기**: `scripts/testnet_fee_probe.py`와 그 테스트는 **미사용으로 보존**(삭제하지 않음). 설계서 §11은 폐기 표시. #4 수수료 가정은 보수적(수수료가 격리 마진을 줄인다)으로 유지, 레지스트리 #6대로 첫 LIVE 진입에서 판정. `.env.example` 테스트넷 블록 미사용 표시.
+- **결정 1·2 승인**: 실행 시점 예상 체결가로 재사이징 · 체결 후 #5 위반 즉시 청산.
+- **결정 3**: 페이퍼 슬리피지 2 bps 편도 + 불리 tick → 레지스트리 #7(0.016 bps를 페이퍼에 한해 대체).
+- **ccxt 고정**: `ccxt==4.5.78`(PyPI 최신, 2026-09-15 확인) → 레지스트리 #8. 푸시: 로컬 9커밋 `9f4ab4b..0a604f0` 사용자 요청으로 푸시.
+- **슬리피지 2 bps 전환 중 엔진 결함 발견·수정**: 진입 스킵 판단이 SL을 **예상 체결가**와 비교했다. 0.016 bps에서는 드러나지 않았으나 2 bps에서 LONG 예상가(mark×1.0002)가 SL 위로 올라가 **mark가 이미 SL을 넘은 진입**을 허용했다(`test_sl_already_crossed_at_execution_skips_entry`가 잡음). SL 트리거 기준(mark, #5)으로 먼저 판정하도록 수정. LIVE 흉내 테스트 송신기 4곳은 슬리피지 0으로 고정(LIVE 예상가 = mark와 맞추기 위한 테스트 더블 조정 · 단언 변경 없음).
+- ⚠️ 열린 항목: `LiveSender.quote_fill_price`는 여전히 mark다. 실제 라이브 슬리피지가 2 bps 수준이면 최고 L 경계(한 L 단계 ≈ 청산 거리 1.45e-4)보다 `1.5 × 슬리피지`가 커서 **체결 후 #5 위반 → 즉시 청산이 자주 날 수 있다**. LIVE 예상가에도 #7 모델을 쓸지는 사용자 결정(라이브 배선 전).

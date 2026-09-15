@@ -5,6 +5,8 @@ description = "BTCUSDT USDⓈ-M perpetual bot — paper first, live only after u
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "pyarrow>=17",
+    # 🔒 exact pin — ccxt/ccxt.pro is part of the exchange-rules surface (registry). Upgrades = new registry row + re-run tier test.
+    "ccxt==4.5.78",
 ]
 
 [dependency-groups]

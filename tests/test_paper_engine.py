@@ -48,6 +48,8 @@ H = 3_600_000
 DAY0 = 1_789_430_400_000                  # 2026-09-15 00:00:00 UTC
 RATE = D("0.0001")
 W0 = D("1000")
+#  LIVE 흉내 송신기는 mark에 체결한다 — LIVE 예상가(mark)와 같게 두어야 테스트가 겨냥한 경로만 탄다
+ZERO_SLIP = D("0")
 
 
 def next_funding(ts: int) -> int:
@@ -265,7 +267,7 @@ def test_paper_sizes_at_the_quoted_adverse_fill_so_the_gate_holds_after_fill(rul
 
 
 def test_live_mode_runs_post_entry_liquidation_check(rules):
-    s = SpySender(PaperSender(rules), mode=Mode.LIVE)
+    s = SpySender(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE)
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
     probe = size_entry(D("60000"), intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
@@ -276,7 +278,7 @@ def test_live_mode_runs_post_entry_liquidation_check(rules):
 
 
 def test_live_position_amount_mismatch_blocks_entries(rules):
-    s = SpySender(PaperSender(rules), mode=Mode.LIVE, exchange_liq=D("59000"), exchange_amt=D("0.001"))
+    s = SpySender(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE, exchange_liq=D("59000"), exchange_amt=D("0.001"))
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
@@ -298,7 +300,7 @@ class FlakyLive(SpySender):
 
 def test_live_post_fill_position_risk_failure_keeps_the_position_and_blocks(rules):
     """Codex L3 검토 1: 체결 후 positionRisk 조회가 실패해도 내부 포지션은 남고(청산 감시 계속) 진입은 막힌다."""
-    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE, fail_position_risk=True)
+    s = FlakyLive(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE, fail_position_risk=True)
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
@@ -309,7 +311,7 @@ def test_live_post_fill_position_risk_failure_keeps_the_position_and_blocks(rule
 
 def test_live_entry_outcome_unknown_adopts_the_exchange_position(rules):
     """응답을 못 받았지만 실제로는 체결됐다 → 거래소 수량을 포지션으로 채택해 SL 감시를 한다(방치 금지)."""
-    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE, unknown_on_send=1, exchange_amt=D("0.033"))
+    s = FlakyLive(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE, unknown_on_send=1, exchange_amt=D("0.033"))
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
@@ -321,7 +323,7 @@ def test_live_entry_outcome_unknown_adopts_the_exchange_position(rules):
 
 def test_live_exit_syncs_to_the_exchange_quantity_and_average_entry_before_closing(rules):
     """Codex L3 재검토 3: 거래소가 더 들고 있으면 그 수량을 닫되, 손익은 **거래소 평균 진입가** 기준 + 진입 차단."""
-    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
+    s = FlakyLive(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE)
     probe = size_entry(D("60000"), intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
     s.exchange_amt = probe.qty
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
@@ -347,7 +349,7 @@ def test_live_malformed_position_read_never_raises_after_orders(rules):
         def position_risk(self):
             self.calls.append(("position_risk",))
             raise OrderOutcomeUnknown("positionRisk 해석 불가")
-    s = Broken(PaperSender(rules), mode=Mode.LIVE)
+    s = Broken(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE)
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent())
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
@@ -360,7 +362,7 @@ def test_live_adoption_never_shrinks_below_confirmed_fills(rules):
     """Codex L3 재검토 2: 거래소 수량이 확인된 체결보다 작으면 채택하지 않는다(지갑·포지션 불일치 방지) — 차단만."""
     sr = replace(rules.symbol_rules, market_max_qty=D("0.010"))
     r2 = replace(rules, symbol_rules=sr)
-    s = FlakyLive(PaperSender(r2), mode=Mode.LIVE, unknown_on_send=2, exchange_amt=D("0.005"))
+    s = FlakyLive(PaperSender(r2, slippage_rate=ZERO_SLIP), mode=Mode.LIVE, unknown_on_send=2, exchange_amt=D("0.005"))
     e = Engine(r2, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent(sl="59820", risk="0.02"))
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
@@ -373,7 +375,7 @@ def test_live_adoption_never_shrinks_below_confirmed_fills(rules):
 def test_live_adoption_uses_the_exchange_average_entry_for_the_whole_quantity(rules):
     sr = replace(rules.symbol_rules, market_max_qty=D("0.010"))
     r2 = replace(rules, symbol_rules=sr)
-    s = FlakyLive(PaperSender(r2), mode=Mode.LIVE, unknown_on_send=2, exchange_amt=D("0.020"), exchange_entry=D("60001"))
+    s = FlakyLive(PaperSender(r2, slippage_rate=ZERO_SLIP), mode=Mode.LIVE, unknown_on_send=2, exchange_amt=D("0.020"), exchange_entry=D("60001"))
     e = Engine(r2, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
     e.request_entry(intent(sl="59820", risk="0.02"))
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
@@ -456,7 +458,7 @@ def test_paper_liquidation_beats_sl_and_loses_margin_plus_liquidation_fee(rules,
 
 
 def test_live_does_not_simulate_liquidation_it_alerts_and_exits_by_sl(rules):
-    s = SpySender(PaperSender(rules), mode=Mode.LIVE, exchange_liq=D("1"))
+    s = SpySender(PaperSender(rules, slippage_rate=ZERO_SLIP), mode=Mode.LIVE, exchange_liq=D("1"))
     probe = size_entry(D("60000"), intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
     s.exchange_amt = probe.qty
     e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())

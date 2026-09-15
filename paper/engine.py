@@ -220,6 +220,11 @@ class Engine:
         pe = self.pending
         assert pe is not None
         self.pending = None
+        #  SL 트리거 기준은 mark(#5) — 예상 체결가가 아니라 **mark가 이미 SL을 넘었는지**로 건너뛴다
+        #  (2 bps 슬리피지에서 BUY 예상가가 SL 위로 올라가 "SL 이미 발동된 진입"을 허용하던 결함 · 레지스트리 #7 전환 중 발견)
+        long_ = pe.direction is Direction.LONG
+        if (long_ and ref_mark <= pe.sl) or (not long_ and ref_mark >= pe.sl):
+            return [EntrySkipped(ts_ms, None, SkipReason.SL_CROSSED_BEFORE_FILL, f"실행 mark {ref_mark} · SL {pe.sl}")]
         quote = self.sender.quote_fill_price(side_for(pe.direction, Intent.ENTRY), ref_mark)
         d = size_entry(quote, pe.sl, pe.direction, self.wallet, pe.regime, self.rules, self.limits)
         if not d.ok or d.leverage is None:
