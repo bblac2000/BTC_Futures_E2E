@@ -697,3 +697,28 @@ def test_entry_filled_carries_the_total_entry_commission_including_adopted_estim
     p.request_entry(intent())
     (g,) = of(p.on_tick(tick(DAY0 + 1000, "60000")), EntryFilled)
     assert g.entry_commission == sum(x.commission for x in g.fills)
+
+
+def test_live_exit_sync_to_a_smaller_exchange_quantity_records_the_missing_part_as_vanished(rules):
+    """Codex 재검토 #1: 거래소 수량이 **줄어** 있으면 사라진 부분(부분 청산·ADL·수동 감소 의심)을 `PositionVanished`로 —
+    수정 행으로 덮으면 사라진 수량의 기록·손익이 없어진다. 늘어난 경우만 `PositionSynced`."""
+    from paper.types import PositionSynced, PositionVanished
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
+    probe = size_entry(PaperSender(rules).quote_fill_price(Side.BUY, D("60000")), intent().sl, LONG, W0, intent().regime,
+                       rules, SizingLimits())
+    s.exchange_amt = probe.qty
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    e.on_tick(tick(DAY0 + 1000, "60000"))
+    pos = e.position
+    assert pos is not None and probe.qty > D("0.004")
+    entry = pos.entry_price
+    s.exchange_amt = probe.qty - D("0.004")
+    ev = e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000)
+    assert of(ev, PositionSynced) == []
+    (v,) = of(ev, PositionVanished)
+    (c,) = of(ev, PositionClosed)
+    kinds = [type(x).__name__ for x in ev]
+    assert kinds.index("PositionVanished") < kinds.index("PositionClosed")
+    assert v.qty == D("0.004") and v.entry_price == entry and c.qty == probe.qty - D("0.004")
+    assert v.qty + c.qty == probe.qty

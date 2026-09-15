@@ -158,7 +158,7 @@ class CommandBot:
         return self._alert_sends(a)
 
     def cancel_deadline_ms(self, p: PendingConfirm) -> int:
-        """발행 + (재전송 횟수 + 1) × 간격 — 이 시각을 넘긴 '예'는 실행하지 않는다(경계 포함 유효)."""
+        """발행 + (재전송 횟수 + 1) × 간격 — 이 시각 **이후(경계 포함)**의 '예'는 실행하지 않는다(tick 취소와 같은 경계)."""
         return p.issued_ms + (self.resends + 1) * self.resend_interval_ms
 
     # ── 내부 ────────────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ class CommandBot:
             return [Answer(qid, "만료되었거나 이미 처리됨 — 실행 안 함")]
         self.pending = None
         #  🔴 Codex L6·7 #1: 무응답 취소 기한(+12초)은 tick만이 아니라 **콜백에서도** 검사 — 폴링이 멈춘 사이의 '예'를 막는다
-        if now_ms > self.cancel_deadline_ms(p):
+        if now_ms >= self.cancel_deadline_ms(p):             # tick 취소(>=)와 같은 경계 — 처리 순서와 무관
             return [Answer(qid, "응답 기한 지남 — 실행 안 함"),
                     Send(p.chat_id, f"응답 기한 지남 — {self._label(p.command)} 취소, 청산 안 됨")]
         if now_ms - p.issued_ms > self.ttl_ms:

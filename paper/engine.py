@@ -391,11 +391,17 @@ class Engine:
                             * self.rules.commission.taker
                         self.wallet -= extra_fee
                         pos.entry_commission += extra_fee
+                    else:
+                        #  🔴 Codex L6·7 재검토 #1: 거래소 수량이 **줄었다** — 사라진 부분은 수정 행으로 덮지 않고 소실로 기록
+                        #  (부분 청산·ADL·수동 감소 의심 · 손익 모름 → 추정하지 않음 · 킬스위치가 청산 1회로 본다)
+                        ev.append(PositionVanished(ts_ms, pos.direction, pos.qty - abs(pr.amt), pos.entry_price,
+                                                   f"청산({reason}) 직전 거래소 수량 {pos.qty} → {abs(pr.amt)} 감소 — 부분 청산·ADL·수동 감소 의심"))
                     pos.qty = abs(pr.amt)
                     if pr.entry_price > 0:
                         pos.entry_price = pr.entry_price
                     signed = pr.amt
-                    ev.append(PositionSynced(ts_ms, pos.direction, previous_qty, pos.qty, pos.entry_price, extra_fee, pr))
+                    if pos.qty > previous_qty:
+                        ev.append(PositionSynced(ts_ms, pos.direction, previous_qty, pos.qty, pos.entry_price, extra_fee, pr))
         fills: list[Fill] = []
         failure: Exception | None = None
         try:

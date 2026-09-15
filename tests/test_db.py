@@ -493,3 +493,19 @@ def test_position_vanished_closes_the_db_position_with_unknown_exit(con):
     (row,) = con.execute("SELECT reason, exit_price, realized_pnl_usdt, position_id, detail FROM positions WHERE event='close'").fetchall()
     assert row[:3] == ("vanished", None, None) and row[3] is not None and "거래소 포지션 0" in row[4]
     assert R.open_position_state(con, mode="live", symbol="BTCUSDT") is None
+
+
+def test_partial_vanish_then_close_leaves_the_position_flat_and_every_unit_accounted(con):
+    from paper.types import PositionVanished
+    base = _entry_filled_event()
+    R.record_events(con, [base], mode="live", symbol="BTCUSDT")
+    q0 = base.post_fill.qty
+    v = PositionVanished(DAY0 + 2000, Direction.LONG, D("0.004"), base.post_fill.entry_price, "부분 감소")
+    R.record_events(con, [v], mode="live", symbol="BTCUSDT")
+    st = R.open_position_state(con, mode="live", symbol="BTCUSDT")
+    assert st is not None and st.remaining_qty == q0 - D("0.004")
+    close = PositionClosed(DAY0 + 2000, Direction.LONG, ExitReason.MANUAL, q0 - D("0.004"), D("60000"), D("60000"), (),
+                           D("0"), D("0"), D("0"), D("999"))
+    R.record_events(con, [close], mode="live", symbol="BTCUSDT")
+    assert R.open_position_state(con, mode="live", symbol="BTCUSDT") is None
+    assert [r[0] for r in con.execute("SELECT reason FROM positions WHERE event='close' ORDER BY id")] == ["vanished", "manual"]

@@ -101,7 +101,8 @@ class EntryFilled:
 
 @dataclass(frozen=True)
 class PositionSynced:
-    """LIVE 청산 직전 거래소 수량이 내부와 달라 **거래소 기준으로 동기화**했다(진리원 = 그 시점 positionRisk).
+    """LIVE 청산 직전 거래소 수량이 내부보다 **커서** 거래소 기준으로 동기화했다(진리원 = 그 시점 positionRisk).
+    줄어든 경우는 사라진 부분을 `PositionVanished`로 낸다(수정 행으로 덮지 않는다 · Codex L6·7 재검토 #1).
     db: root open 행의 수정 행(reason 'adopted_from_exchange') — close보다 먼저 나온다(Codex L6·7 #3)."""
     ts_ms: int
     direction: Direction
@@ -114,7 +115,8 @@ class PositionSynced:
 
 @dataclass(frozen=True)
 class PositionVanished:
-    """LIVE — 내부 포지션이 있는데 거래소 수량이 0이다(거래소 강제 청산 또는 수동 청산 의심). 엔진은 포지션을 내려놓는다.
+    """LIVE — 내부 포지션의 전부(거래소 수량 0) 또는 일부(청산 직전 거래소 수량 감소)가 거래소에서 사라졌다
+    (거래소 강제 청산·ADL·수동 청산 의심). `qty` = 사라진 수량.
     손익은 모른다(추정하지 않는다) · 킬스위치는 청산 1회로 본다(Codex L6·7 #2)."""
     ts_ms: int
     direction: Direction

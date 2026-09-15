@@ -1018,3 +1018,47 @@ Verification: focused pytest passed with `TMPDIR=/dev/shm .venv/bin/python -m py
 Codex session ID: 01a0a4ec-b917-72c2-9c98-d6f06674be19
 Resume in Codex: codex resume 01a0a4ec-b917-72c2-9c98-d6f06674be19
 ```
+
+## 2026-09-15 — Codex 재검토 #1: layer 6·7 수정분 (`66272b4`, read-only · `task-mu2mkh2b-iwgaap`)
+판정: 원 발견 #1~#5 **전부 CLOSED**. 새 발견 2건 → (1) 채택 FIX FIRST · (2) 텔레그램 FIX FIRST · **(3) 킬스위치 MERGE** · (4) 대사 FIX FIRST.
+
+### 항목별 동의 여부와 조치 (실패 테스트 3개 → 수정 → green)
+| Codex | 동의 | 조치 |
+|---|---|---|
+| 새 1 HIGH 청산 직전 거래소 수량이 **작으면** 수정 행이 수량을 덮어 사라진 0.004의 close·소실·지갑 기록이 없다 | ✅ | 줄어든 경우 사라진 수량을 `PositionVanished`(부분 청산·ADL·수동 감소 의심)로 내고 `PositionSynced`는 **늘어난 경우만** → DB: vanished close 행 + 청산 close 행으로 수량 전부 설명 · 킬스위치는 청산 1회로 발동 |
+| 새 2 MEDIUM 정확히 +12초의 '예'가 tick 먼저면 거부·콜백 먼저면 실행(>= vs >) | ✅ | 콜백도 `>=` — 경계에서 처리 순서와 무관하게 실행 안 함(경계 −1ms 실행 · 경계 거부 · tick +12초 취소 테스트) |
+
+### Codex 재검토 #1 원문 (verbatim)
+```
+**Per-Finding Status**
+
+1. **CLOSED** — Callback now checks the no-answer deadline independently of ticks via `cancel_deadline_ms()` and rejects late confirmations. Evidence: [notify/bot.py](/home/cms/project/BTC_Futures_E2E/notify/bot.py:160), [notify/bot.py](/home/cms/project/BTC_Futures_E2E/notify/bot.py:228), [tests/test_notify_bot.py](/home/cms/project/BTC_Futures_E2E/tests/test_notify_bot.py:296).
+
+2. **CLOSED** — LIVE exchange-flat exits now emit `PositionVanished`, and both kill switch observation and per-bar reconcile can trip on it. Evidence: [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:373), [safety/killswitch.py](/home/cms/project/BTC_Futures_E2E/safety/killswitch.py:63), [safety/gate.py](/home/cms/project/BTC_Futures_E2E/safety/gate.py:35).
+
+3. **CLOSED for the original larger-quantity case** — Exit-time sync emits `PositionSynced` before `PositionClosed`, DB stores an amendment against the root, and remaining qty uses latest open amendment minus closes. Evidence: [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:384), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:398), [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:181), [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:244).
+
+4. **CLOSED** — `EntryFilled` now carries total entry commission, including adopted estimates, and DB records it instead of recomputing only from fills. Evidence: [paper/types.py](/home/cms/project/BTC_Futures_E2E/paper/types.py:98), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:284), [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:221).
+
+5. **CLOSED** — Legacy sender redacts the bot token from transport exception text before logging/stderr. Evidence: [notify/sender.py](/home/cms/project/BTC_Futures_E2E/notify/sender.py:73).
+
+**New Findings**
+
+1. **HIGH** — [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:384), [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:181)  
+   Exit sync also amends downward when exchange qty is smaller than internal qty. Scenario: internal LONG `0.010`, exchange LONG `0.006`; `_exit` rewrites position qty to `0.006`, closes `0.006`, and DB becomes flat because `_remaining()` uses the latest open amendment. The missing `0.004` has no close/vanished event and no wallet accounting. This is a provenance/accounting regression.
+
+2. **MEDIUM** — [notify/bot.py](/home/cms/project/BTC_Futures_E2E/notify/bot.py:136), [notify/bot.py](/home/cms/project/BTC_Futures_E2E/notify/bot.py:229)  
+   Exact cancel-deadline behavior depends on ordering: `on_tick()` cancels at `now_ms >= deadline`, but callback execution allows `now_ms == deadline` because it rejects only `> deadline`. So a “yes” exactly at +12s executes if callback is processed first, but is rejected if tick runs first.
+
+**Area Verdicts**
+
+1. Adoption provenance: **FIX FIRST** due to the downward sync provenance/accounting gap.
+2. Telegram forced close: **FIX FIRST** due to the deadline boundary race.
+3. Kill switch + human resume: **MERGE**.
+4. Reconcile/stale/rate guard: **FIX FIRST** because the downward sync can make DB/internal/exchange appear flat after losing unrecorded quantity.
+
+Verification: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python -m pytest -q -p no:cacheprovider tests/` passed. Worktree remained clean.
+
+Codex session ID: 01a0a4f5-12c9-7af1-b02c-efcb0b4b7994
+Resume in Codex: codex resume 01a0a4f5-12c9-7af1-b02c-efcb0b4b7994
+```

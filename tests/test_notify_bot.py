@@ -303,7 +303,16 @@ def test_yes_after_the_no_answer_cancel_deadline_never_executes_even_if_ticks_st
     acts = b.on_update(cb(confirm_data(s, "y")), deadline + 1)                  # tick 한 번도 없이
     assert acts[0] == Answer("q1", "응답 기한 지남 — 실행 안 함") and "청산 안 됨" in sends(acts)[0].text
     assert ctrl.calls == [] and b.pending is None
-    b2 = bot(FakeController())
-    (s2,) = sends(b2.on_update(msg("/close"), t))
-    b2.on_update(cb(confirm_data(s2, "y")), deadline)                           # 기한 경계 = 아직 유효
-    assert b2.controller.calls == [("close_all", f"telegram:{OWNER}")]           # type: ignore[attr-defined]
+    #  Codex 재검토: 경계는 tick 취소(>=)와 같게 — 정확히 +12초의 '예'는 처리 순서와 무관하게 실행되지 않는다
+    for at, executed in ((deadline - 1, True), (deadline, False)):
+        c2 = FakeController()
+        b2 = bot(c2)
+        (s2,) = sends(b2.on_update(msg("/close"), t))
+        b2.on_update(cb(confirm_data(s2, "y")), at)
+        assert (c2.calls == [("close_all", f"telegram:{OWNER}")]) is executed, at
+    c3 = FakeController()
+    b3 = bot(c3)
+    sends(b3.on_update(msg("/close"), t))
+    for dt in range(0, 12_001, 3000):
+        b3.on_tick(t + dt)
+    assert b3.pending is None, "tick도 정확히 +12초에 취소"
