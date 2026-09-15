@@ -610,3 +610,26 @@ I did not modify files, use network, read `.env`, or run tests. `git diff --chec
 Codex session ID: 01a0a3e1-ba12-7f32-866d-abf310306357
 Resume in Codex: codex resume 01a0a3e1-ba12-7f32-866d-abf310306357
 ```
+
+## 2026-09-15 — Codex 재검토 #3 layer 3 엔진 (`382eb1d`, read-only · `task-mu2bxrji-efiary`)
+판정: **엔진 MERGE** — 발견 없음(추가 수량 수수료 CLOSED · 이중 부과 없음 · 거래소 수량이 작을 때 추가 부과 없음 확인). Codex는 환경에 pytest가 없어 테스트를 돌리지 못했다고 명시 — 로컬 351 passed.
+**layer 3 최종: LiveSender MERGE(#2) · 엔진 MERGE(#3) · 테스트넷 프로브 SAFE TO RUN ON TESTNET(1차 재검토).**
+
+### Codex 재검토 #3 원문 (verbatim)
+```
+No findings.
+
+The FIX FIRST looks closed at [paper/engine.py:376](/home/cms/project/BTC_Futures_E2E/paper/engine.py:376): close-time sync now charges only `abs(pr.amt) - pos.qty` when the exchange position is larger than internal, subtracts it from wallet, and adds it to `pos.entry_commission`.
+
+Regression checks:
+- No double charge after entry adoption: adoption already raises `pos.qty` and `pos.entry_commission` at [paper/engine.py:257](/home/cms/project/BTC_Futures_E2E/paper/engine.py:257), so the close-time guard `abs(pr.amt) > pos.qty` is false for the same extra.
+- `pr.amt < internal qty`: no extra fee is charged; the engine syncs down to exchange qty before close at [paper/engine.py:382](/home/cms/project/BTC_Futures_E2E/paper/engine.py:382). That matches “close what exchange actually holds” and does not introduce a new synthetic fee.
+- Test coverage was updated at [tests/test_paper_engine.py:339](/home/cms/project/BTC_Futures_E2E/tests/test_paper_engine.py:339) to assert wallet includes the discovered extra entry commission.
+
+Verdict: engine MERGE.
+
+I could not run the test suite because `pytest` is not installed in this environment (`pytest: command not found`).
+
+Codex session ID: 01a0a3e4-9e32-7113-a247-9cbcc72edc54
+Resume in Codex: codex resume 01a0a3e4-9e32-7113-a247-9cbcc72edc54
+```

@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1·2 수용(사용자 2026-09-15) · 🔶 layer 3 `paper/` 구현·테스트 완료 — Codex 검토 → **layer 4 착수 전 보고·확인 대기**
+- ✅ layer 1·2 수용(사용자 2026-09-15) · ✅ layer 3 `paper/` 구현·테스트·Codex MERGE — **layer 4 착수 전 보고·확인 대기**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브(테스트넷 전용)
 
 ## 다음
@@ -24,7 +24,8 @@
 3k. [ ] ~~첫 페이퍼 주~~ → **첫 라이브 진입부터**: 진입 후 검사 로그로 #4 수수료 가정 판정(레지스트리 #6) · 테스트넷/최소 명목 프로브로 앞당길지 사용자 결정 대기
 3l. [ ] **테스트넷 수수료 프로브** `scripts/testnet_fee_probe.py` — 해석 규칙 설계서 §11(사전확약) · 사용자 실행(테스트넷 키) → 레지스트리 #7 · INCONCLUSIVE면 실계정 프로브(Codex+승인)
 3m. [x] layer 3 `paper/` — 송신기·엔진·테스트(설계서 §12)
-3n. [ ] layer 3 사용자 확인: 체결 후 #5 버퍼 위반은 기록만(청산은 SL이 청산가 뒤일 때만) · 실행 시점 재사이징
+3n. [ ] layer 3 사용자 확인: 실행 시점 재사이징(예상 체결가) · 체결 후 #5 위반 → 즉시 청산 · 페이퍼 슬리피지 0.016 bps 유지 여부(mark−mid p99 1.8 bps 대비)
+3o. [ ] 사용자 실행: `.env`에 테스트넷 키·URL → `uv run python scripts/testnet_fee_probe.py` → 레지스트리 #7
 3h. [x] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
 3c. [x] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
