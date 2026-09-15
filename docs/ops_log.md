@@ -759,3 +759,30 @@ I could not run the tests: `pytest` is not installed, and `python3 -m pytest` re
 Codex session ID: 01a0a4a6-65dd-7b11-be14-c69f20203efe
 Resume in Codex: codex resume 01a0a4a6-65dd-7b11-be14-c69f20203efe
 ```
+
+## 2026-09-15 — Codex 재검토 #2 ccxt 어댑터 (`9b911a9`, read-only · `task-mu2jljte-a0glix`)
+성공 경로 CLOSED · 재동기화 `/time`이 실패(429+헤더)하면 헤더 유실 OPEN → ✅ 동의, 실패 테스트 → `finally`로 관측 → 446 green. 주문 경로 회귀 없음(Codex가 로컬 venv로 좁은 테스트 10개 실행 통과).
+
+### Codex 재검토 #2 원문 (verbatim)
+```
+**Findings**
+
+OPEN, partial remains: [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:171) observes resync headers only when `self.ex.load_time_difference()` succeeds. If the `/fapi/v1/time` resync request itself gets an exchange response with rate-limit headers and ccxt raises, the `except ccxt.BaseError: pass` at line 174 skips `_headers()`, so those headers are still lost. The narrow fix is to observe in a `finally` around the resync call.
+
+CLOSED for the success path: [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:173) now feeds successful `-1021` resync `/time` headers into `RateLimitCounter`, and [tests/test_ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/tests/test_ccxt_rest.py:364) covers that path.
+
+**Regression / Order Path**
+
+No order-path regression found in this diff. I ran the narrow ccxt REST/order/error tests with the project venv and no network:
+
+`10 passed`
+
+I also manually probed the failed-resync header case: original request raised `-1021`, resync `/time` returned `429` with `X-MBX-USED-WEIGHT-1M`, and counter usage stayed `0.0`.
+
+**Verdict**
+
+FIX FIRST for the whole ccxt REST adapter. The original partial finding is only half closed; success-path resync is fixed, failed resync with response headers is still open.
+
+Codex session ID: 01a0a4a8-f3fb-7932-93fb-606eee26c526
+Resume in Codex: codex resume 01a0a4a8-f3fb-7932-93fb-606eee26c526
+```

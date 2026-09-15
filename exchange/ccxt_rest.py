@@ -170,7 +170,8 @@ class CcxtRestClient:
             if code == TIMESTAMP_ERROR:
                 try:
                     self.ex.load_time_difference()
-                    self._headers()                  # 재동기화 /time 응답도 카운터에(Codex 재검토)
                 except ccxt.BaseError:
                     pass
+                finally:
+                    self._headers()                  # 재동기화 /time 응답 헤더도 성공·실패 모두 카운터에(Codex 재검토 #2)
             raise BinanceAPIError(status or 0, code, str(body.get("msg")), path) from e

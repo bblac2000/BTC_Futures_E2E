@@ -380,3 +380,23 @@ def test_timestamp_resync_call_also_feeds_the_rate_limit_counter(snap):
     limit_1m = [rl for rl in parse_rate_limits(snap["exchangeInfo"]["response"])
                 if rl.rate_limit_type == "REQUEST_WEIGHT" and rl.interval == "MINUTE"][0]
     assert counter.usage(120_000)[f"REQUEST_WEIGHT/MINUTE/{limit_1m.interval_num}"] == 777 / limit_1m.limit
+
+
+def test_failed_timestamp_resync_still_feeds_the_rate_limit_counter(snap):
+    """Codex 재검토 #2: 재동기화 /time 자체가 실패(429 + 헤더)해도 헤더는 카운터에 들어간다."""
+    from exchange.rules import parse_rate_limits
+    counter = RateLimitCounter(parse_rate_limits(snap["exchangeInfo"]["response"]))
+    ref = {}
+
+    def route(m, p, q):
+        if p.endswith("/time"):
+            ref["h"].headers = {"X-MBX-USED-WEIGHT-1M": "2399"}
+            return 429, {"code": -1003, "msg": "Too many requests."}
+        ref["h"].headers = {}
+        return 400, {"code": -1021, "msg": "Timestamp for this request is outside of the recvWindow."}
+    c, http = make(route, rate_limits=counter, clock_ms=lambda: 120_000)
+    ref["h"] = http
+    with pytest.raises(BinanceAPIError) as e:
+        c.get("/fapi/v2/positionRisk", signed=True)
+    assert e.value.code == -1021
+    assert max(counter.usage(120_000).values()) > 0
