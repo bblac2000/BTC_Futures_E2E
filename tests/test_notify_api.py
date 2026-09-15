@@ -181,3 +181,16 @@ def test_poll_timeout_shortens_while_a_confirmation_is_pending_so_3s_resends_are
     p.poll_once()
     timeouts = [c[2] for c in api.calls if c[0] == "get_updates"]
     assert timeouts == [30, K.FAST_POLL_TIMEOUT_S, 30] and K.FAST_POLL_TIMEOUT_S <= 1
+
+
+def test_fetch_and_handle_split_so_network_and_bot_state_can_live_on_different_threads():
+    """layer 8: 폴 스레드는 `fetch`(네트워크·offset)만 · 봇 상태는 엔진 스레드가 `handle`로 — 행동은 돌려줄 뿐 보내지 않는다."""
+    api = FakeApi([[{"update_id": 5}, {"update_id": 4}]])
+    b = FakeBot(fail_on=5)
+    p = TelegramPoller(api, b, clock_ms=lambda: 0, long_poll_s=30)
+    ups = p.fetch(fast=True)
+    assert [u["update_id"] for u in ups] == [4, 5] and p.offset == 6 and b.seen == []
+    assert [c[2] for c in api.calls if c[0] == "get_updates"] == [K.FAST_POLL_TIMEOUT_S]
+    actions = p.handle(ups)
+    assert b.seen == [4, 5] and p.handler_errors == 1 and len(actions) == 2
+    assert [c for c in api.calls if c[0] != "get_updates"] == [], "handle은 네트워크를 쓰지 않는다"
