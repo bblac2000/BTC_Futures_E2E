@@ -32,7 +32,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex MERGE(검토 2회 · `task-mu2kq6ib-uro1pe`·`task-mu2l1ukd-e0sy2c`) |
 | 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ✅ 구현·테스트(§15) · Codex MERGE(검토 3회) · 배선은 layer 8 |
 | 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ✅ 구현·테스트(§16) · Codex MERGE(검토 3회) · 킬스위치 값 **레지스트리 #10 PENDING** · 배선은 layer 8 |
-| 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ✅ 런타임·러너·템플릿·런북 구현·테스트(§17) · 페이퍼 드라이런(실제 공개 피드·실제 텔레그램) · Codex 배치 검토 — 결과 §17 · **VPS 배포는 사용자 논의 후** |
+| 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ✅ 런타임·러너·템플릿·런북 구현·테스트(§17) · 페이퍼 드라이런 3회(최종 `d20d8a1` clean) · **Codex MERGE(검토 5회)** · **VPS 배포는 사용자 논의 후** |
 | – | `strategies/` 플러그인(피처 in → 목표 포지션 out). 첫 전략은 `docs/trial_registry.md`에 사전등록 **후** 백테스트 열람 | 🚫 1~8 통과 전 금지 |
 
 ⚠️ 상시 발견: 30분 이하 신호는 대부분 비용 게이트(G2)에서 실패했다. 1m 의사결정 전략은 **비용 차감 후 순엣지**를 명시적으로 보여야 한다.

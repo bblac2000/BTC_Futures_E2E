@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1~7 수용(사용자 2026-09-16) · ✅ 레지스트리 #11·#12·#13 · ✅ layer 8 `ops/` 런타임·러너·VPS 템플릿·런북 · 페이퍼 드라이런 · **Codex 배치(layer 8 + 부분 청산) → 보고 → VPS 배포 논의 대기**
+- ✅ layer 1~7 수용(사용자 2026-09-16) · ✅ 레지스트리 #11·#12·#13 · ✅ layer 8 `ops/` 런타임·러너·VPS 템플릿·런북 · 페이퍼 드라이런 3회 · Codex MERGE(검토 5회) · **보고 → VPS 배포 논의 대기**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브 **폐기**(파일만 미사용 보존)
 
 ## 다음
@@ -39,7 +39,8 @@
 5c. [x] `_exit` 동기화 기록(`PositionSynced` → root open 수정 행) · LIVE 거래소 수량 소실(`PositionVanished` → 킬스위치) · 채택 추정 수수료 — Codex L6·7 #2~#4
 5b. [x] layer 8 기동 배선(`ops/runtime.py`·`ops/run_bot.py`) — 설계서 §17
 5e. [ ] 페이퍼 14일차 재평가 새 행: #5 · #7 · #9 · **#11**
-5f. [ ] 결정 필요: 페이퍼 포지션 재기동 복원 여부(현재 복원 안 함 → 대사 sticky) · LIVE `ExchangeReader` 계좌 필드 공식 문서 확인
+5f. [ ] 결정 필요: 페이퍼 포지션 재기동 복원 여부(현재 복원 안 함 → 대사 sticky) · LIVE `ExchangeReader` 계좌 필드 공식 문서 확인 · LIVE 거래소 읽기 비동기화(Codex L8 #3)
+5h. [ ] 보류: `engine_events` op_id 조회 인덱스(스키마 v3) · shard `roll_failed` health 경보
 5g. [ ] VPS 배포(런북 `docs/runbook_vps.md`) — 사용자 논의 후 · 외부 heartbeat · Drive 사본 재검증 도구 · 대장 reconcile 도구
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [x] layer 8: health 스로틀 구조 · `data_stores` allowlist(설계 #131) · [ ] shard `roll_failed` 대장 이벤트를 health가 읽는 경보(상태 파일에 없음)
 7. [x] VPS 템플릿: 봇 전용 Linux 사용자 user 유닛(`ops/systemd/`)·런북 — **배포는 Codex 검토 + 사용자 논의 후**

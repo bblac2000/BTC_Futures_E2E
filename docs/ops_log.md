@@ -1323,3 +1323,62 @@ C. safety #11-#13: **FIX FIRST**
 D. prune/sync/data stores: **MERGE**
 E. health/systemd/runbook: **MERGE**
 ```
+
+### Codex 재검토 #4: 행 id 신선도 (`4e7c758..d20d8a1`, read-only · 세션 `01a0a5e4-0435-7972-8afe-04893a98e5fe`)
+판정: **A·B·C·D·E 전부 MERGE** · 새 지적 없음. 남은 동작(의도): 사람이 이미 푼 트립이 오래된 breadcrumb에만 남아 있으면 재기동 때 다시 걸린다(fail-closed · 진입 일시정지 + 알림 · 사람의 /start로 해제).
+
+```
+Codex session ID: `01a0a5e4-0435-7972-8afe-04893a98e5fe`
+
+Read-only re-review of `d20d8a1` over `4e7c758..d20d8a1`: **no edits, no git writes, no external network tools used**. Worktree check after tests: clean for tracked and untracked files.
+
+**Per-Finding Status**
+`Codex re-review #3 new finding #1 MEDIUM`: **CLOSED**.
+
+Evidence:
+- `save_safety_state()` now returns the inserted durable row id: db/record.py:465
+- `latest_safety_state_id()` reads the latest durable generation by row id: db/record.py:473
+- `SafetyGate.save()` returns that id: safety/gate.py:86
+- Runtime records `saved_state_id` on successful changed-state save: ops/runtime.py:473
+- Breadcrumb writes `base_state_id`: ops/runtime.py:489
+- Startup initializes `rt.saved_state_id` from DB latest id on every run: ops/run_bot.py:259
+- Startup quarantines only when `latest_id > base_id` and no breadcrumb-only trip exists: ops/run_bot.py:240
+- Mixed-clock regression test covers the original failure mode: tests/test_ops_run_bot.py:327
+
+**Residual Behavior**
+No remaining path found that loses a kill-switch trip silently across restart. Breadcrumb-only trips are restored even when DB has a later row: ops/run_bot.py:241.
+
+A stale breadcrumb can still re-impose a trip a human already cleared if the file is old but contains a trip absent from DB. That is intentional fail-closed behavior under this patch: startup restores it, pauses entries with `system:restart_with_unsaved_safety_state`, and persists that pause: ops/run_bot.py:256, ops/run_bot.py:264. For stale pause/reconcile-only breadcrumbs, exact old blocker content may be quarantined, but entries are still paused.
+
+`saved_state_id` correctness looks good. Unchanged-state saves do not create a new row and do not need to change `saved_state_id`: ops/runtime.py:466. Across runs, it is refreshed from DB latest id at startup: ops/run_bot.py:259. Successful changed-state saves update it to the new row id: ops/runtime.py:473.
+
+**New Findings**
+None.
+
+**Verification**
+Requested command passed:
+
+`TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python -m pytest -q -p no:cacheprovider tests/`
+
+Result: exit code `0`, full suite passed.
+
+**Area Verdicts**
+- `(A) engine/db`: **MERGE**
+- `(B) runtime/runner/threading/telegram`: **MERGE**
+- `(C) safety #11-#13`: **MERGE**
+- `(D) prune/sync/data stores`: **MERGE**
+- `(E) health/systemd/runbook`: **MERGE**
+```
+
+### 드라이런 #2 · #3 (거래소 쓰기 없음 · 키 없음 · 실제 공개 피드 · 실제 텔레그램)
+| 항목 | #2 (`231122a` · 16:13:34–16:17:46 UTC) | #3 (**최종 `d20d8a1`** · 16:29:07–16:33:17 UTC) |
+|---|---|---|
+| 종료 | exit 0 · `stop` clean dropped=0 | exit 0 · `stop` clean dropped=0 |
+| 규칙 | exchangeInfo·fundingInfo rest · 서명 2종 snapshot(2026-09-02) | 같음 |
+| 봉 | REST 29 + WS 4 · 경계 연속 · conflict 0 | REST 29 + WS 4 · 경계 연속(rest 마지막 1789489680000 → ws 첫 1789489740000) · conflict 0 |
+| 틱/안전 틱 | 250 / 250 · stale 청산 0 · 정지 없음 · 차단 없음 | 249 / 250 · 같음 |
+| 전달(직전 분) | update 159 · close 1 · markprice 60 | update 125 · close 1 · markprice 60 |
+| DB | account_snapshots engine 5 · safety_state 1 · Backfill 이벤트 · db_errors 0 | 같음 + 운영 이벤트 `op_id` 기록 확인 · breadcrumb 파일 없음 |
+| shard | update 5파일 666행 · close 2파일 4행 · markprice 5파일 250행 | update 5파일 527행 · close 3파일 4행 · markprice 5파일 249행 |
+| 텔레그램 | 발송 2 · **배달 2**(message_id 응답) · 폴 오류 0 · send_errors 0 | 발송 2 · **배달 2** · 폴 오류 0 · send_errors 0 |
+| 참고 | 첫 백그라운드 실행은 환경(메모리 경고)이 SIGTERM으로 끊었고 러너가 38초 만에 clean 종료·정지 알림까지 했다(정상 종료 경로 실측) — 그 데이터는 버리고 전경으로 재실행 | — |
