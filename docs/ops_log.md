@@ -842,3 +842,13 @@ ccxt.pro가 구독마다 소켓을 연다: kline_1m · markPrice@1s(· forceOrde
 - `GET /fapi/v1/klines` · `GET /fapi/v1/markPriceKlines`: `limit` — **integer · int64 · max: 1500 · Default: 500**
 - IP weight(LIMIT 기준): [1,100) → **1** · [100,500) → **2** · [500,1000] → **5** · >1000 → **10**
 - 설정: `data/config.py` `KLINES_PAGE_LIMIT = 1000` — 가중치 5인 최대 크기(1500은 가중치 10으로 봉당 비용이 1.33배). 30일 1m 백필 = 43,200봉 = 44페이지 × 5 = 220 weight(분당 한도 대비 작다 · 한도 값은 런타임 헤더 카운터가 본다). 문서상 최대 1500 초과 요청은 `data.backfill`이 거부한다.
+
+### layer 5 마무리 — E2E 이식 기록 (`data/shards.py` · 출처 `e2e/l2_collector.py` @ `90d47aa`, E2E HEAD `f1e7d86`)
+| E2E 원본 | 여기 | 변경 |
+|---|---|---|
+| `ShardWriter`(:143-191) | `data.shards.ShardWriter` | root·symbol·monotonic 주입 · 스키마는 이 봇(kline 14열·markprice 7열, **가격·수량 `pa.string` Decimal 원문**, E2E는 float64) · 같은 이름 shard가 있으면 `_n` 접미사(rename이 조용히 덮는 것 방지 — `_file_start_ms`는 None을 돌려 재생에서 건너뛰지 않는다) · register_shard 무예외·`manifest_errors` 불변 |
+| `WriterThread`(:193-303) | `data.shards.WriterThread` | writer = kind별 dict(kline1m_update·kline1m_close·markprice) · depth1s 다운샘플 없음 · `("event", (kind, detail))`을 **writer 스레드가** `manifest.log_event("feed", …)`(asyncio 루프에서 sqlite 금지) · 실패 `event_errors` · 모르는 kind는 dispatch 오류. #138 동작 불변: roll 격리 + `roll_failed` · dispatch 예외 기록 후 계속 · writer별 종료 플러시 + `final_flush_failed` · 처리기 `_safe_log` · 종료 플러시 중 대장 쓰기 없음 |
+| `Collector._shutdown_record`(:590-614) | `data.shards.shutdown_record` | 자유 함수 · **큐 포화 드롭 > 0도 `stop_dirty`**(E2E는 드롭 수만 문구에) |
+| `Collector` 큐·`_put`·run 종료부 | `data.shards.Recorder` | 소켓 코드 없음(ccxt.pro가 소유) · `put`/`event`는 put_nowait(블록·예외 없음) · `stop()` = stop 표지 → join(30s) → 종료 기록을 대장에 |
+| `consume` 23h 선제 재연결(:505) | `data.feed.MarketFeed._refresh_loop` | 소켓마다 `client.connectionEstablished` 기준 · 넘은 소켓만 `client.on_error(ProactiveRefresh)` → 그 watch만 끝나고 백오프 없이 재watch(ccxt가 같은 URL로 새 소켓·SUBSCRIBE — 가짜 소켓 실험·테스트로 확인) |
+테스트 복원(`tests/test_data_shards.py` 17건): E2E #138 네 건(첫 writer 플러시 실패·dispatch 예외 후 계속·처리기 로그 실패·종료 기록 조건)을 이 구조로 옮기고, 대장 쓰기 금지·roll 실패 격리·재생 스캔 호환(`scan_window`가 writer 파일을 그대로 셈)·드롭 → dirty 추가. 피드(`tests/test_data_feed.py` +5): 소켓별 connect 이벤트 · 23h 초과 소켓만 재연결·전달 재개 · 기록 행 · 훅 실패 무전파 · 취소로 끝난 watch 루프 → `FeedFailure`(구현 중 발견: 예전 `run()`은 취소된 태스크를 건너뛰어 스트림 하나가 조용히 죽을 수 있었다).

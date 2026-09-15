@@ -49,7 +49,7 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 | `tests/test_delivery_counter.py` | `tests/test_delivery_counter.py` | `d0d6426` | 부분 복사 | 순수 판정·재생 테스트만. l2_collector·vps_health·quality 의존 테스트(#138 포함)는 layer 5/8에서 복원 |
 | `e2e/manifest.py` | `data/manifest.py` | `23e5005` | 복사 + 출처 헤더 | DB 경로 주입(`var/manifest.sqlite`). register_shard 무예외·mark_pruned 행 보존 유지 |
 | `e2e/paper/notify.py` (F-TGDAEMON 수정본) | `notify/sender.py` | `a60f4f8` | 복사 + 출처 헤더 | 응답 `ok` 검증 + atexit join 유지. prefix `[BTC]`, opener 주입(테스트) |
-| `e2e/l2_collector.py` `ShardWriter`(:143-191)·`WriterThread` 종료 플러시(:193-303, #138 `final_flush_failed`→`stop_dirty`) | `data/` (layer 5) | `90d47aa` | **패턴 — 미복사** | 60초 shard·tmp→atomic rename·writer별 독립 종료 플러시. 여기서 테스트할 수 없는 800줄 결합 코드라 layer 5에서 이식 |
+| `e2e/l2_collector.py` `ShardWriter`(:143-191)·`WriterThread` 종료 플러시(:193-303, #138 `final_flush_failed`→`stop_dirty`)·`_shutdown_record`(:590-614) | `data/shards.py` (layer 5) | `90d47aa` | **이식 + 출처 헤더**(2026-09-15) | writer = kind별 dict · 가격 Decimal 문자열 · 이름 충돌 접미사 · 소켓 이벤트를 writer 스레드가 대장에 · 드롭 → `stop_dirty`. #138 동작 불변, 테스트 복원 `tests/test_data_shards.py`. 변경 목록 ops_log |
 | `ops/vps_health.py` 경보 구조(:742-819 `STATE`/`STATE_ONCE`, `problem_items` :498) | `ops/` (layer 8) | `90d47aa` | **패턴 — 미복사** | 반복형 = 고정 스로틀 키(날짜·숫자 없음)·3h / 확정 사실 = 하루 1통 / 발송 실패 시 상태 미갱신. 텔레그램 도달성 재시도 1회(:261) |
 | `ops/data_stores.py` allowlist prune 모델 | `ops/` (layer 8) | — | **원본 없음** | ⚠️ f1e7d86에 **코드로 존재하지 않는다**(`git log --all` 0건). 설계만 있음: `docs/설계_prune확장_2026-09-12.md`(`f836d16`, 레지스트리 #131, Codex 검토 완료·단계 0→4). 현행 코드는 `ops/prune_local.py`(`e6e5125`, denylist `NEVER_TOUCH`). layer 8에서 설계 v2대로 `deletion_mode="drive_verified_prune"`·30일·파생물 `expired_local_derivative` 별도 구현 |
 | 비용 모델 왕복 10.02 bps | `paper/` config (layer 3) | — | **원본은 문서** | ⚠️ `e2e/cost/*.py`에 10.02 상수 없음. 출처 `docs/Phase1A_계측결과_2026-08-15.md:180,197`(`8f457ef`): 수수료 10 bps + 슬리피지 0.016 bps. 꼬리표 **"2026-08 regime, recalibrate"**. 수수료 부분은 리터럴이 아니라 `commissionRate` 런타임 값에서, 슬리피지 0.016 bps만 꼬리표 달린 실측 파라미터로 둔다 |
@@ -174,7 +174,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | `paper/types.py` | 피드 입력(MarkTick·MarkBar)·Fill·이벤트(layer 4 행의 원천) |
 
 **엔진 규칙** (테스트 `tests/test_paper_engine.py`가 잠근다)
-- 전략은 `EntryIntent`(방향·SL·TP·레짐)를 낸다. 결정 **이후** 첫 mark 틱(봉 재생은 다음 봉 시가)에서 **송신기의 예상 체결가(`quote_fill_price`: PAPER = mark ± 슬리피지 불리 tick, LIVE = mark)·현재 지갑으로 `size_entry` 재실행** → 레버리지 설정 응답 확인 → MARKET(maxQty 분할).
+- 전략은 `EntryIntent`(방향·SL·TP·레짐)를 낸다. 결정 **이후** 첫 mark 틱(봉 재생은 다음 봉 시가)에서 **송신기의 예상 체결가(`quote_fill_price`: PAPER·LIVE 모두 #7 mark ± 2 bps 불리 tick — 레지스트리 #9)·현재 지갑으로 `size_entry` 재실행** → 레버리지 설정 응답 확인 → MARKET(maxQty 분할).
   이유: 사이징은 #5를 통과하는 **최고** L을 고르므로 결정 시점 L은 게이트 경계에 붙어 있다 — 가격이 몇 USD만 움직여도 체결 기준으로 게이트를 깬다(구현 중 테스트로 발견).
 - 한 틱/봉 안 **청산 > SL > TP**(같은 봉 SL·TP → SL). 봉 SL 체결 기준 = min(SL, 시가)(LONG), 봉 TP = TP(갭 이득 없음). 판정 가격은 mark.
 - 체결 후 실제 체결가·수량으로 청산 추정(#4)·#5 게이트·SL 손실 재계산 → `PostFillCheck`. **#5가 깨지면 즉시 청산**(사전확약 게이트 — Codex L3 검토로 "기록만"에서 변경). PAPER는 체결가로 사이징하므로 깨지지 않고, LIVE는 실제 슬리피지만큼 깨질 수 있다. 예산 초과(`loss_over_budget`)는 기록만.
@@ -190,10 +190,12 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 |---|---|
 | `exchange/ccxt_rest.py` | `RestClient` 구현 — 원시 응답, ccxt가 서명 1회, `POST /fapi/v1/order` → `create_order(market, reduceOnly)` + 우리 `newClientOrderId` + 정밀도 값 가드, 5xx·전송 실패 → `TransportError` |
 | `data/feed.py` | `TeeBinanceUsdm`(원시 kline·markPrice·forceOrder 티) · `MarketFeed`(DeliveryCounter를 이벤트 시각으로, 재연결 백오프, 콜백 실패 → `FeedFailure`) |
-| `data/backfill.py` | 닫힌 1m kline·mark kline REST 백필(페이지 크기는 호출자) |
+| `data/backfill.py` | 닫힌 1m kline·mark kline REST 백필(페이지 크기 `data/config.py` 1000 · 문서 최대 1500 초과 거부) |
+| `data/shards.py` | 60초 shard parquet(원자적)·대장 등록·writer 스레드(#138)·`Recorder`(큐·드롭·종료 기록) |
 | `tests/test_ccxt_stream_tiers.py` | ccxt.pro가 **실제로 여는** URL·SUBSCRIBE를 `ops/stream_tiers.py`로 검증(ccxt 업그레이드마다) |
 | `scripts/feed_delivery_probe.py` | 읽기 전용 라이브 전달 프로브 |
 
 - 규칙 값(필터·브라켓·cum·수수료·fundingInfo·positionRisk)은 원시 응답에서만. ccxt 정규화 필드 사용 금지. 수량 정규화는 우리 코드가 권위.
 - 게이트·로더·송신기는 코드 변경 없이 ccxt 전송 위에서 테스트한다(`tests/test_ccxt_rest.py`).
-- 남은 것(layer 5): E2E `ShardWriter` 60초 shard·#138 종료 플러시 이식, manifest 기록, 기동 배선. klines 페이지 최대값 공식 확인 후 config.
+- layer 5 완료(2026-09-15): shard 이식·#138 · 소켓별 connect/disconnect/reconnect 이벤트 · **소켓별 23h 선제 재연결**(`client.on_error(ProactiveRefresh)` → 백오프 없이 재watch) · 기록 `recorder.put`(kline1m_update·kline1m_close·markprice, 경계 열 = `TS_COLUMN`) · klines limit 렌더링 확인. 기동 배선(피드 + Recorder + 엔진)은 layer 8.
+- LIVE 예상 체결가 = #7(레지스트리 #9, `paper.sender.adverse_fill_estimate` 공용).

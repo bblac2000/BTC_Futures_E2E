@@ -1,7 +1,8 @@
 """layer 5 REST 백필 — 원시 kline 배열 → Decimal 봉. 전송은 `RestClient`(운영에서는 `exchange.ccxt_rest.CcxtRestClient`).
 
 - **닫힌 봉만** 돌려준다(`closeTime < now_ms`). 형성 중인 봉은 WS 피드의 몫.
-- 페이지 크기(`page_limit`)는 **호출자가 준다** — 거래소 최대값을 여기서 추측하지 않는다(값은 config·문서 확인 후).
+- 페이지 크기(`page_limit`)는 호출자가 준다(운영 값 `data.config.KLINES_PAGE_LIMIT`). 문서 최대(`KLINES_MAX_LIMIT` 1500,
+  공식 레퍼런스 렌더링 확인)를 넘으면 요청 전에 거부한다.
 - fail-closed: 응답이 요청보다 많음 · openTime 역행/정체 · 모양·숫자 오류 → `BackfillError`.
 """
 from __future__ import annotations
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from data.config import KLINES_MAX_LIMIT
 from exchange.client_types import RestClient
 from paper.types import MarkBar
 
@@ -58,7 +60,7 @@ def _i(row: list, i: int) -> int:
 
 
 def _pages(client: RestClient, path: str, symbol_id: str, start_ms: int, end_ms: int, page_limit: int) -> list[list]:
-    if page_limit <= 0 or end_ms < start_ms:
+    if not 0 < page_limit <= KLINES_MAX_LIMIT or end_ms < start_ms:
         raise ValueError(f"page_limit={page_limit} start={start_ms} end={end_ms}")
     out: list[list] = []
     cursor = start_ms

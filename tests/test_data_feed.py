@@ -271,3 +271,117 @@ def test_feed_stall_is_visible_through_the_counter_when_one_stream_goes_silent()
     for i in range(0, 200_000, 250):
         feed.sink("kline", kline_msg(E0 + i, closed=(i % 60_000 == 59_750)))
     assert "markprice" in counter.stalled(E0 + 200_000) and "kline1m_update" not in counter.stalled(E0 + 200_000)
+
+
+# ── 결정 2(사용자 2026-09-15): 스트림마다 /market 소켓 1개 · 소켓별 대장 이벤트 · 소켓별 23h 선제 재연결 ──────────
+class FakeRecorder:
+    def __init__(self, fail_events=False):
+        self.rows: list[tuple[str, tuple]] = []
+        self.events: list[tuple[str, str]] = []
+        self.fail_events = fail_events
+
+    def put(self, kind, row):
+        self.rows.append((kind, row))
+
+    def event(self, kind, detail):
+        if self.fail_events:
+            raise RuntimeError("queue gone")
+        self.events.append((kind, detail))
+
+
+def counter3(start=E0 - 1000):
+    return DeliveryCounter(("kline1m_update", "kline1m_close", "markprice"), start_ms=start)
+
+
+def test_each_socket_logs_its_own_connect_event_with_url_and_subscription(sockets):
+    rec = FakeRecorder()
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter3(), on_kline=lambda k: None, on_mark=lambda t: None,
+                      exchange_factory=tee_factory, recorder=rec)
+
+    async def run():
+        stop = asyncio.Event()
+        task = asyncio.ensure_future(feed.run(stop))
+        await _wait(lambda: len([e for e in rec.events if e[0] == "connect"]) == 2)
+        stop.set()
+        await asyncio.wait_for(task, 5)
+    asyncio.run(run())
+    connects = [d for k, d in rec.events if k == "connect"]
+    urls = {d.split()[0] for d in connects}
+    assert len(urls) == 2 and all("/market/ws/" in u for u in urls), connects
+    assert any("ohlcv" in d or "kline" in d for d in connects) and any("markPrice" in d for d in connects)
+
+
+def test_proactive_refresh_reconnects_only_the_socket_older_than_23h_and_delivery_resumes(sockets):
+    rec = FakeRecorder()
+    marks: list[MarkTick] = []
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter3(), on_kline=lambda k: None, on_mark=marks.append,
+                      exchange_factory=tee_factory, recorder=rec, refresh_check_s=0.01)
+    assert feed.refresh_after_s == 23 * 3600
+
+    async def run():
+        stop = asyncio.Event()
+        task = asyncio.ensure_future(feed.run(stop))
+        await _wait(lambda: len(sockets) == 2 and all(s.sent for s in sockets))
+        ex = feed.exchange
+        mark_sock = socket_for(sockets, "@markPrice@1s")
+        kline_sock = socket_for(sockets, "@kline_1m")
+        old = ex.clients[mark_sock.url]
+        old.connectionEstablished = ex.milliseconds() - 23 * 3600 * 1000 - 1000     # 이 소켓만 23h 초과
+        await _wait(lambda: len(sockets) == 3 and sockets[-1].sent)
+        new = sockets[-1]
+        assert new.url == mark_sock.url and new.sent[0]["params"] == ["btcusdt@markPrice@1s"]
+        new.push(mark_msg(E0 + 5000))
+        await _wait(lambda: len(marks) == 1)
+        assert not kline_sock.closed and len([s for s in sockets if "@kline_1m" in str(s.sent)]) == 1
+        stop.set()
+        await asyncio.wait_for(task, 5)
+    asyncio.run(run())
+    mark_url = socket_for(sockets[:2], "@markPrice@1s").url
+    refreshes = [d for k, d in rec.events if k == "reconnect" and "proactive" in d]
+    assert len(refreshes) == 1 and refreshes[0].startswith(mark_url + " proactive 23h refresh")
+    assert [k for k, _ in rec.events].count("connect") == 3
+    assert any(k == "disconnect" for k, _ in rec.events)
+    assert feed.reconnects and feed.reconnects[-1]["delay_s"] == 0, "선제 재연결은 백오프 없이"
+
+
+def test_feed_hands_rows_to_the_recorder_update_close_and_markprice(monkeypatch):
+    rec = FakeRecorder()
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter3(E0), on_kline=lambda k: None, on_mark=lambda t: None,
+                      recorder=rec, now_ms=lambda: E0 + 99)
+    feed.sink("kline", kline_msg(E0, closed=False))
+    feed.sink("kline", kline_msg(E0 + 59_000, closed=True))
+    feed.sink("markPrice", mark_msg(E0 + 1000))
+    feed.sink("markPrice", mark_msg(E0 + 2000, p="bad"))                  # 해석 실패 → 기록도 안 한다
+    assert [k for k, _ in rec.rows] == ["kline1m_update", "kline1m_update", "kline1m_close", "markprice"]
+    assert rec.rows[3][1][:3] == (E0 + 1000, "60001.2", "60003.4") and rec.rows[3][1][-1] == E0 + 99
+
+
+def test_recorder_or_hook_failure_never_escapes_into_the_ccxt_receive_loop():
+    rec = FakeRecorder(fail_events=True)
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter3(E0), on_kline=lambda k: None, on_mark=lambda t: None,
+                      recorder=rec)
+    feed._event("connect", "wss://x")                                       # 던지지 않는다
+    assert feed.event_errors == 1
+
+
+def test_a_watch_loop_that_ends_by_cancellation_fails_the_feed_loudly():
+    """ccxt가 퓨처를 취소하면(`client.close()`) 우리 루프 태스크가 조용히 끝난다 — 스트림 하나가 소리 없이 죽는 모양."""
+    class Cancels(TeeBinanceUsdm):
+        async def watch_mark_price(self, symbol, params={}):  # type: ignore[override]  # noqa: B006
+            raise asyncio.CancelledError()
+
+        async def watch_ohlcv(self, symbol, timeframe="1m", since=None, limit=None, params={}):  # type: ignore[override]  # noqa: B006
+            await asyncio.sleep(3600)
+
+    def factory(config, sink):
+        ex = Cancels(config, sink=sink)
+        info = load_snapshot("exchangeInfo")["response"]
+        ex.set_markets(ex.parse_markets([s for s in info["symbols"] if s["symbol"] == "BTCUSDT"]))
+        return ex
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter3(E0), on_kline=lambda k: None, on_mark=lambda t: None,
+                      exchange_factory=factory)
+
+    async def run():
+        with pytest.raises(FeedFailure):
+            await asyncio.wait_for(feed.run(asyncio.Event()), 5)
+    asyncio.run(run())

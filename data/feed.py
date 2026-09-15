@@ -13,8 +13,16 @@ ccxt 4.5.78 `handle_ohlcv`는 kline을 `[t, o, h, l, c, v]` **float**으로 줄�
 - 콜백(엔진) 예외는 삼키지 않는다 → `run()`이 `FeedFailure`로 끝난다. ccxt 수신 루프 안에서 예외가 새면
   수신 루프가 조용히 멈추므로, 여기서 잡아 저장하고 `run()`이 올린다.
 - watch 오류는 백오프 후 재시도하고 `reconnects`에 남긴다. 멈춤 판정은 카운터가 한다(`safety/` 입력).
-- 이 봇의 스트림은 `@kline_1m`·`@markPrice@1s`(둘 다 `/market` 티어). ccxt는 구독마다 소켓을 따로 연다 — 설계서 layer 5의
-  "같은 소켓"과 다르지만 티어가 같고 스트림별 감시라 한쪽 침묵이 다른 쪽에 가려지지 않는다(기록).
+- 이 봇의 스트림은 `@kline_1m`·`@markPrice@1s`(둘 다 `/market` 티어). ccxt는 구독마다 소켓을 따로 연다 —
+  **사용자 수락(2026-09-15)**: 스트림마다 `/market` 소켓 1개. 스트림별 감시라 한쪽 침묵이 다른 쪽에 가려지지 않는다.
+
+## 소켓 수명 (사용자 결정 2 · E2E `RECONNECT_PROACTIVE_SEC` 이식)
+- 소켓마다 connect / disconnect / reconnect를 `recorder.event`로 남긴다(대장 쓰기는 writer 스레드 — `data.shards`).
+  훅은 ccxt `on_connected`·`on_error`·`on_close`. 훅·기록 실패는 세고 삼킨다(ccxt 수신 루프를 멈추지 않게).
+- **23h 선제 재연결은 소켓마다**: 연결 시각(`client.connectionEstablished`)이 23h를 넘은 소켓만 `client.on_error(ProactiveRefresh)`
+  → 그 watch가 오류로 끝나고 백오프 없이 다시 watch → ccxt가 새 소켓·SUBSCRIBE. 비용 = 23h마다 소켓 수만큼 재연결.
+- 기록: 해석에 성공한 메시지만 `recorder.put(kind, row)`(kline1m_update 전부 · kline1m_close x=true · markprice).
+- watch 루프 태스크가 stop 전에 끝나면(취소 포함) `FeedFailure` — 스트림 하나가 조용히 죽지 않게.
 """
 from __future__ import annotations
 
@@ -27,11 +35,18 @@ from typing import Any
 import ccxt
 import ccxt.pro as ccxtpro
 
+from data.shards import kline_row, markprice_row
 from ops.delivery_counter import DeliveryCounter
 from paper.types import MarkTick
 
 UNIFIED_SYMBOL = {"BTCUSDT": "BTC/USDT:USDT"}
 INTERVAL = "1m"
+RECONNECT_PROACTIVE_SEC = 23 * 3600      # Binance 24h 연결 상한 선제 대응(E2E l2_collector 동일 값)
+REFRESH_CHECK_SEC = 30.0
+
+
+class ProactiveRefresh(ccxt.NetworkError):
+    """23h 선제 재연결 — 이 소켓의 watch만 끝내고 즉시 다시 연결시킨다."""
 
 
 class FeedMessageError(ValueError):
@@ -123,12 +138,34 @@ def parse_force_order(msg: Any, *, symbol_id: str) -> LiquidationEvent:
 Sink = Callable[[str, Any], None]
 
 
+SocketHook = Callable[[str, str], None]
+
+
 class TeeBinanceUsdm(ccxtpro.binanceusdm):
-    """원시 메시지를 먼저 `sink(kind, message)`로 넘기고 ccxt 핸들러를 그대로 돈다."""
+    """원시 메시지를 먼저 `sink(kind, message)`로 넘기고 ccxt 핸들러를 그대로 돈다. 소켓 수명은 `socket_hook(kind, detail)`."""
 
     def __init__(self, config: Any = None, *, sink: Sink | None = None):
         super().__init__(config or {})
         self._tee_sink = sink
+        self.socket_hook: SocketHook | None = None
+
+    def _socket(self, kind: str, client: Any, why: str) -> None:
+        if self.socket_hook is None:
+            return
+        subs = sorted(str(k) for k in (getattr(client, "subscriptions", None) or {}))
+        self.socket_hook(kind, f"{getattr(client, 'url', '?')} subs={subs}" + (f" {why}" if why else ""))
+
+    def on_connected(self, client, message=None):
+        self._socket("connect", client, "")
+        return super().on_connected(client, message)
+
+    def on_error(self, client, error):
+        self._socket("disconnect", client, f"error {type(error).__name__}: {error}")
+        return super().on_error(client, error)
+
+    def on_close(self, client, error):
+        self._socket("disconnect", client, f"close {error}")
+        return super().on_close(client, error)
 
     def _tee(self, kind: str, message: Any) -> None:
         if self._tee_sink is not None:
@@ -164,7 +201,27 @@ class MarketFeed:
     errors: list[Exception] = field(default_factory=list)
     reconnects: list[dict] = field(default_factory=list)
     exchange: Any = None
+    recorder: Any = None                                   # `data.shards.Recorder`(put·event) — 없으면 기록 안 함
+    now_ms: Callable[[], int] = field(default=ccxt.Exchange.milliseconds)
+    refresh_after_s: float = RECONNECT_PROACTIVE_SEC
+    refresh_check_s: float = REFRESH_CHECK_SEC
+    event_errors: int = 0
     _failure: BaseException | None = None
+
+    def _event(self, kind: str, detail: str) -> None:
+        """소켓 수명 이벤트 → recorder. ccxt 콜백 안에서 불린다 — 던지지 않는다(센다)."""
+        try:
+            if self.recorder is not None:
+                self.recorder.event(kind, detail)
+        except Exception:  # noqa: BLE001
+            self.event_errors += 1
+
+    def _record(self, kind: str, row: tuple) -> None:
+        try:
+            if self.recorder is not None:
+                self.recorder.put(kind, row)
+        except Exception as e:  # noqa: BLE001 — 기록 실패는 피드를 멈추지 않지만 드러난다
+            self.errors.append(e)
 
     def sink(self, kind: str, message: Any) -> None:
         """ccxt 수신 루프 안에서 불린다 — 여기서 예외를 밖으로 내보내지 않는다."""
@@ -174,8 +231,11 @@ class MarketFeed:
                 if kind == "kline":
                     k = parse_kline(m, symbol_id=self.symbol_id)
                     self.counter.observe("kline1m_update", k.event_ms)
+                    row = kline_row(k, recv_ms=self.now_ms())
+                    self._record("kline1m_update", row)
                     if k.closed:
                         self.counter.observe("kline1m_close", k.event_ms)
+                        self._record("kline1m_close", row)
                     event: Any = k
                     callback: Any = self.on_kline
                 elif kind == "markPrice":
@@ -183,6 +243,7 @@ class MarketFeed:
                         continue                      # @arr 형태의 다른 심볼
                     event = parse_mark_price(m, symbol_id=self.symbol_id)
                     self.counter.observe("markprice", event.ts_ms)
+                    self._record("markprice", markprice_row(event, m, recv_ms=self.now_ms()))
                     callback = self.on_mark
                 elif kind == "forceOrder":
                     event = parse_force_order(m, symbol_id=self.symbol_id)
@@ -207,15 +268,35 @@ class MarketFeed:
                 attempt = 0
             except asyncio.CancelledError:
                 raise
+            except ProactiveRefresh as e:
+                self.reconnects.append({"stream": name, "error": f"{type(e).__name__}: {e}", "delay_s": 0})
+                attempt = 0                           # 선제 재연결 — 백오프 없이 바로 다시 watch
             except (ccxt.NetworkError, ccxt.ExchangeError) as e:
                 delay = self.backoff_s[min(attempt, len(self.backoff_s) - 1)]
                 self.reconnects.append({"stream": name, "error": f"{type(e).__name__}: {e}", "delay_s": delay})
+                self._event("reconnect", f"{name} after {type(e).__name__}: {e} delay_s={delay}")
                 attempt += 1
                 await self.sleep(delay)
+
+    async def _refresh_loop(self, ex: Any, stop: asyncio.Event) -> None:
+        """소켓마다 연결 시각을 따로 잰다 — 23h를 넘은 소켓만 끊어 다시 연결시킨다(E2E consume의 선제 재연결)."""
+        while not stop.is_set():
+            now = self.now_ms()
+            for url, client in list((getattr(ex, "clients", None) or {}).items()):
+                est = getattr(client, "connectionEstablished", None)
+                if not isinstance(est, int) or getattr(client, "error", None) is not None:
+                    continue
+                age_s = (now - est) / 1000
+                if age_s >= self.refresh_after_s:
+                    self._event("reconnect", f"{url} proactive {self.refresh_after_s / 3600:g}h refresh age_s={age_s:.0f}")
+                    client.on_error(ProactiveRefresh(f"proactive refresh after {age_s:.0f}s"))
+            await asyncio.sleep(self.refresh_check_s)
 
     async def run(self, stop: asyncio.Event, *, config: Any = None) -> None:
         symbol = UNIFIED_SYMBOL[self.symbol_id]
         ex = self.exchange = self.exchange_factory(config or {}, self.sink)
+        if hasattr(ex, "socket_hook"):
+            ex.socket_hook = self._event
         if not ex.markets:
             await ex.load_markets()
         tasks = [
@@ -224,13 +305,19 @@ class MarketFeed:
         ]
         if self.on_liquidation is not None:
             tasks.append(asyncio.ensure_future(self._loop("forceOrder", lambda: ex.watch_liquidations(symbol), stop)))
+        tasks.append(asyncio.ensure_future(self._refresh_loop(ex, stop)))
         try:
             while not stop.is_set():
                 if self._failure is not None:
                     raise FeedFailure(f"피드 콜백 실패: {type(self._failure).__name__}: {self._failure}") from self._failure
                 for t in tasks:
-                    if t.done() and not t.cancelled() and t.exception() is not None:
-                        raise FeedFailure(f"watch 루프 종료: {t.exception()!r}") from t.exception()
+                    if not t.done() or stop.is_set():
+                        continue
+                    #  🔴 stop 전에 끝난 루프는 취소든 예외든 정상 종료든 실패다 — 스트림 하나가 조용히 죽지 않게
+                    if t.cancelled():
+                        raise FeedFailure("watch 루프가 취소로 끝났다(ccxt가 퓨처를 취소?)")
+                    exc = t.exception()
+                    raise FeedFailure(f"watch 루프 종료: {exc!r}") from exc
                 await asyncio.sleep(0.01)
             if self._failure is not None:
                 raise FeedFailure(f"피드 콜백 실패: {self._failure}") from self._failure

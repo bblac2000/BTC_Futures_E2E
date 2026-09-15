@@ -1,7 +1,7 @@
 """layer 5 REST 백필 — `GET /fapi/v1/klines`·`/fapi/v1/markPriceKlines` 원시 배열 → Decimal 봉(ccxt 전송 · `RestClient`).
 
 - **닫힌 봉만**(closeTime < now) — 형성 중인 봉은 WS가 준다
-- 페이지 크기는 호출자가 준다(거래소 최대값을 여기서 추측하지 않는다) · 응답이 요청보다 많거나 시각이 역행/정체하면 멈춘다
+- 페이지 크기는 호출자가 준다 · 문서 최대 1500(렌더링 확인) 초과는 거부 · 응답이 요청보다 많거나 시각이 역행/정체하면 멈춘다
 """
 from __future__ import annotations
 
@@ -79,3 +79,18 @@ def test_bad_arguments(kw):
     args = {"start_ms": T0, "end_ms": T0 + M, "page_limit": 3, "now_ms": T0 + 5 * M} | kw
     with pytest.raises(ValueError):
         fetch_closed_klines(FakeRest({"/fapi/v1/klines": []}), "BTCUSDT", **args)
+
+
+def test_page_limit_config_is_the_documented_weight_5_maximum():
+    """공식 레퍼런스 렌더링(2026-09-15, ops_log): limit max 1500 · default 500 · weight [500,1000]→5 · >1000→10."""
+    from data.config import KLINES_MAX_LIMIT, KLINES_PAGE_LIMIT
+    assert KLINES_MAX_LIMIT == 1500 and KLINES_PAGE_LIMIT == 1000
+
+
+def test_page_limit_above_the_documented_maximum_is_refused():
+    from data.config import KLINES_MAX_LIMIT
+    with pytest.raises(ValueError):
+        fetch_closed_klines(FakeRest({"/fapi/v1/klines": []}), "BTCUSDT", start_ms=T0, end_ms=T0 + M,
+                            page_limit=KLINES_MAX_LIMIT + 1, now_ms=T0 + 5 * M)
+    assert fetch_closed_klines(FakeRest({"/fapi/v1/klines": []}), "BTCUSDT", start_ms=T0, end_ms=T0 + M,
+                               page_limit=KLINES_MAX_LIMIT, now_ms=T0 + 5 * M) == []

@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1·2 수용(사용자 2026-09-15) · ✅ layer 3 `paper/` 구현·테스트·Codex MERGE — **layer 4 착수 전 보고·확인 대기**
+- ✅ layer 1·2 수용 · ✅ layer 3 · ✅ ccxt 전환 수락(사용자 2026-09-15) · ✅ layer 5 마무리(shard·#138·소켓별 이벤트·23h 소켓별 재연결) — Codex 검토 · 다음 layer 4 → **layer 6 착수 전 보고**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브 **폐기**(파일만 미사용 보존)
 
 ## 다음
@@ -27,14 +27,14 @@
 3n. [x] layer 3 사용자 결정(2026-09-15): 실행 시점 재사이징 승인 · 체결 후 #5 위반 즉시 청산 승인 · 페이퍼 슬리피지 2 bps → 레지스트리 #7
 3p. [ ] 페이퍼 14일차: 레지스트리 #7 슬리피지 재평가 새 행
 3q. [x] ccxt/ccxt.pro 전환(레지스트리 #8): 티어 테스트 · REST 어댑터 · watch 피드(layer 5) · 라이브 전달 프로브 — Codex MERGE(어댑터 검토 4회·피드·백필 1회)
-3r. [ ] layer 5 남은 것: ShardWriter·#138 종료 플러시 이식 · manifest 기록 · klines 페이지 최대값 공식 확인
-3s. [ ] 사용자 결정: `LiveSender.quote_fill_price`(현재 mark)에 #7 슬리피지 모델을 쓸지 — 라이브 체결 후 #5 즉시 청산 빈도
+3r. [x] layer 5: `data/shards.py`(E2E ShardWriter·WriterThread·#138·shutdown_record 이식) · 소켓별 connect/disconnect/reconnect 대장 이벤트 · 소켓별 23h 선제 재연결 · klines limit 공식 렌더링 확인(max 1500 · 운영 1000=weight 5) · 기동 배선은 layer 8
+3s. [x] 사용자 결정(2026-09-15): LIVE 예상 체결가 = #7 모델(레지스트리 #9) · `adverse_fill_estimate` 공용 — Codex 검토 대상(LiveSender)
 3h. [x] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
 3c. [x] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
 4. [x] 전달 감시 임계 → 레지스트리 #1 확정(kline1m_update·kline1m_close·markprice) — layer 5 writer가 kline을 두 kind로 기록해야 재생 어댑터가 같은 값을 센다
 5. [ ] layer 4에서 `exchange/store.py` DDL을 마이그레이션 schema v1로 흡수
-6. [ ] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원 · layer 8: vps_health 스로틀 구조 · `data_stores` allowlist(설계 #131)
+6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [ ] layer 8: vps_health 스로틀 구조(`roll_failed` 경보 포함) · `data_stores` allowlist(설계 #131)
 7. [ ] VPS: 봇 전용 Linux 사용자·systemd 유닛 (E2E 수집기와 분리 · 수집기 우선 · 수집기 데이터 디렉터리 금지) — **Codex 검토 대상(수집기 호스트)**
 8. [ ] GitHub 원격 미설정 — CI는 푸시 후에야 실제로 돈다(푸시는 사용자 요청 시에만)
 
