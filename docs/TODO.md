@@ -26,7 +26,9 @@
 3m. [x] layer 3 `paper/` — 송신기·엔진·테스트(설계서 §12)
 3n. [x] layer 3 사용자 결정(2026-09-15): 실행 시점 재사이징 승인 · 체결 후 #5 위반 즉시 청산 승인 · 페이퍼 슬리피지 2 bps → 레지스트리 #7
 3p. [ ] 페이퍼 14일차: 레지스트리 #7 슬리피지 재평가 새 행
-3q. [ ] ccxt/ccxt.pro 전환(레지스트리 #8): 티어 테스트 · REST 어댑터 · watch 피드(layer 5) · Codex 검토
+3q. [x] ccxt/ccxt.pro 전환(레지스트리 #8): 티어 테스트 · REST 어댑터 · watch 피드(layer 5) · 라이브 전달 프로브 — Codex 검토 진행
+3r. [ ] layer 5 남은 것: ShardWriter·#138 종료 플러시 이식 · manifest 기록 · klines 페이지 최대값 공식 확인
+3s. [ ] 사용자 결정: `LiveSender.quote_fill_price`(현재 mark)에 #7 슬리피지 모델을 쓸지 — 라이브 체결 후 #5 즉시 청산 빈도
 3h. [x] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
 3c. [x] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)

@@ -641,3 +641,44 @@ Resume in Codex: codex resume 01a0a3e4-9e32-7113-a247-9cbcc72edc54
 - **ccxt 고정**: `ccxt==4.5.78`(PyPI 최신, 2026-09-15 확인) → 레지스트리 #8. 푸시: 로컬 9커밋 `9f4ab4b..0a604f0` 사용자 요청으로 푸시.
 - **슬리피지 2 bps 전환 중 엔진 결함 발견·수정**: 진입 스킵 판단이 SL을 **예상 체결가**와 비교했다. 0.016 bps에서는 드러나지 않았으나 2 bps에서 LONG 예상가(mark×1.0002)가 SL 위로 올라가 **mark가 이미 SL을 넘은 진입**을 허용했다(`test_sl_already_crossed_at_execution_skips_entry`가 잡음). SL 트리거 기준(mark, #5)으로 먼저 판정하도록 수정. LIVE 흉내 테스트 송신기 4곳은 슬리피지 0으로 고정(LIVE 예상가 = mark와 맞추기 위한 테스트 더블 조정 · 단언 변경 없음).
 - ⚠️ 열린 항목: `LiveSender.quote_fill_price`는 여전히 mark다. 실제 라이브 슬리피지가 2 bps 수준이면 최고 L 경계(한 L 단계 ≈ 청산 거리 1.45e-4)보다 `1.5 × 슬리피지`가 커서 **체결 후 #5 위반 → 즉시 청산이 자주 날 수 있다**. LIVE 예상가에도 #7 모델을 쓸지는 사용자 결정(라이브 배선 전).
+
+## 2026-09-15 — ccxt/ccxt.pro 전환 (레지스트리 #8) — exchange 전송 · layer 5 피드 · 검증 결과
+
+### watch 메서드 확인 (ccxt 4.5.78 `ccxt.pro.binanceusdm`, `ex.has` + 소스)
+`watchOHLCV` ✅ · `watchMarkPrice`/`watchMarkPrices` ✅ · `watchLiquidations` ✅ · `watchBidsAsks`(bookTicker) ✅ · `watchTicker`(miniTicker) ✅ · `watchTrades`(@trade) ✅ · `watchOrderBook`(@depth@100ms) ✅ · `watchFundingRate` 메서드 존재.
+→ 원시 구독(raw subscription) 대체가 필요한 스트림 없음.
+
+### 티어 검증 테스트 출력 (verbatim · `tests/test_ccxt_stream_tiers.py`)
+```
+[ccxt 4.5.78] ccxt.pro.binanceusdm 가 연 소켓
+  watch_ohlcv_1m       wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@kline_1m']
+  watch_mark_price     wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@markPrice@1s']
+  watch_liquidations   wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@forceOrder']
+  watch_trades         wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@trade']
+  watch_bids_asks      wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@bookTicker']
+  watch_order_book     wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@depth@100ms']
+  watch_ticker         wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@miniTicker']
+[ccxt 4.5.78] data.feed.TeeBinanceUsdm 가 연 소켓
+  watch_ohlcv_1m       wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@kline_1m']
+  watch_mark_price     wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@markPrice@1s']
+  watch_liquidations   wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@forceOrder']
+  watch_trades         wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@trade']
+  watch_bids_asks      wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@bookTicker']
+  watch_order_book     wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@depth@100ms']
+  watch_ticker         wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@miniTicker']
+```
+- 경로 끝의 `/0`은 ccxt 스트림 인덱스이며 구독은 SUBSCRIBE 프레임으로 한다. 재작성은 `get_ws_url`이 future 기본 URL이 정확히 `/ws`로 끝날 때만 한다 — 기본 URL을 `/stream`으로 바꾼 흉내에서 `wss://fstream.binance.com/stream/0`(legacy)이 열리고 검증이 실패함을 테스트로 고정.
+
+### 라이브 전달 프로브 (읽기 전용 · 키 없음 · `scripts/feed_delivery_probe.py 150` · 로컬 WSL)
+urls_opened `market/ws/0·1·2` · 150초 kline push 309 · 마감 2 · markPrice@1s 149 · forceOrder 0 · stalled [] · 해석 오류 0 · 재연결 0.
+forceOrder 0건은 BTC 강제청산이 드문 탓일 수 있어 **판정 불가**(이 봇은 청산 스트림을 소비하지 않는다).
+
+### 구현 중 확인한 사실 (소스·모의 HTTP로 실측)
+1. **`create_order`는 수량을 조용히 자른다**: `amount_to_precision` 때문에 0.0339 → wire `quantity=0.033`. → 어댑터가 ccxt 정밀도 결과와 우리 수량의 **값**이 다르면 전송 거부(표기 차이 `0.010`↔`0.01`은 같은 값이라 허용 — 처음엔 문자열 비교로 정상 주문을 거부해 테스트가 잡음).
+2. **ccxt는 `newClientOrderId`가 없으면 자기 브로커 id(`x-cvBPrNm9…`)를 주입한다** → 어댑터가 항상 우리 id(`bfe2e-…`)를 넣는다.
+3. **`watch_ohlcv`는 `E`·`x`를 버리고 float으로 줄인다** → `TeeBinanceUsdm`이 핸들러에서 원시 메시지를 먼저 받는다(`super()` 유지). 원시 `ex.watch(url,…)`는 binance `handle_message`가 자기 해시만 풀어 우리 퓨처가 안 풀리므로 쓰지 않았다.
+4. 서명: ccxt `sign()`이 `timestamp`·`recvWindow`(options, 5000으로 설정)·`signature`를 1회 붙인다(테스트가 개수 검사). 시각 오프셋은 ccxt `timeDifference`(`sync_time()`), -1021이면 재동기화. 우리 `TimeSync`는 ccxt 경로에서 쓰지 않는다(중복 없음).
+5. rate limit: ccxt 스로틀은 클라이언트 토큰 버킷(`enableRateLimit`), 헤더 카운터는 없다 → 응답 헤더를 우리 `RateLimitCounter`에 넣는다.
+6. 오류: ccxt는 HTTP 상태를 예외에 싣지 않는다 → `on_rest_response`를 감싸 상태를 잡는다. 5xx(503 "Unknown error" 포함)·타임아웃·연결 실패 → `TransportError`, Binance `{code,msg}` → `BinanceAPIError(code)`.
+7. ccxt는 구독마다 소켓을 따로 연다(kline·markPrice가 다른 `/market` 소켓) — 설계서 layer 5 "같은 소켓"과 다르나 티어 동일·스트림별 감시(기록).
+8. `exchange/client.py` urllib `BinanceRestClient`는 운영 경로에서 제거(미사용 프로브·자기 테스트만, 가드 테스트). `capture_account_snapshot.py`는 ccxt 전송으로 이식.

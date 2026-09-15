@@ -29,7 +29,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 2 | `sizing/` 위험 예산 → 목표 명목 → 최고 정수 L(브라켓·거래소 공식 청산 거리) → pos_pct 캡 → 수량 → 최종 재검증·손실 예산 (레지스트리 #2) | ✅ B1·B2로 재작업·테스트 — Codex 재검토 §7 · buffer 값 대기(#3) |
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ✅ 구현·테스트(351) · Codex LiveSender MERGE · 엔진 MERGE(검토 4회) — **사용자 확인 대기**(§12) |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ⏸ (`runtime_rules` DDL은 임시로 `exchange/store.py`) |
-| 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s 같은 소켓 · 스트림별 전달 감시 · manifest | ⏸ (`ops/delivery_counter.py`·`data/manifest.py` 복사 완료) |
+| 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | 🔶 ccxt.pro 피드(`data/feed.py`)·REST 백필(`data/backfill.py`)·전달 감시 연결 · 라이브 프로브 통과 — **ShardWriter·manifest 기록 미이식**(§13) |
 | 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ⏸ (`notify/sender.py` 복사 완료) |
 | 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ⏸ |
 | 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
@@ -183,3 +183,17 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 - LIVE만: 진입 후 `positionRisk` 1회 → `post_entry_liquidation_check` + 수량 대사(불일치·조회 실패 → 진입 차단, 포지션은 유지). 청산은 **거래소 보유 수량**을 닫고(반대 부호·0이면 멈추고 차단), 청산 후 flat 대사.
 - `OrderOutcomeUnknown` → 진입 차단. LIVE는 거래소 수량을 포지션으로 채택해 SL 감시(방치 금지). 청산 실패 → 포지션 유지·다음 트리거에서 재시도 + 진입 차단. 체결 후 수수료 조회 이상은 예외가 아니라 taker 추정 + 표시.
 - 아직 없음: 기동 배선(config → 모드 → 송신기), DB 기록(layer 4), 피드 어댑터(layer 5), 킬스위치(layer 7).
+
+
+## 13. ccxt/ccxt.pro 전송 (2026-09-15 · 사용자 결정 · 레지스트리 #8)
+| 모듈 | 역할 |
+|---|---|
+| `exchange/ccxt_rest.py` | `RestClient` 구현 — 원시 응답, ccxt가 서명 1회, `POST /fapi/v1/order` → `create_order(market, reduceOnly)` + 우리 `newClientOrderId` + 정밀도 값 가드, 5xx·전송 실패 → `TransportError` |
+| `data/feed.py` | `TeeBinanceUsdm`(원시 kline·markPrice·forceOrder 티) · `MarketFeed`(DeliveryCounter를 이벤트 시각으로, 재연결 백오프, 콜백 실패 → `FeedFailure`) |
+| `data/backfill.py` | 닫힌 1m kline·mark kline REST 백필(페이지 크기는 호출자) |
+| `tests/test_ccxt_stream_tiers.py` | ccxt.pro가 **실제로 여는** URL·SUBSCRIBE를 `ops/stream_tiers.py`로 검증(ccxt 업그레이드마다) |
+| `scripts/feed_delivery_probe.py` | 읽기 전용 라이브 전달 프로브 |
+
+- 규칙 값(필터·브라켓·cum·수수료·fundingInfo·positionRisk)은 원시 응답에서만. ccxt 정규화 필드 사용 금지. 수량 정규화는 우리 코드가 권위.
+- 게이트·로더·송신기는 코드 변경 없이 ccxt 전송 위에서 테스트한다(`tests/test_ccxt_rest.py`).
+- 남은 것(layer 5): E2E `ShardWriter` 60초 shard·#138 종료 플러시 이식, manifest 기록, 기동 배선. klines 페이지 최대값 공식 확인 후 config.
