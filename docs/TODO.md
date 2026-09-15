@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ 부트스트랩 · layer 1 `exchange/` 구현·테스트 — **layer 2 착수 전 보고·확인 대기**
+- ✅ layer 1 수용(사용자 2026-09-15) · ✅ layer 2 `sizing/` 구현 — **layer 3 착수 전 보고·확인 대기**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 실주문 전송 경로 없음(layer 3에서 LIVE+체크리스트 게이트 뒤)
 
 ## 다음
@@ -13,7 +13,10 @@
 1e. [ ] 재검토 후 수정분(TransportError·_amt 엄격화) Codex 3차 검토 — 선택
 1c. [ ] 실계정 read-only 캡처로 positionRisk V2에 `isolated` 필드가 있는지 확인(Codex Q3 불확실 항목)
 2. [ ] **사용자 실행 대기** — `uv run python scripts/capture_account_snapshot.py`(read-only 키) → 합성 fixture 교체 + positionRisk `isolated` 필드 판정(1c 해결). 결과 보고 후 `gate._is_isolated` 확정
-3. [ ] layer 2 `sizing/` — v6 격리 청산 공식 + liquidationFee(런타임) 속성 테스트
+3. [x] layer 2 `sizing/` 구현·테스트(`d1ed96d`)
+3a. [ ] **사용자 결정** — 설계서 §9 B1(liquidationFee를 청산 거리 검사에 둘지)·B2(클램프 시 risk_pct 의미)
+3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
+3c. [ ] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
 4. [x] 전달 감시 임계 → 레지스트리 #1 확정(kline1m_update·kline1m_close·markprice) — layer 5 writer가 kline을 두 kind로 기록해야 재생 어댑터가 같은 값을 센다
 5. [ ] layer 4에서 `exchange/store.py` DDL을 마이그레이션 schema v1로 흡수
 6. [ ] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원 · layer 8: vps_health 스로틀 구조 · `data_stores` allowlist(설계 #131)

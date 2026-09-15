@@ -144,6 +144,66 @@ def test_bracket_leverage_cap_below_l_min_is_refused(rules):
     assert not d.ok and d.reason is RejectReason.LEVERAGE_INFEASIBLE
 
 
+# ── Codex layer 2 검토(2026-09-15) ───────────────────────────────────────
+def test_reported_bracket_is_the_final_floored_notional_not_the_planned_one(rules):
+    """Codex Q5 — 계획 명목이 정확히 300000(tier2 경계)이어도 qty 내림 후 명목은 299987.8 → **tier1**.
+    결과의 bracket·mmr·청산가는 최종 명목 기준이어야 한다(layer 3·4가 그대로 기록한다)."""
+    d = size_entry(D("61234.5"), D("61204"), LONG, D("60000"), regime(risk_pct=D("0.9"), l_min=50, l_max=50),
+                   rules, buffer=D("1"))
+    assert d.ok and d.notional < D("300000")
+    assert d.bracket == 1 and d.mmr == D("0.004")
+
+
+def test_flooring_into_a_riskier_bracket_is_revalidated_and_refused(rules):
+    """Codex Q1 — (파서가 이제 거부하는) 비단조 브라켓을 우회 주입: 계획 명목 5000은 tier2(MMR 0.1%)로 통과하지만
+    내림 후 4980은 tier1(MMR 2%) → 청산 거리 음수. 최종 명목으로 **재검증**해 거부해야 한다."""
+    b1 = Bracket(1, 150, D("0"), D("5000"), D("0.020"), D("0"))
+    b2 = Bracket(2, 150, D("5000"), D("1000000000"), D("0.001"), D("0"))
+    bad = replace(rules, brackets=(b1, b2))
+    d = size_entry(D("60000"), D("59700"), LONG, D("1000"), regime(risk_pct=D("0.9"), l_min=50, l_max=50),
+                   bad, buffer=D("1"))
+    assert not d.ok and d.reason is RejectReason.LIQ_DISTANCE and "내림 후" in d.detail
+
+
+def test_parser_rejects_non_monotone_brackets():
+    """Codex 권고 2 — MMR 비감소 · cum ≥ 0 · initialLeverage 비증가가 아니면 규칙 로드 단계에서 멈춘다."""
+    from exchange.errors import RulesError
+    from exchange.rules import parse_brackets
+
+    def resp(*rows):
+        return [{"symbol": "BTCUSDT", "brackets": [
+            {"bracket": i + 1, "initialLeverage": lev, "notionalFloor": lo, "notionalCap": hi,
+             "maintMarginRatio": m, "cum": c} for i, (lev, lo, hi, m, c) in enumerate(rows)]}]
+    with pytest.raises(RulesError, match="MMR"):
+        parse_brackets(resp((150, 0, 5000, "0.02", 0), (150, 5000, 10**9, "0.001", 0)), "BTCUSDT")
+    with pytest.raises(RulesError, match="cum"):
+        parse_brackets(resp((150, 0, 5000, "0.004", -1),), "BTCUSDT")
+    with pytest.raises(RulesError, match="레버리지"):
+        parse_brackets(resp((50, 0, 5000, "0.004", 0), (100, 5000, 10**9, "0.005", 5)), "BTCUSDT")
+
+
+def test_notional_beyond_every_bracket_has_its_own_reason(rules):
+    """Codex Q4 — 모든 브라켓 cap을 넘는 명목은 '레버리지 불가'가 아니라 **명목 한도 초과**다."""
+    d = size_entry(D("60000"), D("59970"), LONG, D("1000000000"), regime(risk_pct=D("0.9")), rules, buffer=D("1"))
+    assert not d.ok and d.reason is RejectReason.NOTIONAL_CAP
+
+
+def test_tiny_sl_distance_clamps_without_materializing_a_huge_integer(rules):
+    d = size_entry(D("60000"), D("59999.9999999"), LONG, D("1000"), regime(risk_pct=D("0.9")), rules, buffer=D("1"))
+    assert d.leverage_start == 100
+
+
+def test_result_does_not_depend_on_the_callers_decimal_context(rules):
+    """Codex 권고 4 — 호출자가 전역 Decimal 정밀도를 낮춰도 판정이 같아야 한다."""
+    import decimal
+    args = (D("60000"), D("59910"), LONG, D("1000"), regime(risk_pct=D("0.9")), rules)
+    base = size_entry(*args, buffer=D("1"))
+    with decimal.localcontext() as ctx:
+        ctx.prec = 6
+        low = size_entry(*args, buffer=D("1"))
+    assert (base.ok, base.leverage, base.qty) == (low.ok, low.leverage, low.qty)
+
+
 # ── 정규화 연결 ──────────────────────────────────────────────────────────
 def test_notional_below_min_notional_is_refused_via_normalization(rules):
     d = size_entry(D("60000"), D("59940"), LONG, D("0.5"), regime(), rules, buffer=D("1"))
@@ -202,7 +262,8 @@ def _check(rules, entry, sl_bp, long_, equity, l_min, width, pos_bp, risk_bp, bu
     elif d.reason is RejectReason.LIQ_DISTANCE:
         assert not any(feasible_at(L) for L in range(l_min, start + 1))
     else:
-        assert d.reason in (RejectReason.MIN_NOTIONAL, RejectReason.BELOW_MIN_QTY, RejectReason.LEVERAGE_INFEASIBLE)
+        assert d.reason in (RejectReason.MIN_NOTIONAL, RejectReason.BELOW_MIN_QTY, RejectReason.LEVERAGE_INFEASIBLE,
+                            RejectReason.NOTIONAL_CAP)
     return d
 
 

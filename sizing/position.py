@@ -22,6 +22,7 @@
 """
 from __future__ import annotations
 
+import decimal
 import math
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -72,8 +73,19 @@ def liq_price_v6(direction: Direction, entry: Decimal, leverage: int, mmr: Decim
     return entry * (1 - inv + mmr) if direction is Direction.LONG else entry * (1 + inv - mmr)
 
 
+#  나눗셈이 많은 안전 검사 — 호출자의 전역 Decimal 문맥(정밀도)에 판정이 흔들리지 않게 고정한다(Codex 권고 4)
+DECIMAL_PREC = 34
+
+
 def size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decimal, regime: RegimeSizing,
                rules: RuntimeRules, *, buffer: Decimal) -> SizingDecision:
+    with decimal.localcontext() as ctx:
+        ctx.prec = DECIMAL_PREC
+        return _size_entry(entry, sl, direction, equity, regime, rules, buffer=buffer)
+
+
+def _size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decimal, regime: RegimeSizing,
+                rules: RuntimeRules, *, buffer: Decimal) -> SizingDecision:
     entry, sl, equity, buffer = (_dec(entry, "entry"), _dec(sl, "sl"), _dec(equity, "equity"),
                                  _dec(buffer, "buffer"))
     if type(direction) is not Direction:
@@ -101,15 +113,16 @@ def size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decima
 
     sl_dist = abs(entry - sl) / entry
     l_raw = regime.risk_pct / sl_dist
-    start = max(regime.l_min, min(regime.l_max, math.floor(l_raw)))
-    liq_failures = bracket_failures = 0
+    #  아주 작은 SL이면 L_raw가 거대하다 — 정수로 만들기 전에 l_max로 먼저 자른다
+    start = max(regime.l_min, math.floor(min(l_raw, Decimal(regime.l_max))))
+    liq_failures = bracket_failures = cap_failures = 0
     chosen = None
     for L in range(start, regime.l_min - 1, -1):
         notional = equity * regime.pos_pct * L
         try:
             b = rules.bracket_for_notional(notional)
         except RulesError:
-            bracket_failures += 1
+            cap_failures += 1
             continue
         if L > b.initial_leverage:
             bracket_failures += 1
@@ -122,9 +135,10 @@ def size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decima
 
     common = dict(sl_dist_pct=sl_dist, l_raw=l_raw, leverage_start=start)
     if chosen is None:
-        detail = (f"L {start}→{regime.l_min} 전부 불가 · sl×buffer={sl_dist * buffer} · "
-                  f"fee={fee} · 브라켓 실패 {bracket_failures} · 청산거리 실패 {liq_failures}")
-        reason = RejectReason.LIQ_DISTANCE if liq_failures else RejectReason.LEVERAGE_INFEASIBLE
+        detail = (f"L {start}→{regime.l_min} 전부 불가 · sl×buffer={sl_dist * buffer} · fee={fee} · "
+                  f"청산거리 실패 {liq_failures} · 브라켓 레버리지 실패 {bracket_failures} · 명목 cap 초과 {cap_failures}")
+        reason = (RejectReason.LIQ_DISTANCE if liq_failures else
+                  RejectReason.LEVERAGE_INFEASIBLE if bracket_failures else RejectReason.NOTIONAL_CAP)
         return reject(reason, detail, **common)
 
     L, b, liq_dist = chosen
@@ -134,12 +148,21 @@ def size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decima
         assert q.reason is not None
         return reject(q.reason, q.detail, **common, leverage=L, bracket=b.bracket, mmr=b.maint_margin_ratio,
                       liq_dist_pct=liq_dist)
-    chunks = tuple(split_market_qty(q.qty, rules.symbol_rules, ref_price=entry, reduce_only=False))
+    #  🔴 Codex layer 2 검토 Q1·Q5: 내림으로 명목이 줄면 **브라켓이 바뀔 수 있다**. 최종 명목으로 재검증하고
+    #     결과의 bracket·MMR·청산 거리·청산가는 최종 명목 기준으로 기록한다(계획 명목 값을 남기지 않는다).
     notional = q.qty * entry
+    fb = rules.bracket_for_notional(notional)
+    final_liq = 1 / Decimal(L) - fb.maint_margin_ratio - fee
+    if L > fb.initial_leverage or not sl_dist * buffer < final_liq:
+        return reject(RejectReason.LIQ_DISTANCE,
+                      f"내림 후 최종 명목 {notional} → 브라켓 {fb.bracket}(MMR {fb.maint_margin_ratio}, 최대 "
+                      f"{fb.initial_leverage}x)에서 L={L} 검사 실패 · 청산거리 {final_liq} vs sl×buffer {sl_dist * buffer}",
+                      **common, leverage=L, bracket=fb.bracket, mmr=fb.maint_margin_ratio, liq_dist_pct=final_liq)
+    chunks = tuple(split_market_qty(q.qty, rules.symbol_rules, ref_price=entry, reduce_only=False))
     return SizingDecision(
         ok=True, reason=None, detail="", regime=regime.name, direction=direction, entry=entry, sl=sl, buffer=buffer,
-        sl_dist_pct=sl_dist, l_raw=l_raw, leverage_start=start, leverage=L, bracket=b.bracket,
-        mmr=b.maint_margin_ratio, liquidation_fee=fee, liq_dist_pct=liq_dist,
-        liq_price_v6=liq_price_v6(direction, entry, L, b.maint_margin_ratio),
+        sl_dist_pct=sl_dist, l_raw=l_raw, leverage_start=start, leverage=L, bracket=fb.bracket,
+        mmr=fb.maint_margin_ratio, liquidation_fee=fee, liq_dist_pct=final_liq,
+        liq_price_v6=liq_price_v6(direction, entry, L, fb.maint_margin_ratio),
         notional=notional, margin=notional / Decimal(L), qty=q.qty, chunks=chunks,
         loss_at_sl_usdt=q.qty * abs(entry - sl), risk_budget_usdt=risk_budget)

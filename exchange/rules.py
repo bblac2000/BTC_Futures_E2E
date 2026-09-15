@@ -194,9 +194,19 @@ def parse_brackets(resp: Any, symbol: str) -> tuple[Bracket, ...]:
         for b in hit[0].get("brackets", [])), key=lambda b: b.bracket))
     if not out:
         raise RulesError(f"{symbol}: 브라켓 0개")
+    for b in out:
+        if b.cum < 0:
+            raise RulesError(f"{symbol}: 브라켓 {b.bracket} cum {b.cum} < 0 — cum 무시가 보수적이라는 전제가 깨진다")
     for a, b in zip(out, out[1:], strict=False):
         if a.notional_cap != b.notional_floor:
             raise RulesError(f"{symbol}: 브라켓 {a.bracket}→{b.bracket} 구간이 이어지지 않는다")
+        #  🔴 Codex layer 2 검토: 사이징은 '명목이 줄면 위험이 줄어든다'(MMR 비감소)를 전제로 한다
+        if b.maint_margin_ratio < a.maint_margin_ratio:
+            raise RulesError(f"{symbol}: 브라켓 {a.bracket}→{b.bracket} MMR이 감소한다 "
+                             f"({a.maint_margin_ratio}→{b.maint_margin_ratio})")
+        if b.initial_leverage > a.initial_leverage:
+            raise RulesError(f"{symbol}: 브라켓 {a.bracket}→{b.bracket} 최대 레버리지가 증가한다 "
+                             f"({a.initial_leverage}→{b.initial_leverage})")
     return out
 
 

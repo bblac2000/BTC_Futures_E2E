@@ -27,6 +27,7 @@ class RejectReason(StrEnum):
     SL_WRONG_SIDE = "sl_wrong_side"
     LIQ_DISTANCE = "liq_distance"
     LEVERAGE_INFEASIBLE = "leverage_infeasible"
+    NOTIONAL_CAP = "notional_cap"          # 명목이 모든 브라켓 cap을 넘는다
 
 
 @dataclass(frozen=True)

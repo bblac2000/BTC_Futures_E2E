@@ -26,7 +26,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | # | 계층 | 상태(2026-09-15) |
 |---|---|---|
 | 1 | `exchange/` 런타임 규칙 로더·정규화·주문 매트릭스·기동 게이트·rate-limit 카운터·서버 시각 오프셋 | ✅ 구현·테스트 (Codex 검토: 아래 §7) |
-| 2 | `sizing/` SL 거리 → L → 클램프 → 청산 거리 검사 → 명목 → 수량 → 정규화 (순수 함수 + 속성 테스트) | ⏸ 대기 — layer 1 보고 후 |
+| 2 | `sizing/` SL 거리 → L → 클램프 → 청산 거리 검사 → 명목 → 수량 → 정규화 (순수 함수 + 속성 테스트) | ✅ 구현·테스트(`d1ed96d`) — **미결 2건 §9** · Codex 검토 §7 |
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ⏸ |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ⏸ (`runtime_rules` DDL은 임시로 `exchange/store.py`) |
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s 같은 소켓 · 스트림별 전달 감시 · manifest | ⏸ (`ops/delivery_counter.py`·`data/manifest.py` 복사 완료) |
@@ -79,6 +79,7 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 ## 7. 검토 상태
 | 대상 | 검토 | 상태 |
 |---|---|---|
+| layer 2 `sizing/` | Codex 독립 검토 read-only (`task-mu21ai6o-slrnyc`) | ✅ 완료 — Q2·Q3 OK · Q1·Q4·Q5 ISSUE → 전부 동의·수정(178 green). liquidationFee 모델은 §9 B1로 사용자 결정 대기. 수정분 재검토 미실시 |
 | layer 1 `exchange/gate.py` LIVE 분기(계정 설정 변경) · `client.py` 서명/POST · `orders.py`/`normalize.py` | Codex 독립 검토 read-only (2026-09-15, job `task-mu1zv0h4-qazyjb`) | ✅ **완료** — Q1·Q2 OK · Q3·Q4·Q5 ISSUE → 전부 채택·수정·테스트(125 green). 원문·조치표 `docs/ops_log.md`. 재검토(`task-mu20lg9y-h4uua9`): F1 PARTIAL · F2 CLOSED · F3 PARTIAL → 동의 항목 수정(전송 실패→StartupAbort '상태 불명' · positionAmt 엄격). algo 미체결 사전검사는 문서 확인 후(TODO). 재수정분은 3차 검토 미실시 |
 
 ## 8. 미결·결정 표 (open-decisions.md 원문 복사 · md5 `ef25c7f5…` 시점)
@@ -114,3 +115,10 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 | 2026-09-12 | #9 텔레그램 강제청산 | **중간 수준 + 3회 재알림**: `/stop`·`/close` 수신 → 봇 주인 ID 화이트리스트 확인 → "정말 청산할까요? [예/아니오]" 인라인 버튼 → 응답 없으면 **3초 간격으로 3회** 재전송 → 예 응답 시 MARKET reduceOnly 전량 | 3회 후에도 무응답이면 **취소하고 "청산 안 됨" 통보**(미확인 청산은 오터치일 수 있으므로). 확인 메시지에는 현재 포지션·미실현손익을 함께 보여준다. 일반 알림(진입·청산·펀딩·킬스위치)도 사용자가 놓치지 않게 중요 이벤트는 같은 3회 규칙 적용 가능(config). `strategy-modules.md §6` |
 | 2026-09-12 | #8 구현 도구 역할 | **Claude Code 구현 + Claude(claude.ai) 검토·프롬프트 작성 + 삭제·라이브·자금 관련 변경은 Codex 독립 검토** | 프롬프트는 영문, SKILL.md §4 형식. Codex가 불가하면 해당 변경은 대기(시간 압박이 없으면 기다리고, 있으면 먼저 "지우지 않는" 대안을 찾는다 — 2026-09-12 EBS 사례) |
 | 2026-09-12 | 평가지표·고급전략·지지저항·DB컬럼 | 사용자 추가요청 | `strategy-modules.md §2~§5` |
+
+## 9. 이 저장소에서 발견한 미결 (사용자 결정 대기 · 임의로 고르지 않음)
+| # | 발견일 | 항목 | 사실(fixture 2026-09-02 값) | 현재 구현 | 결정할 것 |
+|---|---|---|---|---|---|
+| B1 | 2026-09-15 | **liquidationFee를 청산 거리 검사에 포함하면 100x가 BTC에서 구조적으로 불가능** | BTC tier1 MMR 0.4% + liquidationFee 1.25% = 1.65%. 검사식 `1/L − MMR − fee > sl×buffer` → 가능한 최대 L = floor(1/(0.0165 + sl×buffer)): SL 0.10% → 57x · 0.15% → 55x · 0.30% → 51x · **0.36% 이상 → 50x에서도 거부**. 100x 청산 거리 = 1% − 1.65% < 0. `l_min`이 약 61 이상인 레짐은 어떤 SL로도 수락이 없다. 무작위 2만 건(SL 0.03~2%) 중 수락 206건(1%)·L 50~59 | 사용자 지시대로 **MMR + liquidationFee** 포함(보수). 스킬 §1 식과 일치하나 같은 절의 예시("100x → liq_dist ≈ 0.6%")는 fee를 빼지 않아 **스킬 내부가 불일치**. v6 §4.4 원문 공식에는 fee가 없다 | liquidationFee를 **청산 트리거 검사**에 둘지(현행), 아니면 청산 시 비용으로만 보고 검사는 v6 원문(1/L − MMR)으로 하고 fee는 별도 버퍼로 둘지. 후자면 100x·SL<0.6% 영역이 열린다. VCB 선례(clip이 L을 제한·100x 구조적 진입불가)와 같은 형태 |
+| B2 | 2026-09-15 | **클램프가 걸리면 risk_pct가 손실에 반영되지 않는다** | 식 `L_raw = risk_pct/sl_dist`는 "SL에 맞으면 equity×risk_pct를 잃는" L이라고 스킬에 적혀 있으나, 명목이 `equity×pos_pct×L`이라 실제 SL 손실 = equity×pos_pct×L×sl_dist = pos_pct×risk_pct×equity(클램프 없을 때), 클램프가 걸리면 risk_pct와 무관. 1m SL 0.2%·risk 1% → L_raw 5 → 50x로 올림 → 손실 ≈ equity×pos_pct×10% | 식 그대로 구현. 결과에 `loss_at_sl_usdt`(실제)와 `risk_budget_usdt`(목표)를 **나란히 노출**. 테스트가 둘이 다름을 문서화 | `risk_pct`를 "마진 대비"로 볼지, 아니면 `pos_pct`를 risk 목표에서 **도출**할지(예: pos_pct = risk_pct / (L×sl_dist)), 아니면 클램프로 손실이 목표를 넘으면 거부할지 |
+
