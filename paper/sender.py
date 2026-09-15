@@ -64,6 +64,9 @@ class LiveChecklist:
     #  사용자 2026-09-16(페이퍼는 기동 때만 읽음 · LIVE 필수): 런타임 규칙 주기 재조회 ≥ 6시간마다 + 24시간 넘은 규칙으로는 진입 금지
     runtime_rules_refresh_6h_and_entries_need_rules_under_24h: bool = False
     pause_reasons_are_a_set: bool = False                       # 사용자 2026-09-16: 일시정지 사유 단일값 → 집합(LIVE 전)
+    #  사용자 2026-09-16: 거래 권한 키는 **LIVE 전환 때 새로 발급** · 화이트리스트 = VPS IP 하나만 · **VPS `.env`에만** 둔다(로컬 금지).
+    #  페이퍼의 읽기 전용 키는 그대로 두고 따로 관리한다(권한이 다르므로 같은 키를 승격하지 않는다).
+    trading_key_separate_vps_ip_only_and_never_local: bool = False
     user_approval: bool = False
 
     def missing(self) -> list[str]:

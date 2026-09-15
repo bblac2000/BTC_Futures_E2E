@@ -1775,3 +1775,20 @@ D1 창 09-18 00:35–02:30 UTC · 여기서 멈춤(사용자 항목: rclone remo
 - ⚠️ 키가 **이미 `ipRestrict=true`**(허용 IP = 로컬). 사용자 확정 순서: §9.1 동안 유지 → D1 5단계 전 VPS IP 추가 → 로컬 점검 뒤 로컬 IP 제거 →
   증명 = VPS `--dry-run` 성공 + 로컬 실패. VPS 공인 IP·Elastic IP 여부는 D1 읽기 전용 사전 점검(§9.2)에서 알린다. 런북 §9 반영.
 
+## 2026-09-15 22:45–22:49 UTC — §9.1 로컬 worktree 사전 점검 (커밋 `54b5af8`)
+
+`git worktree add ../btcfut-deploy-54b5af8 54b5af8` · `uv sync --frozen`.
+| 항목 | 값 |
+|---|---|
+| 테스트·정적검사 | pytest **716 passed** · ruff clean · pyright 0 errors · stream-tiers 위반 0 |
+| 유닛 파일 | `git diff 25f08cb..54b5af8 -- ops/systemd/` **비어 있음**(Codex 검토 범위 그대로) |
+| 규칙 | `runtime:signed` 6종(exchangeInfo·fundingInfo=rest · leverageBracket·commissionRate·positionSideDual·multiAssetsMargin=rest:signed) · `fallback_reason null` |
+| 드라이런 240초 | exit 0 · `stop`(clean, dropped 0) · `blockers []` · `entries_allowed true` · `stalled []` · `confirmed_facts []` · db_errors 0 · bar_conflicts 0 |
+| 봉 | REST 백필 179 + WS 4 · 스냅샷 5 · 운영 이벤트 Backfill 1 · 포지션 0(전략 없음) |
+| shard | parquet 11개(kline1m_update·kline1m_close·markprice) |
+| 텔레그램 | 발송 2 · 배달 2 · poll_errors 0 · send_errors 0 |
+| 전달 나이 | kline1m_update 0.6s · markprice 1.5s · kline1m_close 15.9s(모두 grace 120초 안) |
+
+**사용자 결정(2026-09-16 · 점검 중 수신)**: 읽기 전용 키 화이트리스트에 **로컬 IP를 남긴다**(VPS 35.79.38.63 추가됨) →
+§9.1/§9에서 "로컬 IP 제거" 단계 삭제 · D1 증명 = **VPS 캡처 `--dry-run` 성공**만. 거래 권한 키는 **LIVE 전환 때 새로 발급**(VPS IP 하나 · VPS `.env`에만) → 레지스트리 #17 · 라이브 체크리스트 필드.
+

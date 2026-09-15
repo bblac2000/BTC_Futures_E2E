@@ -137,6 +137,7 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 - [ ] 레지스트리 #5 14일차 재평가 행 존재
 - [ ] **LIVE 거래소 읽기(positionRisk·계좌)를 루프 스레드 밖으로** — 타임아웃 있는 비동기/작업자 큐(Codex L8 #3 · 지금은 동기 · PAPER에서는 호출 없음)
 - [ ] **런타임 규칙 주기 재조회 ≥ 6시간마다 + 24시간 넘은 규칙으로는 진입 금지**(레지스트리 #15 ③ · `LiveChecklist.runtime_rules_refresh_6h_and_entries_need_rules_under_24h` — 페이퍼는 기동 때만)
+- [ ] **거래 권한 키는 LIVE 전환 때 새로 발급** — 화이트리스트 VPS IP 하나 · VPS `.env`에만(로컬·저장소·백업 금지) · 페이퍼 읽기 전용 키는 승격하지 않는다(레지스트리 #17 · `LiveChecklist.trading_key_separate_vps_ip_only_and_never_local`)
 - [ ] **일시정지 사유를 집합으로**(레지스트리 #15 ④ · `LiveChecklist.pause_reasons_are_a_set` — 지금은 단일값이라 사유 문구가 덮인다)
 - [ ] LIVE `ExchangeReader` 실구현 — 계좌 응답 필드를 공식 문서 렌더링 + 실캡처로 확인(v6에는 가중치 표만) · 러너 LIVE 경로 + 기동 게이트 호출 · 재기동 시 거래소 포지션 처리 결정
 
