@@ -1583,3 +1583,19 @@ Codex session ID: 01a0a6c2-e7cf-7243-b4e5-a62bbec146fd
 Resume in Codex: codex resume 01a0a6c2-e7cf-7243-b4e5-a62bbec146fd
 ```
 </details>
+
+### 페이퍼 드라이런 — 재기동 복원(SIGKILL) · 런타임 규칙(읽기 전용 키) (`3233ab2`, 2026-09-15 20:32:53–20:39:25 UTC · `var/dryrun-restore-20260916/`)
+사용자 확인(2026-09-16): `.env`의 키 = 이 봇용 읽기 전용 키, 드라이런 사용 승인. 하네스 `scripts/dryrun_restart_restore.py --use-binance-key --hold-s 75 --run2-s 300`.
+| 항목 | 값 |
+|---|---|
+| 규칙 | 두 기동 모두 `runtime:signed` 6종(exchangeInfo·leverageBracket·commissionRate·fundingInfo·positionSideDual·multiAssetsMargin) · 권한 조회 통과(읽기 외 권한 없음) · fallback 사유 없음 |
+| 1차 | 기동 20:32:54 · 진입 주입 LONG 0.026 @ 75697.20 · 84x · SL 75323.39 (20:32:59, 게이트 통과 `pf_gate_ok=1`) · 엔진 스냅샷 3개(체결 1 + 봉 2) · **SIGKILL 20:34:15**(returncode −9) · manifest: connect 2, stop 없음 |
+| kill 직후 DB | open 행 1(root 1) · close 0 · orders entry 1 · 마지막 스냅샷 3(20:34:00)에 포지션 |
+| 2차 | 기동 20:34:20 · `RestartRestore` "root 1 · 스냅샷 3 · 일치" · 추정 청산가 재계산 75134.429… = 스냅샷 값 · 90초 뒤 상태: 포지션 LONG 0.026 · **blockers [] · entries_allowed true** · stalled [] |
+| 청산 | 하네스 `close_all` 20:38:23 SELL 0.026 @ 75784.30 · close 행 `position_id=1`(같은 root) · 실현 2.2646 · 청산 수수료 0.9852 · 지갑 1000.2953 · 대사 차단 없음 |
+| 봉 | REST 29 + WS 7 · kill 전후 간격 0 |
+| 안전 상태 | safety_state 3행 · `engine_blocks []` · 킬스위치 발동 없음 · stale 청산 0 · FundingMissed 없음(다음 경계 00:00 UTC) |
+| 2차 종료 | exit 0 · `stop`(clean, dropped 0) · db_errors 0 |
+| 텔레그램 | 2차 발송 5 · 배달 5(message_id) · poll_errors 0 · send_errors 0 · 1차 배달 수는 SIGKILL로 상태 파일이 덮여 기록 없음 |
+| 거래소 쓰기 | 없음 — `ReadOnlyClient`(키 있어도 POST 구조적 불가) · 체결은 `PaperSender` · positionRisk 미조회 |
+| 비밀값 | report.json·status.json에서 키·시크릿·봇 토큰 문자열 검색 0건 |
