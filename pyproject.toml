@@ -23,6 +23,10 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+filterwarnings = [
+    # aiohttp 3.14.3 inside ccxt.pro on py3.12.13 — harmless, upstream notice only
+    "ignore:enable_cleanup_closed ignored:DeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 110
