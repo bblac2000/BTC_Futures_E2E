@@ -196,28 +196,40 @@ def _size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decim
         loss_at_sl_usdt=loss, loss_at_liquidation_usdt=margin + final * fee, liquidation_fee=fee)
 
 
-def post_entry_liquidation_check(decision: SizingDecision, *, entry_price: Decimal,
+def post_entry_liquidation_check(decision: SizingDecision, rules: RuntimeRules, *, entry_price: Decimal, qty: Decimal,
                                  exchange_liq_price: Decimal) -> LiquidationCheck:
-    """진입 후 — 거래소 `positionRisk.liquidationPrice`(진리원)를 진입 전 추정과 비교한다.
+    """진입 후 — 거래소 `positionRisk.liquidationPrice`(진리원)를 **실제 체결 기준으로 재계산한** 추정과 비교한다.
 
+    🔴 Codex 재검토(0c78d37) Q4: 진입 전 결정의 비율(`decision.liq_dist_pct`)을 재사용하면 실제 체결가·수량이
+       브라켓(MMR·cum)을 바꾸는 경우를 놓친다 → 실제 `entry_price × qty`로 브라켓·MMR_eff·거리를 다시 구한다.
+       레버리지는 결정값을 쓴다(layer 3가 `POST /leverage` 응답 == decision.leverage를 확인한 뒤에만 진입한다).
     해석(레지스트리 #2): "거래소 청산가가 추정보다 **버퍼 이상** 가깝다" ⇔ `exchange_dist × buffer < estimate_dist`
     → CHECK(로그·점검 대상). 거래소 값이 0/없음이거나 진입가의 잘못된 쪽이면 해석할 수 없으므로 CHECK.
     """
-    entry_price = _dec(entry_price, "entry_price")
-    exchange_liq_price = _dec(exchange_liq_price, "exchange_liq_price")
-    if not decision.ok or decision.liq_dist_pct is None:
-        raise ValueError("수락된 사이징 결정에만 진입 후 검사를 한다")
-    est, buf = decision.liq_dist_pct, decision.buffer
-    if exchange_liq_price <= 0 or entry_price <= 0:
-        return LiquidationCheck("CHECK", None, est, buf, f"거래소 청산가 해석 불가: {exchange_liq_price}")
-    if decision.direction is Direction.LONG:
-        dist = (entry_price - exchange_liq_price) / entry_price
-    else:
-        dist = (exchange_liq_price - entry_price) / entry_price
-    if dist <= 0:
-        return LiquidationCheck("CHECK", dist, est, buf,
-                                f"거래소 청산가 {exchange_liq_price}가 {decision.direction} 진입가 {entry_price}의 잘못된 쪽")
-    if dist * buf < est:
-        return LiquidationCheck("CHECK", dist, est, buf,
-                                f"거래소 청산 거리 {dist} × buffer {buf} < 추정 {est} — 추정보다 버퍼 이상 가깝다")
-    return LiquidationCheck("OK", dist, est, buf, "")
+    with decimal.localcontext() as ctx:
+        ctx.prec = DECIMAL_PREC
+        entry_price = _dec(entry_price, "entry_price")
+        qty = _dec(qty, "qty")
+        exchange_liq_price = _dec(exchange_liq_price, "exchange_liq_price")
+        if not decision.ok or decision.leverage is None:
+            raise ValueError("수락된 사이징 결정에만 진입 후 검사를 한다")
+        if entry_price <= 0 or qty <= 0:
+            raise ValueError(f"실제 체결 entry_price·qty는 양수: {entry_price}, {qty}")
+        buf = decision.buffer
+        notional = entry_price * qty
+        b = rules.bracket_for_notional(notional)
+        est = 1 / Decimal(decision.leverage) - mmr_eff(b, notional)
+        if exchange_liq_price <= 0:
+            return LiquidationCheck("CHECK", None, est, buf, f"거래소 청산가 해석 불가: {exchange_liq_price}")
+        if decision.direction is Direction.LONG:
+            dist = (entry_price - exchange_liq_price) / entry_price
+        else:
+            dist = (exchange_liq_price - entry_price) / entry_price
+        if dist <= 0:
+            return LiquidationCheck("CHECK", dist, est, buf,
+                                    f"거래소 청산가 {exchange_liq_price}가 {decision.direction} 진입가 {entry_price}의 잘못된 쪽")
+        if dist * buf < est:
+            return LiquidationCheck("CHECK", dist, est, buf,
+                                    f"거래소 청산 거리 {dist} × buffer {buf} < 실제 체결 기준 추정 {est}"
+                                    f"(명목 {notional}·브라켓 {b.bracket}) — 추정보다 버퍼 이상 가깝다")
+        return LiquidationCheck("OK", dist, est, buf, "")

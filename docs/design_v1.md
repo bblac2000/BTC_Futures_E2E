@@ -79,6 +79,7 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 ## 7. 검토 상태
 | 대상 | 검토 | 상태 |
 |---|---|---|
+| layer 2 재작업(B1·B2) + 이전 수정분 + algo 사전검사 | Codex 재검토 read-only (`task-mu27w8m4-oicyfq`, `0c78d37`) | ✅ 완료 — Q1·Q3·Q5 OK · Q4 수정(실제 체결 재계산) · **Q2 → §9 B5 · Q6 → §9 B6 사용자 결정 대기** |
 | layer 2 `sizing/` | Codex 독립 검토 read-only (`task-mu21ai6o-slrnyc`) | ✅ 완료 — Q2·Q3 OK · Q1·Q4·Q5 ISSUE → 전부 동의·수정(178 green). liquidationFee 모델은 §9 B1로 사용자 결정 대기. 수정분 재검토 미실시 |
 | layer 1 `exchange/gate.py` LIVE 분기(계정 설정 변경) · `client.py` 서명/POST · `orders.py`/`normalize.py` | Codex 독립 검토 read-only (2026-09-15, job `task-mu1zv0h4-qazyjb`) | ✅ **완료** — Q1·Q2 OK · Q3·Q4·Q5 ISSUE → 전부 채택·수정·테스트(125 green). 원문·조치표 `docs/ops_log.md`. 재검토(`task-mu20lg9y-h4uua9`): F1 PARTIAL · F2 CLOSED · F3 PARTIAL → 동의 항목 수정(전송 실패→StartupAbort '상태 불명' · positionAmt 엄격). algo 미체결 사전검사는 문서 확인 후(TODO). 재수정분은 3차 검토 미실시 |
 
@@ -123,3 +124,5 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 | B2 | 2026-09-15 | 클램프 시 risk_pct가 손실에 반영되지 않음(구 스킬 식) | ✅ **해결 — 레지스트리 #2**: 위험 예산이 1차 제약, pos_pct는 도출(캡 40%·권고 10%), 최종 손실 > 예산×(1+tol) 거부 |
 | B3 | 2026-09-15 | **목표 명목이 상위 티어**면 pos_pct 캡으로 최종 명목이 tier1로 내려와도 L은 **목표 명목 티어의 레버리지 상한**에 묶인다(예: 목표 1,867,630 → tier3 최대 75x → 캡 후 명목 112,058(tier1)인데 L=75). 레지스트리 #2 ③ 순서 그대로의 결과 — 보수적(더 낮은 L·더 작은 명목·손실 더 작음) | 📝 **기록만** — 규칙대로 구현. 1,000 USDT 자본에서는 목표가 300,000을 넘으려면 risk/sl ≥ 300배(예: risk 3%·SL 0.01%)라 드묾. 바꾸려면 새 행 |
 | B4 | 2026-09-15 | `SizingLimits.buffer` 값 | ⏸ 레지스트리 #3 값 사전등록 대기 |
+| **B5** | 2026-09-15 | **행 #2 청산 거리 `1/L − MMR_eff`는 바이낸스 정확식의 근사 — SHORT에서 반보수** (Codex 재검토 Q2 · 공식 FAQ 원식으로 직접 확인) | 신규 격리 포지션(WB = N/L, TMM=UPNL=0) 정확 거리: **LONG `(1/L − MMR_eff)/(1 − MMR)`**(행#2보다 멀다 → 행#2 보수) · **SHORT `(1/L − MMR_eff)/(1 + MMR)`**(행#2보다 가깝다 → **행#2 반보수**). tier1 100x: LONG 0.60241% · SHORT 0.59761% vs 행#2 0.600%. 추가로 원문은 MMR·cum을 **청산가에서의 명목** 티어로 재계산하라고 한다. ⏸ **사용자 결정 대기**: (a) 정확식으로 교체(방향별) (b) 두 방향 모두 `min(행#2, 정확식)`(= LONG 행#2 · SHORT 정확식) (c) 행#2 유지 + buffer로 흡수. 결정 전 layer 3 착수 안 함 |
+| **B6** | 2026-09-15 | 헤지→원웨이 전환 사전검사가 **COIN-M(dapi)** 포지션·미체결을 못 본다(UM·CM이 dualSidePosition 공유 · 공식 문서) | 현재 = 거래소 -4067/-4068 거부 → StartupAbort(fail-closed). ⏸ **사용자 결정 대기**: dapi 사전검사 추가(엔드포인트 원문 확인 후) vs "COIN-M 미사용 전용 계정"을 라이브 체크리스트 항목으로 명시 |

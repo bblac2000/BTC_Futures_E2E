@@ -230,29 +230,49 @@ def test_result_does_not_depend_on_the_callers_decimal_context(rules):
 
 
 # ── 진입 후 검사: 거래소 청산가가 진리원 ───────────────────────────────
+def _long_decision(rules, buffer="1.2"):
+    d = size_entry(D("60000"), D("59700"), LONG, D("1000"), regime(), rules, limits(buffer=D(buffer)))
+    assert d.ok and d.liq_dist_pct is not None and d.liq_price_est is not None
+    return d
+
+
 def test_post_entry_ok_when_exchange_liq_matches_estimate(rules):
-    d = size_entry(D("60000"), D("59700"), LONG, D("1000"), regime(), rules, limits(buffer=D("1.2")))
-    assert d.ok and d.liq_price_est is not None
-    c = P.post_entry_liquidation_check(d, entry_price=D("60000"), exchange_liq_price=d.liq_price_est)
+    d = _long_decision(rules)
+    assert d.liq_price_est is not None
+    c = P.post_entry_liquidation_check(d, rules, entry_price=D("60000"), qty=d.qty, exchange_liq_price=d.liq_price_est)
     assert c.status == "OK"
 
 
 def test_post_entry_check_when_exchange_liq_is_closer_than_estimate_by_more_than_buffer(rules):
     """해석(레지스트리 #2): 거래소 청산 거리 × buffer < 추정 청산 거리 → CHECK(로그·점검)."""
-    d = size_entry(D("60000"), D("59700"), LONG, D("1000"), regime(), rules, limits(buffer=D("1.2")))
+    d = _long_decision(rules)
     est = d.liq_dist_pct
     assert est is not None
     closer = D("60000") * (1 - est / D("1.3"))                   # 거래소 거리 = 추정/1.3 < 추정/1.2
-    c = P.post_entry_liquidation_check(d, entry_price=D("60000"), exchange_liq_price=closer)
+    c = P.post_entry_liquidation_check(d, rules, entry_price=D("60000"), qty=d.qty, exchange_liq_price=closer)
     assert c.status == "CHECK" and c.exchange_dist_pct is not None and c.exchange_dist_pct < c.estimate_dist_pct
     near = D("60000") * (1 - est / D("1.1"))                     # 추정/1.1 > 추정/1.2 → 버퍼 안
-    assert P.post_entry_liquidation_check(d, entry_price=D("60000"), exchange_liq_price=near).status == "OK"
+    assert P.post_entry_liquidation_check(d, rules, entry_price=D("60000"), qty=d.qty,
+                                          exchange_liq_price=near).status == "OK"
 
 
 @pytest.mark.parametrize("bad", [D("0"), D("60010")])
 def test_post_entry_missing_or_wrong_side_exchange_liq_is_check(rules, bad):
-    d = size_entry(D("60000"), D("59700"), LONG, D("1000"), regime(), rules, limits())
-    assert P.post_entry_liquidation_check(d, entry_price=D("60000"), exchange_liq_price=bad).status == "CHECK"
+    d = _long_decision(rules, "1")
+    assert P.post_entry_liquidation_check(d, rules, entry_price=D("60000"), qty=d.qty,
+                                          exchange_liq_price=bad).status == "CHECK"
+
+
+def test_post_entry_estimate_is_recomputed_from_the_actual_fill_not_reused(rules):
+    """🔴 Codex 재검토(0c78d37) Q4 — 결정의 비율을 재사용하면 실제 체결가·수량이 브라켓을 바꿀 때 놓친다.
+    결정: entry 60000·qty 10·명목 600,000(tier2 MMR_eff 0.45%) → 추정 0.55%.
+    실제 체결 30000 → 명목 300,000 → MMR_eff 0.4% → 추정 0.6%. 거래소 거리 0.52%·buffer 1.1:
+    재사용하면 0.572% ≥ 0.55% → OK(놓침) · 재계산하면 0.572% < 0.6% → CHECK."""
+    d = size_entry(D("60000"), D("59940"), LONG, D("20000"), regime(risk_pct=D("0.03")), rules, limits(buffer=D("1.1")))
+    assert d.ok and d.qty == D("10") and d.liq_dist_pct == D("0.0055")
+    fill = D("30000")
+    c = P.post_entry_liquidation_check(d, rules, entry_price=fill, qty=d.qty, exchange_liq_price=fill * (1 - D("0.0052")))
+    assert c.status == "CHECK" and c.estimate_dist_pct == D("0.006")
 
 
 # ── 속성 테스트 ─────────────────────────────────────────────────────────
