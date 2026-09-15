@@ -10,7 +10,7 @@
   ① `validate_order_params` 통과한 파라미터만 ② ccxt `amount_to_precision`이 우리 수량과 **값이 다르면 보내지 않는다**(표기 차이 `0.010`↔`0.01`은 허용)
      (ccxt는 수량을 조용히 자른다 — 0.0339→0.033 실측 2026-09-15) ③ `newClientOrderId`는 **우리 것**
      (없으면 ccxt가 자기 브로커 id `x-…`를 주입한다) ④ 돌려주는 값은 `order['info']`(원시 응답).
-- 오류: 5xx·타임아웃·연결 실패 → `TransportError`(실행 여부 불명 — Binance 문서 503 "Unknown error") ·
+- 오류: 5xx·타임아웃·연결 실패·코드 -1006/-1007 → `TransportError`(실행 여부 불명 — Binance 문서 503 "Unknown error") ·
   Binance `{code,msg}` 본문 → `BinanceAPIError(code)`(게이트의 -4046 처리 등이 그대로 동작).
 """
 from __future__ import annotations
@@ -39,6 +39,8 @@ API_BY_PREFIX: dict[str, tuple[str, str]] = {
 ORDER_PATH = "/fapi/v1/order"
 CLIENT_ORDER_ID_PREFIX = "bfe2e-"             # Binance 허용 문자 ^[.A-Z:/a-z0-9_-]{1,36}$
 TIMESTAMP_ERROR = -1021
+#  Binance가 "실행 여부 불명"이라 명시한 코드 — HTTP 4xx로 와도 체결됐을 수 있다(Codex ccxt 검토 1)
+UNKNOWN_EXECUTION_CODES = frozenset({-1006, -1007})
 
 
 def _wall_ms() -> int:
@@ -70,9 +72,12 @@ class CcxtRestClient:
                  timeout_ms: int = 10_000, exchange: Any = None):
         config: Any = {
             "apiKey": api_key, "secret": secret, "enableRateLimit": True, "timeout": timeout_ms,
+            "returnResponseHeaders": False,
             "options": {"recvWindow": recv_window_ms, "adjustForTimeDifference": False, "fetchCurrencies": False},
         }
         self.ex: Any = exchange or ccxt.binanceusdm(config)
+        if getattr(self.ex, "returnResponseHeaders", False):
+            raise ValueError("returnResponseHeaders=True는 원시 응답 객체에 responseHeaders를 끼워 넣는다 — 원시 payload 규칙 위반")
         self.rate_limits, self._clock = rate_limits, clock_ms
         self._last_status: int | None = None
         inner_on_rest_response = self.ex.on_rest_response
@@ -102,12 +107,14 @@ class CcxtRestClient:
         api, sub = _split(path, signed)
         p = {k: v for k, v in (params or {}).items()}
         data = self._call(method, path, lambda: self.ex.request(sub, api, method, p))
-        return Response(self._last_status or 200, data, self._headers())
+        return Response(self._last_status or 200, data, dict(self.ex.last_response_headers or {}))
 
     def _market_order(self, params: dict[str, Any]) -> Response:
         validate_order_params(params)
         if "reduceOnly" in params and params["reduceOnly"] != "true":
             raise OrderParamError(f"reduceOnly={params['reduceOnly']!r}")
+        if params.get("newOrderRespType", "RESULT") != "RESULT":
+            raise OrderParamError(f"newOrderRespType={params['newOrderRespType']!r} — 체결가·수량이 필요해 RESULT만 허용")
         market = self._market(params["symbol"])
         qty = params["quantity"]
         ccxt_qty = self.ex.amount_to_precision(market["symbol"], qty)
@@ -116,7 +123,7 @@ class CcxtRestClient:
             raise OrderParamError(f"ccxt 정밀도가 수량을 바꾼다 {qty} → {ccxt_qty} — 우리 정규화가 권위, 전송하지 않는다")
         extra: dict[str, Any] = {
             "newClientOrderId": params.get("newClientOrderId") or CLIENT_ORDER_ID_PREFIX + uuid.uuid4().hex[:24],
-            "newOrderRespType": params.get("newOrderRespType", "RESULT"),
+            "newOrderRespType": "RESULT",
         }
         if params.get("reduceOnly") == "true":
             extra["reduceOnly"] = True
@@ -127,7 +134,7 @@ class CcxtRestClient:
         info = order.get("info") if isinstance(order, dict) else None
         if not isinstance(info, dict):
             raise TransportError(f"POST {ORDER_PATH}: 원시 응답(info)이 없다 — 체결 여부 불명: {order!r}")
-        return Response(self._last_status or 200, info, self._headers())
+        return Response(self._last_status or 200, info, dict(self.ex.last_response_headers or {}))
 
     def _market(self, symbol_id: str) -> dict:
         if not self.ex.markets:
@@ -146,7 +153,9 @@ class CcxtRestClient:
     def _call(self, method: str, path: str, fn: Callable[[], Any]) -> Any:
         self._last_status = None
         try:
-            return fn()
+            result = fn()
+            self._headers()                          # ccxt 내부 호출(load_markets·load_time_difference)도 카운터에 반영
+            return result
         except ccxt.BaseError as e:
             status = self._last_status
             self._headers()
@@ -156,6 +165,8 @@ class CcxtRestClient:
             if body is None:
                 raise BinanceAPIError(status or 0, None, f"{type(e).__name__}: {e}", path) from e
             code = int(body["code"])
+            if code in UNKNOWN_EXECUTION_CODES:
+                raise TransportError(f"{method} {path}: code {code} {body.get('msg')!r} — 거래소가 실행 여부 불명이라 답했다") from e
             if code == TIMESTAMP_ERROR:
                 try:
                     self.ex.load_time_difference()

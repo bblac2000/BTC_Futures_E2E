@@ -682,3 +682,57 @@ forceOrder 0건은 BTC 강제청산이 드문 탓일 수 있어 **판정 불가*
 6. 오류: ccxt는 HTTP 상태를 예외에 싣지 않는다 → `on_rest_response`를 감싸 상태를 잡는다. 5xx(503 "Unknown error" 포함)·타임아웃·연결 실패 → `TransportError`, Binance `{code,msg}` → `BinanceAPIError(code)`.
 7. ccxt는 구독마다 소켓을 따로 연다(kline·markPrice가 다른 `/market` 소켓) — 설계서 layer 5 "같은 소켓"과 다르나 티어 동일·스트림별 감시(기록).
 8. `exchange/client.py` urllib `BinanceRestClient`는 운영 경로에서 제거(미사용 프로브·자기 테스트만, 가드 테스트). `capture_account_snapshot.py`는 ccxt 전송으로 이식.
+
+## 2026-09-15 — Codex 검토 ccxt 전환 (`f0268f0`, read-only · `task-mu2j7hg4-z7qv2i`)
+판정: **ccxt REST 어댑터 FIX FIRST · 피드 MERGE · 백필 MERGE** · 엔진 변경·2 bps 회귀 없음 · WS 티어 테스트 가로채기 충분(Q5 AGREE).
+
+### 항목별 동의 여부와 조치 (실패 테스트 10개 → 수정 → 444 green)
+| Codex | 동의 | 조치 |
+|---|---|---|
+| 1 -1006·-1007(실행 여부 불명)이 4xx 본문이면 `BinanceAPIError`로 분류 | ✅ | 코드 -1006·-1007 → HTTP 상태와 무관하게 `TransportError` |
+| 2 `newOrderRespType` 값 미고정(호출자가 ACK 등으로 덮을 수 있음) | ✅ | 어댑터가 RESULT 외 거부 · ccxt에 항상 RESULT |
+| 3 ccxt 내부 호출(sync_time·load_markets) 헤더가 카운터에 안 들어감 | ✅ | `_call` 성공 경로마다 헤더 관측 |
+| Q3 `returnResponseHeaders=True`가 원시 응답을 변형 | ✅ | 설정에서 False 고정 · 주입된 거래소가 True면 생성 거부 |
+| Q2 ccxt가 HTTP 전에 거부(InvalidOrder) | ✅ 확인 | 요청 0건 · `BinanceAPIError(code None)`(실행 안 됨) 테스트 추가 |
+
+### Codex 검토 원문 (verbatim)
+```
+Read-only review completed. I did not modify files, did not use network, and did not read `.env`. Targeted pytest could not start because the read-only sandbox has no usable temp directory.
+
+**Findings**
+1. **FIX FIRST: unknown order outcomes can be misclassified.**  
+   `CcxtRestClient._call()` maps JSON `{code,msg}` on non-5xx to `BinanceAPIError` even for ccxt/Binance unknown-outcome codes. ccxt maps `-1006` as execution status unknown and `-1007` as send/execution status unknown: [ccxt/binance.py:2660](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:2660>), [ccxt/binance.py:2661](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:2661>). Adapter logic: [exchange/ccxt_rest.py:153](</home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:153>). For order POST, these should be `TransportError`/unknown regardless of HTTP status.
+
+2. **FIX FIRST: lower-level order adapter allows non-`RESULT` response type.**  
+   `newOrderRespType` is allowlisted without value validation: [exchange/orders.py:51](</home/cms/project/BTC_Futures_E2E/exchange/orders.py:51>), and adapter forwards caller value: [exchange/ccxt_rest.py:119](</home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:119>). ccxt sets `RESULT` for swaps, but later extends request params, so caller params can override: [ccxt/binance.py:6924](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:6924>), [ccxt/binance.py:7088](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:7088>). `LiveSender` pins `RESULT`, but `CcxtRestClient.post('/fapi/v1/order')` should reject anything else.
+
+3. **Medium: rate-limit header accounting misses hidden ccxt calls.**  
+   `sync_time()` and first-order `_market()->load_markets()` go through ccxt but do not call `_headers()`: [exchange/ccxt_rest.py:97](</home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:97>), [exchange/ccxt_rest.py:134](</home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:134>). ccxt throttling still applies: [ccxt/base/exchange.py:5650](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/base/exchange.py:5650>), but `RateLimitCounter` undercounts.
+
+**Q Verdicts**
+- **Q1: DISAGREE, with caveat.** side/type/quantity/reduceOnly are guarded; forbidden `closePosition`, `workingType`, `priceProtect`, `timeInForce`, stop/algo/test/papi/sor params are rejected before ccxt: [exchange/orders.py:48](</home/cms/project/BTC_Futures_E2E/exchange/orders.py:48>), [exchange/orders.py:112](</home/cms/project/BTC_Futures_E2E/exchange/orders.py:112>). ccxt would route papi/algo if those params existed: [ccxt/binance.py:6740](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:6740>), [ccxt/binance.py:6746](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:6746>). Quantity string precision guard is sound: ccxt uses `Decimal(str(n))`: [ccxt/base/decimal_to_precision.py:97](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/base/decimal_to_precision.py:97>). Caveat: `newOrderRespType` value needs locking.
+
+- **Q2: AGREE.** Unknown `-1006/-1007` can become `BinanceAPIError`. `_last_status` is reliable only after `on_rest_response`: [ccxt/base/exchange.py:614](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/base/exchange.py:614>). Pre-fetch ccxt validation has no status and may become `BinanceAPIError(0)` or leak if raised before `_call`.
+
+- **Q3: DISAGREE for current production path.** `ex.request()` returns parsed exchange JSON from `fetch2`: [ccxt/base/exchange.py:5691](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/base/exchange.py:5691>). Rules/sizing consume raw payloads: [exchange/loader.py:70](</home/cms/project/BTC_Futures_E2E/exchange/loader.py:70>). Caveat: `returnResponseHeaders=True` mutates object responses: [ccxt/base/exchange.py:626](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/base/exchange.py:626>).
+
+- **Q4: PARTIAL/AGREE.** Exactly one timestamp/recvWindow/signature is correct via `sign()`: [ccxt/binance.py:12313](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:12313>). `sync_time()` uses USD-M time because `binanceusdm` defaultType is `swap`: [ccxt/binanceusdm.py:38](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binanceusdm.py:38>), [ccxt/binance.py:3123](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/binance.py:3123>). Rate-limit headers are undercounted on hidden calls.
+
+- **Q5: AGREE.** `Client.create_connection` interception captures used ccxt.pro sockets; `Client.open()` calls it directly: [ccxt/ws/client.py:189](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/async_support/base/ws/client.py:189>). Legacy mutation is realistic because rewrite only happens when URL ends exactly `/ws`: [ccxt/pro/binance.py:270](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/pro/binance.py:270>).
+
+- **Q6: AGREE.** Handler overrides are correct: [data/feed.py:137](</home/cms/project/BTC_Futures_E2E/data/feed.py:137>). ccxt unwraps combined `stream/data` wrappers first: [ccxt/pro/binance.py:5224](</home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/ccxt/pro/binance.py:5224>). DeliveryCounter uses `E`, and close only on `x=true`: [data/feed.py:174](</home/cms/project/BTC_Futures_E2E/data/feed.py:174>). Feed MERGE.
+
+- **Q7: AGREE.** Backfill paging is monotonic and fail-closed on overlong pages, malformed rows, and time reversal: [data/backfill.py:60](</home/cms/project/BTC_Futures_E2E/data/backfill.py:60>). Backfill MERGE.
+
+- **Q8: DISAGREE with regression concern.** Engine now checks SL against mark before quote/sizing: [paper/engine.py:223](</home/cms/project/BTC_Futures_E2E/paper/engine.py:223>). 2 bps paper slippage is locked: [paper/config.py:12](</home/cms/project/BTC_Futures_E2E/paper/config.py:12>). Engine MERGE.
+
+- **Q9: Test gaps.** Add tests for `-1006/-1007` order mapping, `newOrderRespType != RESULT`, `returnResponseHeaders=True`, `sync_time/load_markets` header accounting, and ccxt pre-fetch `InvalidOrder` behavior.
+
+**Verdicts**
+- ccxt REST adapter, including order path: **FIX FIRST**.
+- feed: **MERGE**.
+- backfill: **MERGE**.
+
+Codex session ID: 01a0a49e-f24a-7e11-ba4f-ad31bff60030
+Resume in Codex: codex resume 01a0a49e-f24a-7e11-ba4f-ad31bff60030
+```

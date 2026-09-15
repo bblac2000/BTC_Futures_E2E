@@ -300,3 +300,62 @@ def test_no_production_module_uses_the_urllib_client():
             if "BinanceRestClient" in names and rel not in allowed:
                 users.append(rel)
     assert users == []
+
+
+# ── Codex 검토(task-mu2j7hg4-z7qv2i) FIX FIRST ─────────────────────────────────
+@pytest.mark.parametrize("code, msg", [
+    (-1006, "An unexpected response was received from the message bus. Execution status unknown."),
+    (-1007, "Timeout waiting for response from backend server. Send status unknown; execution status unknown."),
+])
+@pytest.mark.parametrize("status", [400, 408])
+def test_binance_unknown_execution_codes_are_transport_error_even_as_4xx(rules, code, msg, status):
+    """-1006·-1007은 Binance가 **실행 여부 불명**이라 명시한 코드 — 주문이었다면 체결됐을 수 있다."""
+    c, _ = make(lambda m, p, q: (status, {"code": code, "msg": msg}))
+    p = market_order_params("BTCUSDT", Direction.LONG, Intent.ENTRY, Decimal("0.033"), rules.symbol_rules)
+    with pytest.raises(TransportError):
+        c.post("/fapi/v1/order", p)
+    with pytest.raises(TransportError):
+        c.post("/fapi/v1/leverage", {"symbol": "BTCUSDT", "leverage": "5"})
+
+
+@pytest.mark.parametrize("resp_type", ["ACK", "FULL", "result", ""])
+def test_order_response_type_other_than_result_is_refused(rules, resp_type):
+    c, http = make(order_route)
+    p = market_order_params("BTCUSDT", Direction.LONG, Intent.ENTRY, Decimal("0.033"), rules.symbol_rules)
+    with pytest.raises(OrderParamError):
+        c.post("/fapi/v1/order", p | {"newOrderRespType": resp_type})
+    assert http.sent == []
+
+
+def test_hidden_ccxt_calls_also_feed_the_rate_limit_counter(snap, rules):
+    from exchange.rules import parse_rate_limits
+    counter = RateLimitCounter(parse_rate_limits(snap["exchangeInfo"]["response"]))
+    c, http = make(lambda m, p, q: (200, {"serverTime": 1}) if p.endswith("/time") else (200, {}),
+                   rate_limits=counter, clock_ms=lambda: 120_000)
+    http.headers = {"X-MBX-USED-WEIGHT-1M": "123"}
+    c.sync_time()
+    assert max(counter.usage(120_000).values()) > 0
+
+
+def test_response_headers_are_never_injected_into_raw_payloads(snap):
+    raw = snap["exchangeInfo"]["response"]
+    c, _ = make(ok(dict(raw)))
+    assert "responseHeaders" not in c.get("/fapi/v1/exchangeInfo").data
+    import ccxt
+    injected = ccxt.binanceusdm({"returnResponseHeaders": True})  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        CcxtRestClient(exchange=injected)
+
+
+def test_ccxt_validation_before_any_request_is_not_executed(rules, monkeypatch):
+    """ccxt가 HTTP 전에 거부(InvalidOrder)하면 전송되지 않은 것 — BinanceAPIError(실행 안 됨), 요청 0건."""
+    import ccxt
+    c, http = make(order_route)
+    p = market_order_params("BTCUSDT", Direction.LONG, Intent.ENTRY, Decimal("0.033"), rules.symbol_rules)
+
+    def reject(*a, **k):
+        raise ccxt.InvalidOrder("binanceusdm amount must be greater than minimum amount precision")
+    monkeypatch.setattr(c.ex, "create_order", reject)
+    with pytest.raises(BinanceAPIError) as e:
+        c.post("/fapi/v1/order", p)
+    assert e.value.code is None and http.sent == []
