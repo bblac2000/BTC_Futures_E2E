@@ -1751,3 +1751,10 @@ Codex session ID: 01a0a717-1974-7462-bb39-40fb61b76ede
 Resume in Codex: codex resume 01a0a717-1974-7462-bb39-40fb61b76ede
 ```
 </details>
+
+## 2026-09-16 — 배포 전 배치 수용 · 푸시 · 백로그 메모
+
+**사용자 지시(2026-09-16)**: 배포 전 배치 수용 · `29e52f2..149c98a` 푸시 · 배포 게이트: Codex MERGE ✓ · Restart B 게이트 종료 2026-09-18 00:16 UTC ·
+D1 창 09-18 00:35–02:30 UTC · 여기서 멈춤(사용자 항목: rclone remote·TELEGRAM_OWNER_IDS·캡처 스크립트 → D1 전 확인 · 화이트리스트는 §9.1 뒤).
+**백로그(설계 메모만, D2 전 금지)**: breadcrumb → DB journal 테이블 대체를 페이퍼 첫 주 뒤 평가(TODO 5o).
+
