@@ -9,12 +9,14 @@
 ## 다음
 1. [x] Codex 독립 검토 layer 1 — Q3·Q4·Q5 채택·수정 완료(ops_log 원문)
 1b. [x] Codex 재검토 — F1 PARTIAL · F2 CLOSED · F3 PARTIAL → 동의 항목 수정(ops_log)
-1d. [ ] algo 미체결 조회 경로를 공식 문서로 확인 후 헤지 전환 사전검사에 추가(Codex F1-b)
+1d. [x] algo 미체결 사전검사 — 공식 문서 확인 `GET /fapi/v1/openAlgoOrders`(`64a1a23`)
 1e. [ ] 재검토 후 수정분(TransportError·_amt 엄격화) Codex 3차 검토 — 선택
 1c. [ ] 실계정 read-only 캡처로 positionRisk V2에 `isolated` 필드가 있는지 확인(Codex Q3 불확실 항목)
 2. [ ] **사용자 실행 대기** — `uv run python scripts/capture_account_snapshot.py`(read-only 키) → 합성 fixture 교체 + positionRisk `isolated` 필드 판정(1c 해결). 결과 보고 후 `gate._is_isolated` 확정
 3. [x] layer 2 `sizing/` 구현·테스트(`d1ed96d`)
-3a. [ ] **사용자 결정** — 설계서 §9 B1(liquidationFee를 청산 거리 검사에 둘지)·B2(클램프 시 risk_pct 의미)
+3a. [x] 사용자 결정 B1·B2 → 레지스트리 #2 · layer 2 재작업 완료
+3d. [ ] **레지스트리 #3 buffer 값 사전등록**(사용자) — 값 없으면 layer 3 페이퍼 기동 불가
+3e. [ ] Codex 재검토 — layer 2 이전 수정분 + B1·B2 + algo 미체결 사전검사 (layer 3 전 필수)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
 3c. [ ] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
 4. [x] 전달 감시 임계 → 레지스트리 #1 확정(kline1m_update·kline1m_close·markprice) — layer 5 writer가 kline을 두 kind로 기록해야 재생 어댑터가 같은 값을 센다

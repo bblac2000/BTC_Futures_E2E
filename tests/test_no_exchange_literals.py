@@ -14,15 +14,15 @@ ROOT = Path(__file__).resolve().parent.parent
 GUARDED = ("exchange", "sizing", "paper")
 
 
-def _violations(py: Path) -> list[str]:
+def _violations(py: Path, root: Path = ROOT) -> list[str]:
     tree = ast.parse(py.read_text(encoding="utf-8"))
     out = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, float) and node.value not in (0.0, 1.0):
-            out.append(f"{py.name}:{node.lineno} float 리터럴 {node.value!r}")
+            out.append(f"{py.relative_to(root).as_posix()}:{node.lineno} float 리터럴 {node.value!r}")
         if (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "Decimal" and node.args
                 and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str | int | float)):
-            out.append(f"{py.name}:{node.lineno} Decimal 리터럴 {node.args[0].value!r}")
+            out.append(f"{py.relative_to(root).as_posix()}:{node.lineno} Decimal 리터럴 {node.args[0].value!r}")
     return out
 
 
@@ -31,13 +31,18 @@ def test_guarded_packages_have_no_exchange_value_literals():
     for d in GUARDED:
         for py in sorted((ROOT / d).rglob("*.py")):
             v += _violations(py)
-    #  HTTP timeout 기본값은 거래소 규칙이 아니라 운영 파라미터다 — 파일·값 단위로 명시 허용
-    allowed = ("client.py:", "float 리터럴 10.0")
-    v = [x for x in v if not (x.startswith(allowed[0]) and x.endswith(allowed[1]))]
+    #  거래소 규칙이 아닌 값만 **파일·값 단위로** 명시 허용한다(목록이 자라면 경계를 여는 것이다):
+    #  - HTTP timeout 기본값(운영 파라미터)
+    #  - 사이징 정책 기본값 — 사용자 확정 레지스트리 #2(pos_pct_max 40% · pos_pct_min 10% · loss_tolerance 0)
+    allowed = {("exchange/client.py", "float 리터럴 10.0"),
+               ("sizing/config.py", "Decimal 리터럴 '0.40'"),
+               ("sizing/config.py", "Decimal 리터럴 '0.10'"),
+               ("sizing/config.py", "Decimal 리터럴 '0'")}
+    v = [x for x in v if not any(x.startswith(f + ":") and x.endswith(val) for f, val in allowed)]
     assert v == [], "\n".join(v)
 
 
 def test_the_guard_actually_detects_literals(tmp_path):
     p = tmp_path / "bad.py"
     p.write_text("from decimal import Decimal\nMIN_NOTIONAL = Decimal('50')\nFEE = 0.0005\n", encoding="utf-8")
-    assert len(_violations(p)) == 2
+    assert len(_violations(p, tmp_path)) == 2

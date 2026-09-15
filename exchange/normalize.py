@@ -28,6 +28,7 @@ class RejectReason(StrEnum):
     LIQ_DISTANCE = "liq_distance"
     LEVERAGE_INFEASIBLE = "leverage_infeasible"
     NOTIONAL_CAP = "notional_cap"          # 명목이 모든 브라켓 cap을 넘는다
+    LOSS_OVER_BUDGET = "loss_over_budget"  # 최종 qty의 SL 손실 > 위험 예산 × (1 + tol) (레지스트리 #2)
 
 
 @dataclass(frozen=True)
