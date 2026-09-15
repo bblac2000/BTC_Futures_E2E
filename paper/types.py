@@ -64,6 +64,7 @@ class ExitReason(StrEnum):
 class SkipReason(StrEnum):
     LEVERAGE_NOT_CONFIRMED = "leverage_not_confirmed"
     SL_CROSSED_BEFORE_FILL = "sl_crossed_before_fill"
+    SIZING_REJECTED = "sizing_rejected"       # 실행 mark로 다시 한 사이징이 거부(사유는 decision.reason)
     SEND_FAILED = "send_failed"
 
 
@@ -77,7 +78,8 @@ class PostFillCheck:
     liq_price_est: Decimal                 # #4 모델(수수료 차감) — PAPER 청산 시뮬레이션 기준
     liq_dist_pct: Decimal
     bracket: int
-    gate_ok: bool                          # #5 게이트 + 브라켓 레버리지 상한
+    gate_ok: bool                          # #5 게이트 + 브라켓 레버리지 상한 — 기록(슬리피지로 경계를 약간 넘을 수 있다)
+    sl_before_liquidation: bool            # 물리적 불변식: SL 거리 < 추정 청산 거리 — 아니면 즉시 청산
     loss_at_sl_usdt: Decimal
     loss_over_budget: bool                 # 기록만(슬리피지로 예산을 약간 넘을 수 있다) — 청산 사유 아님
     liquidation_check: LiquidationCheck | None   # LIVE만(positionRisk.liquidationPrice) · PAPER None
@@ -95,7 +97,7 @@ class EntryFilled:
 @dataclass(frozen=True)
 class EntrySkipped:
     ts_ms: int
-    decision: SizingDecision
+    decision: SizingDecision | None
     reason: SkipReason
     detail: str
 
