@@ -44,6 +44,8 @@ from paper.types import (
     MarkTick,
     PositionClosed,
     PositionRisk,
+    PositionSynced,
+    PositionVanished,
     PostFillCheck,
     SkipReason,
 )
@@ -279,7 +281,7 @@ class Engine:
         live_ev: list[object] = []
         if self.mode is Mode.LIVE:
             post, live_ev = self._live_after_entry(ts_ms, d, post)
-        ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post, adopted=adopted))
+        ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post, adopted=adopted, entry_commission=commission))
         ev += live_ev
         if not post.gate_ok:
             #  #5는 사전확약 게이트 — 실제 체결 기준으로 깨지면 즉시 청산(Codex L3 검토 4 · 기록만 하는 완화 없음)
@@ -370,6 +372,8 @@ class Engine:
             if pr is not None:
                 if pr.amt == 0:
                     self.position = None
+                    ev.append(PositionVanished(ts_ms, pos.direction, pos.qty, pos.entry_price,
+                                               f"청산({reason}) 시도 시 거래소 포지션 0 — 거래소 청산·수동 청산 의심"))
                     ev.append(ExitFailed(ts_ms, reason, "거래소 포지션 0 — 거래소 청산·수동 청산 추정 · 대사 필요"))
                     ev.append(self._block(ts_ms, "청산하려 했으나 거래소 포지션이 이미 0"))
                     return ev
@@ -380,6 +384,7 @@ class Engine:
                 if pr.amt != signed:
                     #  🔴 Codex L3 재검토 3: 거래소 기준으로 동기화한 뒤 닫는다(손익 기준 = 거래소 평균 진입가)
                     ev.append(self._block(ts_ms, f"청산 전 대사 불일치: 내부 {signed} → 거래소 {pr.amt}(평균가 {pr.entry_price})로 동기화"))
+                    previous_qty, extra_fee = pos.qty, Decimal()
                     if abs(pr.amt) > pos.qty:
                         #  처음 드러난 추가 수량의 진입 수수료 — 거래소 평균가 × 런타임 taker로 추정해 지갑에 반영(Codex 재검토 #2)
                         extra_fee = (abs(pr.amt) - pos.qty) * (pr.entry_price if pr.entry_price > 0 else ref_mark) \
@@ -390,6 +395,7 @@ class Engine:
                     if pr.entry_price > 0:
                         pos.entry_price = pr.entry_price
                     signed = pr.amt
+                    ev.append(PositionSynced(ts_ms, pos.direction, previous_qty, pos.qty, pos.entry_price, extra_fee, pr))
         fills: list[Fill] = []
         failure: Exception | None = None
         try:

@@ -452,3 +452,44 @@ def test_safety_state_is_append_only_history_and_latest_wins(con):
     R.save_safety_state(con, "kill_switch", {"tripped": None, "n": 0}, ts_ms=DAY0 + 2, mode="live")
     assert R.load_safety_state(con, "kill_switch", mode="paper") == {"tripped": "liquidation", "n": 2}
     assert con.execute("SELECT COUNT(*) FROM safety_state").fetchone()[0] == 3
+
+
+# ── Codex L6·7 배치 ───────────────────────────────────────────────────────────
+def test_adopted_entry_commission_estimate_is_recorded(con):
+    from dataclasses import replace
+    base = _entry_filled_event()
+    R.record_events(con, [replace(base, fills=(), entry_commission=D("0.99"))], mode="live", symbol="BTCUSDT")
+    assert con.execute("SELECT entry_commission_usdt FROM positions").fetchone()[0] == "0.99"
+
+
+def test_exit_sync_amends_the_open_position_and_the_larger_close_leaves_it_flat(con):
+    """Codex #3: 동기화는 root open 행의 **수정 행**(reason adopted_from_exchange) — 남은 수량 = 최신 수정 수량 − close 합."""
+    from paper.types import PositionRisk, PositionSynced
+    base = _entry_filled_event()
+    R.record_events(con, [base], mode="live", symbol="BTCUSDT")
+    root = con.execute("SELECT id FROM positions").fetchone()[0]
+    q0 = base.post_fill.qty
+    pr = PositionRisk(q0 + D("0.004"), D("59990"), D("59000"), raw={"positionAmt": str(q0 + D("0.004"))})
+    sync = PositionSynced(DAY0 + 2000, Direction.LONG, q0, q0 + D("0.004"), D("59990"), D("0.12"), pr)
+    R.record_events(con, [sync], mode="live", symbol="BTCUSDT")
+    (row,) = con.execute("SELECT event, reason, position_id, qty, entry_price, entry_commission_usdt, liq_price_exchange"
+                         " FROM positions WHERE id != ?", (root,)).fetchall()
+    assert row == ("open", R.ADOPTED_FROM_EXCHANGE, root, str(q0 + D("0.004")), "59990", "0.12", "59000")
+    st = R.open_position_state(con, mode="live", symbol="BTCUSDT")
+    assert st is not None and st.remaining_qty == q0 + D("0.004")
+    close = PositionClosed(DAY0 + 2000, Direction.LONG, ExitReason.MANUAL, q0 + D("0.004"), D("59990"), D("60000"), (),
+                           D("0.04"), D("0.1"), D("0"), D("999"))
+    R.record_events(con, [close], mode="live", symbol="BTCUSDT")
+    assert con.execute("SELECT position_id FROM positions WHERE event='close'").fetchone()[0] == root
+    assert R.open_position_state(con, mode="live", symbol="BTCUSDT") is None
+
+
+def test_position_vanished_closes_the_db_position_with_unknown_exit(con):
+    from paper.types import PositionVanished
+    base = _entry_filled_event()
+    R.record_events(con, [base], mode="live", symbol="BTCUSDT")
+    v = PositionVanished(DAY0 + 9000, Direction.LONG, base.post_fill.qty, base.post_fill.entry_price, "거래소 포지션 0")
+    R.record_events(con, [v], mode="live", symbol="BTCUSDT")
+    (row,) = con.execute("SELECT reason, exit_price, realized_pnl_usdt, position_id, detail FROM positions WHERE event='close'").fetchall()
+    assert row[:3] == ("vanished", None, None) and row[3] is not None and "거래소 포지션 0" in row[4]
+    assert R.open_position_state(con, mode="live", symbol="BTCUSDT") is None

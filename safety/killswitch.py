@@ -3,6 +3,8 @@
 - 거래 손익 = 청산 뒤 지갑 − **직전 flat 지갑**(진입 수수료·펀딩·청산 수수료 전부 포함). 이벤트의 `realized_pnl_usdt`만 보면
   진입 수수료가 빠져 "수수료에 먹힌 이익"이 이긴 거래로 세진다.
 - 일일 손실: UTC 날짜별 첫 equity 관측이 기준 · `equity ≤ 기준 × (1 − x)`면 발동(경계 포함). 날짜가 바뀌어도 트립은 풀리지 않는다.
+- LIVE에서 거래소 수량이 사라지면(`PositionVanished` · 봉마다 대사에서 내부≠0·거래소=0) 청산 1회로 본다 — 거래소 청산은
+  `PositionClosed(LIQUIDATION)`로 오지 않는다(Codex L6·7 #2).
 - 한 번 발동하면 다음 사유로 다시 발동 이벤트를 내지 않는다(첫 사유 유지) · 사람의 `resume`만 해제(연속 손실·청산 수 초기화).
   일일 손실로 발동한 날 재개하면 같은 날 다음 equity 평가에서 다시 발동한다(기준을 낮춰 한도를 풀지 않는다).
 - 상태는 `db.record.save_safety_state`(append-only)로 남긴다 — 재시작이 트립을 풀지 않게.
@@ -17,7 +19,7 @@ from decimal import Decimal
 from typing import Any
 
 from db import record as R
-from paper.types import ExitReason, PositionClosed
+from paper.types import ExitReason, PositionClosed, PositionVanished
 from safety.config import MAX_LIQUIDATIONS, KillSwitchLimits
 
 STATE_NAME = "kill_switch"
@@ -26,7 +28,7 @@ STATE_NAME = "kill_switch"
 @dataclass(frozen=True)
 class KillSwitchTripped:
     ts_ms: int
-    reason: str                     # daily_loss | consecutive_losses | liquidation
+    reason: str                     # daily_loss | consecutive_losses | liquidation | position_vanished
     detail: str
 
 
@@ -49,7 +51,7 @@ class KillSwitch:
     def entries_allowed(self) -> bool:
         return self.tripped is None
 
-    def _trip(self, ts_ms: int, reason: str, detail: str) -> list[KillSwitchTripped]:
+    def trip(self, ts_ms: int, reason: str, detail: str) -> list[KillSwitchTripped]:
         if self.tripped is not None:
             return []
         self.tripped = KillSwitchTripped(ts_ms, reason, detail)
@@ -58,6 +60,11 @@ class KillSwitch:
     def observe(self, events: Iterable[object], ts_ms: int) -> list[KillSwitchTripped]:
         out: list[KillSwitchTripped] = []
         for ev in events:
+            if isinstance(ev, PositionVanished):
+                #  LIVE 청산은 PositionClosed(LIQUIDATION)로 오지 않는다 — 거래소 수량 소실을 청산 1회로 본다(Codex L6·7 #2)
+                self.liquidations += 1
+                out += self.trip(ev.ts_ms, "position_vanished", f"거래소 포지션 소실(청산·수동 청산 의심): {ev.detail}")
+                continue
             if not isinstance(ev, PositionClosed):
                 continue
             net = ev.wallet_after - self.last_flat_wallet
@@ -66,9 +73,9 @@ class KillSwitch:
             if ev.reason is ExitReason.LIQUIDATION:
                 self.liquidations += 1
                 if self.liquidations >= MAX_LIQUIDATIONS:
-                    out += self._trip(ev.ts_ms, "liquidation", f"청산 {self.liquidations}회 · 거래 손익 {net}")
+                    out += self.trip(ev.ts_ms, "liquidation", f"청산 {self.liquidations}회 · 거래 손익 {net}")
             if self.consecutive_losses >= self.limits.max_consecutive_losses:
-                out += self._trip(ev.ts_ms, "consecutive_losses",
+                out += self.trip(ev.ts_ms, "consecutive_losses",
                                   f"연속 순손실 {self.consecutive_losses}회(한도 {self.limits.max_consecutive_losses})")
         return out
 
@@ -78,7 +85,7 @@ class KillSwitch:
             self.day, self.day_start_equity = day, equity
         floor = self.day_start_equity * (1 - self.limits.daily_loss_pct)
         if equity <= floor:
-            return self._trip(ts_ms, "daily_loss", f"{day} 시작 equity {self.day_start_equity} → {equity} "
+            return self.trip(ts_ms, "daily_loss", f"{day} 시작 equity {self.day_start_equity} → {equity} "
                                                    f"(한도 {self.limits.daily_loss_pct} · 기준선 {floor})")
         return []
 

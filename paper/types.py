@@ -95,6 +95,32 @@ class EntryFilled:
     #  LIVE 채택(주문 결과 불명 → 거래소 수량이 확인 체결보다 큼)일 때 **채택 시점 positionRisk** — 수량·평균가의 진리원.
     #  이 이벤트가 채택 포지션의 open 행이다(db: reason='adopted_from_exchange'). 정상 체결은 None.
     adopted: PositionRisk | None = None
+    #  지갑에서 뺀 진입 수수료 합(확인 체결 + 채택 수량의 런타임 taker 추정) — 체결 합과 다를 수 있다(Codex L6·7 #4)
+    entry_commission: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class PositionSynced:
+    """LIVE 청산 직전 거래소 수량이 내부와 달라 **거래소 기준으로 동기화**했다(진리원 = 그 시점 positionRisk).
+    db: root open 행의 수정 행(reason 'adopted_from_exchange') — close보다 먼저 나온다(Codex L6·7 #3)."""
+    ts_ms: int
+    direction: Direction
+    previous_qty: Decimal
+    qty: Decimal
+    entry_price: Decimal
+    extra_commission: Decimal              # 늘어난 수량의 진입 수수료 추정(줄었으면 0)
+    position_risk: PositionRisk
+
+
+@dataclass(frozen=True)
+class PositionVanished:
+    """LIVE — 내부 포지션이 있는데 거래소 수량이 0이다(거래소 강제 청산 또는 수동 청산 의심). 엔진은 포지션을 내려놓는다.
+    손익은 모른다(추정하지 않는다) · 킬스위치는 청산 1회로 본다(Codex L6·7 #2)."""
+    ts_ms: int
+    direction: Direction
+    qty: Decimal
+    entry_price: Decimal
+    detail: str
 
 
 @dataclass(frozen=True)

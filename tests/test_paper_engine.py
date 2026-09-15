@@ -29,6 +29,7 @@ from paper.types import (
     EntriesBlocked,
     EntryFilled,
     EntrySkipped,
+    ExitFailed,
     ExitReason,
     Fill,
     FundingMissed,
@@ -644,3 +645,55 @@ def test_property_wallet_conservation_and_sl_never_better(rules, direction, step
         if c.reason is ExitReason.SL:
             assert c.exit_price is not None
             assert (c.exit_price <= i.sl) if direction is LONG else (c.exit_price >= i.sl)
+
+
+# ── Codex L6·7 배치: LIVE 청산 소실 · 청산 전 동기화 기록 · 채택 수수료 ───────────────────
+def test_live_exit_finding_the_exchange_flat_emits_position_vanished(rules):
+    """Codex #2: LIVE 청산은 거래소가 한다 — 내부 포지션이 있는데 거래소가 0이면 청산(또는 수동 청산) 의심을 **명시 이벤트**로."""
+    from paper.types import PositionVanished
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
+    probe = size_entry(PaperSender(rules).quote_fill_price(Side.BUY, D("60000")), intent().sl, LONG, W0, intent().regime,
+                       rules, SizingLimits())
+    s.exchange_amt = probe.qty
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    e.on_tick(tick(DAY0 + 1000, "60000"))
+    pos = e.position
+    assert pos is not None
+    s.exchange_amt, s.exchange_liq = D("0"), D("59000")
+    ev = e.close_now(ref_mark=D("59000"), ts_ms=DAY0 + 5000)
+    (v,) = of(ev, PositionVanished)
+    assert v.direction is LONG and v.qty == pos.qty and v.entry_price == pos.entry_price and e.position is None
+    assert of(ev, ExitFailed) and e.entries_blocked
+
+
+def test_live_exit_sync_to_a_different_exchange_quantity_emits_a_sync_event_before_the_close(rules):
+    """Codex #3: 청산 직전 거래소 수량으로 동기화하면 그 사실(진리원 positionRisk)을 이벤트로 — close보다 **먼저**."""
+    from paper.types import PositionSynced
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
+    probe = size_entry(PaperSender(rules).quote_fill_price(Side.BUY, D("60000")), intent().sl, LONG, W0, intent().regime,
+                       rules, SizingLimits())
+    s.exchange_amt = probe.qty
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    e.on_tick(tick(DAY0 + 1000, "60000"))
+    s.exchange_amt, s.exchange_entry = probe.qty + D("0.004"), D("59990")
+    ev = e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000)
+    kinds = [type(x).__name__ for x in ev]
+    assert kinds.index("PositionSynced") < kinds.index("PositionClosed")
+    (sy,) = of(ev, PositionSynced)
+    assert (sy.previous_qty, sy.qty, sy.entry_price) == (probe.qty, probe.qty + D("0.004"), D("59990"))
+    assert sy.extra_commission == D("0.004") * D("59990") * rules.commission.taker and sy.position_risk.amt == sy.qty
+
+
+def test_entry_filled_carries_the_total_entry_commission_including_adopted_estimates(rules):
+    """Codex #4: 채택 수량의 추정 수수료는 지갑에서 빠지는데 이벤트에 없어 DB엔 0으로 남았다."""
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE, unknown_on_send=1, exchange_amt=D("0.033"))
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    (f,) = of(e.on_tick(tick(DAY0 + 1000, "60000")), EntryFilled)
+    assert f.entry_commission == D("0.033") * D("60000.5") * rules.commission.taker == W0 - e.wallet
+    p = engine(rules)
+    p.request_entry(intent())
+    (g,) = of(p.on_tick(tick(DAY0 + 1000, "60000")), EntryFilled)
+    assert g.entry_commission == sum(x.commission for x in g.fills)

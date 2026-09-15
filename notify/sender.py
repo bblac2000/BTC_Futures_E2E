@@ -6,6 +6,7 @@
 #   - message prefix is a parameter (PREFIX, default "[BTC]") instead of "[E2E]"
 #   - _post takes an injectable `opener` so tests can prove a 200 with ok:false is a failure
 #   - typing annotations added (pyright clean); delivery semantics unchanged
+#   - 2026-09-15: transport error text redacts the bot token before it is logged/printed (Codex L6·7 review #5)
 # ───────────────────────────────────────────────────────────────────────────
 """텔레그램 send-only 발송 — **응답 검증 + 단명 프로세스 join**.
 
@@ -70,7 +71,8 @@ def _post(token: str, chat_id: str, text: str,
         res = {"ok": ok, "message_id": (body.get("result") or {}).get("message_id"),
                "description": body.get("description")}
     except Exception as e:
-        res = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        #  urllib 예외 문구에 요청 URL(= 토큰 포함)이 들어갈 수 있다 → 기록·stderr 전에 가린다(Codex L6·7 #5)
+        res = {"ok": False, "error": f"{type(e).__name__}: {e}".replace(token, "<token>") if token else f"{type(e).__name__}: {e}"}
     if res["ok"]:
         logger.info(f"텔레그램 발송 성공 message_id={res.get('message_id')}")
     else:

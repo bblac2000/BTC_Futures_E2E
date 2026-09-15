@@ -204,7 +204,7 @@ def test_resends_carry_the_same_buttons_and_any_of_them_confirms():
 
 def test_callback_older_than_the_ttl_never_executes_even_if_ticks_did_not_run():
     ctrl = FakeController()
-    b = bot(ctrl)
+    b = bot(ctrl, resend_interval_ms=30_000)            # 취소 기한(+120초)이 TTL(60초)보다 늦은 설정 — TTL이 마지막 방어선
     (s,) = sends(b.on_update(msg("/close"), T0 + 6000))
     acts = b.on_update(cb(confirm_data(s, "y")), T0 + 6000 + K.CALLBACK_TTL_MS + 1)
     assert acts[0] == Answer("q1", "만료 — 실행 안 함") and "청산 안 됨" in sends(acts)[0].text
@@ -291,3 +291,19 @@ def test_important_alert_resends_three_times_until_acknowledged_when_enabled():
     n = sum(len(sends(b2.on_tick(T0 + dt))) for dt in range(500, 20_000, 500))
     assert n == 3
     assert len(sends(b2.alert("진입", important=False, now_ms=T0))) == 1 and not b2.on_tick(T0 + 30_000)
+
+
+def test_yes_after_the_no_answer_cancel_deadline_never_executes_even_if_ticks_stalled():
+    """Codex L6·7 #1: 취소는 tick에만 달려 있으면 폴링이 멈춘 사이 +30초의 '예'가 실행된다 — 기한은 콜백에서도 검사한다."""
+    ctrl = FakeController()
+    b = bot(ctrl)
+    t = T0 + 6000
+    (s,) = sends(b.on_update(msg("/close"), t))
+    deadline = t + (K.CONFIRM_RESENDS + 1) * K.CONFIRM_RESEND_INTERVAL_MS
+    acts = b.on_update(cb(confirm_data(s, "y")), deadline + 1)                  # tick 한 번도 없이
+    assert acts[0] == Answer("q1", "응답 기한 지남 — 실행 안 함") and "청산 안 됨" in sends(acts)[0].text
+    assert ctrl.calls == [] and b.pending is None
+    b2 = bot(FakeController())
+    (s2,) = sends(b2.on_update(msg("/close"), t))
+    b2.on_update(cb(confirm_data(s2, "y")), deadline)                           # 기한 경계 = 아직 유효
+    assert b2.controller.calls == [("close_all", f"telegram:{OWNER}")]           # type: ignore[attr-defined]

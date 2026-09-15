@@ -4,6 +4,7 @@
 - 발신자 ID 화이트리스트 → `/stop`·`/close`는 현재 포지션·미실현손익과 함께 [예/아니오] 인라인 버튼 →
   무응답이면 **3초 간격 3회 재전송** → 그래도 무응답이면 **취소 + "청산 안 됨"** (미확인 청산은 오터치일 수 있다)
 - 콜백에는 발행 토큰(nonce)을 넣고 **60초 만료** — 오래된 버튼이 나중에 눌려 청산되지 않게
+  (+12초 무응답 취소 기한도 콜백에서 직접 검사한다 — tick이 멈춰도 늦은 '예'가 실행되지 않게 · Codex L6·7 #1)
 - 텍스트 명령('중지'·'stop')도 같은 경로 · 중요 이벤트 알림에 같은 3회 규칙을 설정으로 켤 수 있다
 
 이 저장소의 해석(보고·설계서 기록):
@@ -156,6 +157,10 @@ class CommandBot:
         self.alerts[a.nonce] = a
         return self._alert_sends(a)
 
+    def cancel_deadline_ms(self, p: PendingConfirm) -> int:
+        """발행 + (재전송 횟수 + 1) × 간격 — 이 시각을 넘긴 '예'는 실행하지 않는다(경계 포함 유효)."""
+        return p.issued_ms + (self.resends + 1) * self.resend_interval_ms
+
     # ── 내부 ────────────────────────────────────────────────────────────────
     @staticmethod
     def _label(cmd: Command) -> str:
@@ -220,6 +225,10 @@ class CommandBot:
         if p is None or parts[1] != p.nonce:
             return [Answer(qid, "만료되었거나 이미 처리됨 — 실행 안 함")]
         self.pending = None
+        #  🔴 Codex L6·7 #1: 무응답 취소 기한(+12초)은 tick만이 아니라 **콜백에서도** 검사 — 폴링이 멈춘 사이의 '예'를 막는다
+        if now_ms > self.cancel_deadline_ms(p):
+            return [Answer(qid, "응답 기한 지남 — 실행 안 함"),
+                    Send(p.chat_id, f"응답 기한 지남 — {self._label(p.command)} 취소, 청산 안 됨")]
         if now_ms - p.issued_ms > self.ttl_ms:
             return [Answer(qid, "만료 — 실행 안 함"), Send(p.chat_id, f"확인 만료 — {self._label(p.command)} 취소, 청산 안 됨")]
         if parts[2] == "n":

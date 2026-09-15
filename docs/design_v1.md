@@ -216,7 +216,8 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 - v2 `safety_state`: 킬스위치 등 안전 상태의 append-only 이력(최신 행 = 현재) — 재시작이 트립을 풀지 않게.
 - LIVE 채택: `EntryFilled.adopted`(채택 시점 positionRisk) → open 행 `reason='adopted_from_exchange'`·`liq_price_exchange`·positionRisk 원문(`detail`).
 - `orders.slippage_vs_mark_bps` = 불리한 방향 양수(BUY `(체결−mark)/mark`, SELL 반대) × 10⁴ — 레지스트리 #7·#9 14일차 재평가의 원천.
-- ⚠️ 정정(2026-09-15): "채택은 open 이벤트를 내지 않는다"는 **틀린 보고였다** — 채택 시에도 `EntryFilled`(fills=())가 나가 close가 연결된다. 실제 공백은 출처 표시(채택 여부·positionRisk)였고 `adopted` 필드로 메웠다. 남은 작은 경우: 청산 직전 거래소 수량이 내부보다 **커서** 동기화하는 경로(`_exit`) — close 수량 > open 수량으로 기록되고 늘어난 부분의 open 기록은 없다(대사 대상 · 미구현).
+- ⚠️ 정정(2026-09-15): "채택은 open 이벤트를 내지 않는다"는 **틀린 보고였다** — 채택 시에도 `EntryFilled`(fills=())가 나가 close가 연결된다. 실제 공백은 출처 표시(채택 여부·positionRisk)였고 `adopted` 필드로 메웠다.
+- Codex L6·7 배치로 추가: `EntryFilled.entry_commission`(채택 추정 수수료 포함) · `PositionSynced`(청산 직전 거래소 수량 동기화 → root open의 **수정 행**, reason `adopted_from_exchange`) · `PositionVanished`(LIVE 거래소 수량 0 → close 행 reason `vanished`, 체결가·손익 NULL). 포지션 연결: root = `position_id = id`인 open 행 · 남은 수량 = 최신 open 행(root 또는 수정 행) − close 합.
 - 아직 없음: 엔진·피드 → DB 배선, 봉 기록 경로(WS 마감봉·REST 백필), account_snapshots 생산자 — layer 8 기동 배선.
 
 
@@ -228,7 +229,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | `notify/telegram_api.py` | POST JSON · `ok` 검증 · 토큰을 예외 문구에서 `<token>`으로 가림 · 문서 한도 사전 검사(text 1-4096 · answer 0-200 · callback_data 1-64 bytes) |
 | `notify/poller.py` | getUpdates 롱폴링(offset = 최대 update_id + 1, 응답마다) · 처리 실패도 offset 넘김(재처리로 두 번 청산 방지) · 확인 대기 중 1초 폴링 · `setup()` = setMyCommands + MenuButtonCommands |
 
-- 확인 흐름(open-decisions #9): `/stop`·`/close` → 포지션·uPnL + [예/아니오] → +3·+6·+9초 재전송 → +12초 무응답 취소 "청산 안 됨" · 콜백 nonce 60초 만료 · 모든 콜백에 answer.
+- 확인 흐름(open-decisions #9): `/stop`·`/close` → 포지션·uPnL + [예/아니오] → +3·+6·+9초 재전송 → +12초 무응답 취소 "청산 안 됨" · **+12초 기한은 콜백에서도 검사**(tick이 멈춰도 늦은 '예' 불실행 · Codex L6·7 #1) · 콜백 nonce 60초 만료(마지막 방어선) · 모든 콜백에 answer.
 - 이 저장소의 해석(사용자 확인 필요 시 보고): `/stop` 예 = 진입 차단 + 전량 청산, `/close` 예 = 청산만 · 확인 대기는 하나 · flat이면 `/close`는 확인 없이 "포지션 없음" · 컨트롤러 예외는 "실패" 문구.
 - 중요 이벤트 3회 규칙은 `important_resend` 설정(기본 꺼짐) — [확인] 버튼, 3초 간격 3회.
 - 아직 없음: `BotController` 구현(엔진·`SafetyGate`·DB 배선) · 폴링 스레드·백오프 — layer 8.
@@ -242,5 +243,6 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | `safety/rate_guard.py` | 어떤 한도든 사용량 ≥ 80% → `relax_polling` 신호(주문은 막지 않음) |
 | `safety/gate.py` | `SafetyGate` — 차단 사유 전부 나열 · `/pause` · `/start`(일시정지·킬스위치·sticky 대사 해제, 피드 정지는 못 풂 → 남은 사유 알림) · 저장/복원(`safety_state`) |
 
+- LIVE 청산 감지: 거래소 청산은 `PositionClosed(LIQUIDATION)`로 오지 않는다 → `PositionVanished`(청산 경로) · 봉마다 대사에서 내부≠0·거래소=0(`SafetyGate.observe_reconcile`)을 청산 1회로 보고 발동(Codex L6·7 #2).
 - 사용자 결정 대기: 킬스위치 x·n 값(레지스트리 #10) · stale 중 포지션 자동 청산 여부(현재 보유+알림) · 대사 불일치 자동 해제 여부(현재 수량 불일치는 사람만).
 - 아직 없음: 봉마다 호출하는 배선·알림 발송·엔진 `entries_blocked` 연결 — layer 8.

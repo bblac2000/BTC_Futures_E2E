@@ -12,7 +12,7 @@ from decimal import Decimal
 from db import record as R
 from safety.config import KillSwitchLimits
 from safety.killswitch import KillSwitch
-from safety.reconcile import ReconcileGuard
+from safety.reconcile import ReconcileGuard, ReconcileResult
 from safety.stale import StaleDataGuard
 
 STATE_NAME = "safety_gate"
@@ -28,6 +28,16 @@ class SafetyGate:
             raise ValueError("일시정지는 사람(actor)만")
         self.paused_by = actor
         return f"신규 진입 중지 ({actor}) — 포지션 유지"
+
+    def observe_reconcile(self, result: ReconcileResult, ts_ms: int) -> list[str]:
+        """봉마다 대사 → 대사 차단 갱신. LIVE에서 내부 포지션이 있는데 거래소가 0이면 킬스위치(청산 의심)도 발동."""
+        msgs = self.reconcile.update(result)
+        if result.exchange_signed is not None and result.exchange_signed == 0 and result.internal_signed != 0:
+            for t in self.kill_switch.trip(ts_ms, "position_vanished",
+                                            f"대사: 내부 {result.internal_signed} · 거래소 0 — 청산·수동 청산 의심"):
+                msgs.append(f"🛑 킬스위치 발동: {t.reason} — {t.detail}")
+            self.kill_switch.liquidations = max(self.kill_switch.liquidations, 1)
+        return msgs
 
     def entry_blockers(self) -> list[str]:
         out = []

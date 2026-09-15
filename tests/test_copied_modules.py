@@ -85,3 +85,12 @@ def test_atexit_drain_is_registered():
     atexit.unregister(sender._drain)
     atexit.register(sender._drain)
     assert callable(sender._drain)
+
+
+def test_transport_error_text_never_contains_the_token(capsys):
+    """Codex L6·7 #5: urllib 예외 문구에 URL(토큰 포함)이 들어가면 stderr·로그로 샌다 → `<token>`으로 가린다."""
+    def opener(req, timeout):
+        raise OSError(f"cannot connect {req.full_url}")
+    res = sender._post("123:SECRET", "c", "hi", opener=opener)
+    assert res["ok"] is False and "SECRET" not in res["error"] and "<token>" in res["error"]
+    assert "SECRET" not in capsys.readouterr().err

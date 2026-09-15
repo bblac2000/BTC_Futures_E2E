@@ -960,3 +960,61 @@ Resume in Codex: codex resume 01a0a4ce-2f74-7ac1-81fe-f2384dc1fb3b
 - `setChatMenuButton(chat_id?, menu_button)` · `MenuButtonCommands {type:"commands"}` = 명령 목록을 여는 메뉴 버튼(기본값도 명령 목록).
 - `InlineKeyboardButton.callback_data`: **1-64 bytes**. `CallbackQuery`: "Telegram clients will display a progress bar until you call answerCallbackQuery. It is, therefore, necessary to react by calling answerCallbackQuery even if no notification to the user is needed" → **모든 콜백에 answer**(거부·만료 포함). `answerCallbackQuery.text` 0-200자.
 - `sendMessage.text` 1-4096자 · `reply_markup` = InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply. `ReplyKeyboardMarkup`: `keyboard`(KeyboardButton 행), `is_persistent`, `resize_keyboard`, `input_field_placeholder` 1-64자 · 텍스트 버튼은 누르면 그 텍스트가 메시지로 전송.
+
+## 2026-09-15 — Codex 검토: layer 6·7 + 채택 출처 + db v2 (`3758daf..177d59f`, read-only · `task-mu2m8qsr-gwy4yp`)
+판정: **(1) 채택 출처 · (2) 텔레그램 강제 청산 · (3) 킬스위치 · (4) 대사 — 전부 FIX FIRST**. Q1(주인 '예'·nonce·비주인·재처리) OK · Q6(adopted 설정 범위) OK · db v2 체크섬·wide·safety_state OK.
+
+### 항목별 동의 여부와 조치 (실패 테스트 12개 → 수정 → 590 green)
+| Codex | 동의 | 조치 |
+|---|---|---|
+| 1 HIGH 무응답 취소(+12초)가 tick에만 달려 있어, 폴링이 멈춘 사이 +30초의 '예'가 TTL 60초 안이라 실행된다 | ✅ | 콜백에서 `cancel_deadline_ms`(발행 + (3+1)×3초)를 직접 검사 → 넘으면 "응답 기한 지남 — 실행 안 함" + "청산 안 됨". TTL은 설정이 바뀔 때의 마지막 방어선으로 유지(두 경로 모두 테스트) |
+| 2 HIGH LIVE 청산은 `PositionClosed(LIQUIDATION)`를 내지 않는다 — 거래소 수량 0이면 `ExitFailed`만 → 청산 1회 킬스위치가 안 걸린다 | ✅ | 엔진이 `PositionVanished`(방향·수량·진입가·사유)를 명시 이벤트로 · 킬스위치가 청산 1회로 발동(`position_vanished`) · `SafetyGate.observe_reconcile`: 봉마다 대사에서 내부≠0·거래소=0이면 발동(조회 실패는 제외) · DB는 close 행 reason `vanished`(체결가·손익 NULL — 추정 안 함) |
+| 3 MEDIUM 청산 직전 거래소 수량이 더 크면 close 0.014가 open 0.010에 붙어 flat으로 보이고 늘어난 0.004의 기록이 없다 | ✅ | 엔진이 `PositionSynced`(이전·새 수량, 거래소 평균가, 추가 수수료 추정, positionRisk)를 close **앞에** 냄 → DB는 root open 행의 **수정 행**(reason `adopted_from_exchange`, `position_id` = root) · 남은 수량 = 최신 open 행 수량 − close 합 · root 판별 = `position_id = id` |
+| 4 MEDIUM 채택 수량의 추정 진입 수수료가 지갑에서는 빠지는데 DB `entry_commission_usdt`는 체결 합(fills=()이면 0) | ✅ | `EntryFilled.entry_commission`(지갑에서 뺀 합) · DB가 이 값을 기록 |
+| 5 LOW(기존) 복사본 `notify/sender.py`가 전송 예외 문구를 토큰 가림 없이 로그·stderr에 남길 수 있다 | ✅ | 예외 문구에서 토큰 → `<token>`(PROVENANCE 헤더에 변경 기록 · 테스트) |
+
+### Codex 검토 원문 (verbatim)
+```
+1. **HIGH** [notify/bot.py:132](/home/cms/project/BTC_Futures_E2E/notify/bot.py:132), [notify/bot.py:223](/home/cms/project/BTC_Futures_E2E/notify/bot.py:223)  
+   Confirmation auto-cancel is enforced only by `on_tick()`, but callback execution checks only the 60s TTL. If the poll loop stalls after issuing `/close` and the owner presses “yes” at +30s, the close executes even though the +12s no-answer cancel should already have invalidated it. The 1s fast poll reduces the chance, but does not make the cancel deadline independent of ticks.
+
+2. **HIGH** [safety/killswitch.py:60](/home/cms/project/BTC_Futures_E2E/safety/killswitch.py:60), [paper/engine.py:333](/home/cms/project/BTC_Futures_E2E/paper/engine.py:333), [paper/engine.py:371](/home/cms/project/BTC_Futures_E2E/paper/engine.py:371)  
+   Live liquidation can be missed by the kill switch. `KillSwitch.observe()` only trips liquidation on `PositionClosed(reason=LIQUIDATION)`, but LIVE does not emit that: it emits `LiquidationThresholdCrossed`, and if `positionRisk` is already zero during exit it emits `ExitFailed` and drops the internal position. Result: one real exchange liquidation may not trip `MAX_LIQUIDATIONS=1`.
+
+3. **MEDIUM** [db/record.py:198](/home/cms/project/BTC_Futures_E2E/db/record.py:198), [paper/engine.py:380](/home/cms/project/BTC_Futures_E2E/paper/engine.py:380)  
+   Reconcile can report OK after an exit-time sync to a larger exchange quantity. If open is `0.010`, LIVE syncs close qty to `0.014`, DB stores close `0.014` against open `0.010`; `open_position_id()` treats it as flat because closed >= open. Current-state reconcile then sees internal/exchange/DB all flat and clears, hiding the unrecorded extra `0.004` exposure noted in design §14 as “대사 대상 · 미구현”.
+
+4. **MEDIUM** [paper/engine.py:264](/home/cms/project/BTC_Futures_E2E/paper/engine.py:264), [paper/engine.py:282](/home/cms/project/BTC_Futures_E2E/paper/engine.py:282), [db/record.py:214](/home/cms/project/BTC_Futures_E2E/db/record.py:214)  
+   Adopted-entry estimated commission is lost in DB. The engine estimates fee for adopted extra qty and subtracts it from wallet, but `EntryFilled` carries no total entry commission and `db._entry_filled()` records `sum(ev.fills)`. For a fully adopted fill (`fills=()`), `positions.entry_commission_usdt` becomes `0` while engine wallet already paid the estimate.
+
+5. **LOW, pre-existing/out of this diff** [notify/sender.py:72](/home/cms/project/BTC_Futures_E2E/notify/sender.py:72)  
+   The older send-only notifier can log `str(e)` from opener failures without token redaction. I did not execute this path or read `.env`; the new `notify/telegram_api.py` command API does redact.
+
+**Questions**
+
+Q1: **OK** for explicit owner yes inside 60s TTL: owner allowlist, nonce match, stale/cancelled nonce rejection, non-owner callback answer, `/cmd@otherbot` rejection, private-message command gate, offset advance before handler all look safe. Caveat: finding #1 means “inside TTL” is too broad versus the +12s cancel rule.
+
+Q2: **ISSUE**: finding #1.
+
+Q3: **OK for new command API**, **ISSUE residual** in old `notify/sender.py`.
+
+Q4: **ISSUE**: finding #2. Wallet-delta trade PnL is conceptually right for engine events, including funding/live extra-fee/adopted-fee wallet effects, but live liquidation may not produce the event the kill switch watches.
+
+Q5: **ISSUE**: finding #3. Partial-exit mismatch is safely sticky; exchange-qty-zero exit becomes sticky via DB mismatch. Over-close can false-OK after flat.
+
+Q6: **OK** for `adopted`: set only when LIVE failure path adopts larger same-direction `positionRisk`, not normal fills.
+
+Q7: **ISSUE**: migrations/checksum, wide features, and latest-row safety state look OK; silent data loss in adopted commission is finding #4.
+
+**Verdicts**
+
+1. Adoption provenance: **FIX FIRST**  
+2. Telegram forced close: **FIX FIRST**  
+3. Kill switch + human resume: **FIX FIRST**  
+4. Reconcile/stale/rate guard: **FIX FIRST**
+
+Verification: focused pytest passed with `TMPDIR=/dev/shm .venv/bin/python -m pytest -q -s -p no:cacheprovider ...` for the requested test set.
+
+Codex session ID: 01a0a4ec-b917-72c2-9c98-d6f06674be19
+Resume in Codex: codex resume 01a0a4ec-b917-72c2-9c98-d6f06674be19
+```

@@ -34,6 +34,8 @@ from paper.types import (
     FundingSettled,
     LiquidationThresholdCrossed,
     PositionClosed,
+    PositionSynced,
+    PositionVanished,
 )
 from sizing.position import SizingDecision
 
@@ -176,29 +178,34 @@ class DbPosition:
         return self.remaining_qty if self.direction is Direction.LONG else -self.remaining_qty
 
 
+def _remaining(con: sqlite3.Connection, root_id: int) -> tuple[str, Decimal]:
+    """root open 행 기준 (방향, 남은 수량) — 수량 = 가장 최근 open 행(root 또는 동기화 수정 행) − close 합."""
+    direction, qty = con.execute("SELECT direction, qty FROM positions WHERE position_id=? AND event='open' "
+                                 "ORDER BY id DESC LIMIT 1", (root_id,)).fetchone()
+    closed = sum((Decimal(q) for (q,) in con.execute(
+        "SELECT qty FROM positions WHERE event='close' AND position_id=?", (root_id,))), Decimal())
+    return direction, Decimal(qty) - closed
+
+
 def open_position_state(con: sqlite3.Connection, *, mode: str, symbol: str) -> DbPosition | None:
-    """가장 최근 아직 다 닫히지 않은 open 행의 방향·남은 수량(open − close 합)."""
+    """가장 최근 아직 다 닫히지 않은 포지션의 방향·남은 수량(대사용)."""
     pid = open_position_id(con, mode=_mode(mode), symbol=symbol)
     if pid is None:
         return None
-    direction, qty = con.execute("SELECT direction, qty FROM positions WHERE id=?", (pid,)).fetchone()
-    closed = sum((Decimal(q) for (q,) in con.execute(
-        "SELECT qty FROM positions WHERE event='close' AND position_id=?", (pid,))), Decimal())
-    return DbPosition(Direction(direction), Decimal(qty) - closed)
+    direction, remaining = _remaining(con, pid)
+    return DbPosition(Direction(direction), remaining)
 
 
 def open_position_id(con: sqlite3.Connection, *, mode: str, symbol: str, direction: Any = None) -> int | None:
-    """아직 다 닫히지 않은 가장 최근 open 행(부분 청산은 close 수량 합 < open 수량). `direction`이 있으면 같은 방향만
-    (Codex 재검토 db #4 — 반대 방향 close를 붙이지 않는다)."""
-    sql = "SELECT id, qty FROM positions WHERE mode=? AND symbol=? AND event='open'"
+    """아직 다 닫히지 않은 가장 최근 **root** open 행 id(root = position_id가 자기 id). 남은 수량은 동기화 수정 행을 반영.
+    `direction`이 있으면 같은 방향만(Codex 재검토 db #4 — 반대 방향 close를 붙이지 않는다)."""
+    sql = "SELECT id FROM positions WHERE mode=? AND symbol=? AND event='open' AND position_id=id"
     args: list[Any] = [mode, symbol]
     if direction is not None:
         sql += " AND direction=?"
         args.append(_v(direction))
-    for pid, qty in con.execute(sql + " ORDER BY id DESC", args):
-        closed = sum((Decimal(q) for (q,) in con.execute(
-            "SELECT qty FROM positions WHERE event='close' AND position_id=?", (pid,))), Decimal())
-        if closed < Decimal(qty):
+    for (pid,) in con.execute(sql + " ORDER BY id DESC", args).fetchall():
+        if _remaining(con, int(pid))[1] > 0:
             return int(pid)
     return None
 
@@ -211,7 +218,8 @@ def _entry_filled(con: sqlite3.Connection, ev: EntryFilled, mode: str, symbol: s
         "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "event": "open", "direction": _v(d.direction),
         "qty": _v(pf.qty), "entry_price": _v(pf.entry_price), "leverage": ev.leverage, "sl": _v(d.sl), "tp": _v(tp),
         "liq_price_est": _v(pf.liq_price_est),
-        "entry_commission_usdt": _v(sum((f.commission for f in ev.fills), Decimal())),
+        "entry_commission_usdt": _v(ev.entry_commission if ev.entry_commission is not None
+                                    else sum((f.commission for f in ev.fills), Decimal())),
     }
     if ev.adopted is not None:
         #  사용자 결정(2026-09-15): 채택 포지션의 출처 = 채택 시점 positionRisk
@@ -231,6 +239,28 @@ def _entry_skipped(con: sqlite3.Connection, ev: EntrySkipped, mode: str, symbol:
     _insert(con, "decisions", {"mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "outcome": "skipped",
                                "skip_reason": _v(ev.reason), "tp": _v(tp)} | _decision_cols(ev.decision)
             | {"detail": ev.detail})
+
+
+def _position_synced(con: sqlite3.Connection, ev: PositionSynced, mode: str, symbol: str) -> None:
+    root = open_position_id(con, mode=mode, symbol=symbol, direction=ev.direction)
+    pr = ev.position_risk
+    pid = _insert(con, "positions", {
+        "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "event": "open", "position_id": root,
+        "direction": _v(ev.direction), "reason": ADOPTED_FROM_EXCHANGE, "qty": _v(ev.qty), "entry_price": _v(ev.entry_price),
+        "liq_price_exchange": _v(pr.liquidation_price), "entry_commission_usdt": _v(ev.extra_commission),
+        "detail": _json({"sync": "exit", "previous_qty": ev.previous_qty, "positionRisk": pr.raw}),
+    })
+    if root is None:                                    # 연결할 open이 없으면 이 행이 root(진리원 = positionRisk)
+        con.execute("UPDATE positions SET position_id=? WHERE id=?", (pid, pid))
+
+
+def _position_vanished(con: sqlite3.Connection, ev: PositionVanished, mode: str, symbol: str) -> None:
+    pid = open_position_id(con, mode=mode, symbol=symbol, direction=ev.direction)
+    _insert(con, "positions", {
+        "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "event": "close", "position_id": pid,
+        "direction": _v(ev.direction), "reason": "vanished", "qty": _v(ev.qty), "entry_price": _v(ev.entry_price),
+        "detail": ev.detail if pid is not None else f"{ev.detail} · {ORPHAN_CLOSE}",
+    })
 
 
 def _position_closed(con: sqlite3.Connection, ev: PositionClosed, mode: str, symbol: str) -> None:
@@ -257,6 +287,10 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
                 _entry_skipped(con, ev, mode, symbol, tp)
             elif isinstance(ev, PositionClosed):
                 _position_closed(con, ev, mode, symbol)
+            elif isinstance(ev, PositionSynced):
+                _position_synced(con, ev, mode, symbol)
+            elif isinstance(ev, PositionVanished):
+                _position_vanished(con, ev, mode, symbol)
             elif isinstance(ev, FundingSettled):
                 _insert(con, "funding_events", {
                     "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "rate": _v(ev.rate), "mark": _v(ev.mark),

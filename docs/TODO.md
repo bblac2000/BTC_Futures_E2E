@@ -36,7 +36,7 @@
 5. [x] layer 4 `db/`: 마이그레이션 도구 · v1(§5 전 테이블 + runtime_rules 흡수) · 이벤트 기록(설계서 §14)
 5a. [x] LIVE 채택 출처: `EntryFilled.adopted`(positionRisk) → open 행 reason `adopted_from_exchange`(사용자 2026-09-15 · 전제 정정: 채택도 EntryFilled를 냈다) — Codex 배치(6+7) 대상
 5d. [ ] 사용자 결정: 레지스트리 #10 킬스위치 x·n 값 · stale 중 포지션 자동 청산 여부 · 대사 불일치 자동 해제 여부 · `/stop`(진입 차단+청산)·`/close`(청산만) 해석 확인
-5c. [ ] `_exit` 동기화로 거래소 수량이 내부보다 클 때 늘어난 부분의 open 기록 — 사용자 판단 대기
+5c. [x] `_exit` 동기화 기록(`PositionSynced` → root open 수정 행) · LIVE 거래소 수량 소실(`PositionVanished` → 킬스위치) · 채택 추정 수수료 — Codex L6·7 #2~#4
 5b. [ ] layer 8 기동 배선: 엔진 이벤트·마감봉·REST 백필 → `db.record` · `data.shards.Recorder` · account_snapshots 생산자
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [ ] layer 8: vps_health 스로틀 구조(`roll_failed` 경보 포함) · `data_stores` allowlist(설계 #131)
 7. [ ] VPS: 봇 전용 Linux 사용자·systemd 유닛 (E2E 수집기와 분리 · 수집기 우선 · 수집기 데이터 디렉터리 금지) — **Codex 검토 대상(수집기 호스트)**

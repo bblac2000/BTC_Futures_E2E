@@ -236,3 +236,25 @@ def test_a_persisting_mismatch_with_changing_numbers_alerts_once():
     down = reconcile(Mode.LIVE, internal_signed=D("0.01"), exchange=None, exchange_error="timeout",
                      db=DbPosition(Direction.LONG, D("0.01")))
     assert g.update(down) == [] and g.blocker == "reconcile:internal_vs_exchange", "조회 실패가 sticky 사유를 덮지 않는다"
+
+
+# ── Codex L6·7 #2: LIVE 청산은 PositionClosed(LIQUIDATION)로 오지 않는다 ─────────────────
+def test_position_vanished_trips_the_kill_switch():
+    from paper.types import PositionVanished
+    ks = KillSwitch(LIMITS, wallet=D("1000"))
+    (trip,) = ks.observe([PositionVanished(DAY0 + H, Direction.LONG, D("0.01"), D("60000"), "거래소 포지션 0")], DAY0 + H)
+    assert trip.reason == "position_vanished" and not ks.entries_allowed
+
+
+def test_per_bar_reconcile_seeing_the_exchange_flat_under_an_open_position_trips_the_kill_switch():
+    counter = DeliveryCounter(("kline1m_update", "kline1m_close", "markprice"), start_ms=DAY0)
+    gate = SafetyGate(KillSwitch(LIMITS, wallet=D("1000")), StaleDataGuard(counter), ReconcileGuard())
+    r = reconcile(Mode.LIVE, internal_signed=D("0.01"), exchange=PositionRisk(D("0"), D("0"), D("0")), exchange_error=None,
+                  db=DbPosition(Direction.LONG, D("0.01")))
+    msgs = gate.observe_reconcile(r, DAY0 + H)
+    assert gate.kill_switch.tripped is not None and gate.kill_switch.tripped.reason == "position_vanished" and msgs
+    down = reconcile(Mode.LIVE, internal_signed=D("0.01"), exchange=None, exchange_error="timeout",
+                     db=DbPosition(Direction.LONG, D("0.01")))
+    g2 = SafetyGate(KillSwitch(LIMITS, wallet=D("1000")), StaleDataGuard(counter), ReconcileGuard())
+    g2.observe_reconcile(down, DAY0 + H)
+    assert g2.kill_switch.tripped is None, "조회 실패는 청산 의심이 아니다"
