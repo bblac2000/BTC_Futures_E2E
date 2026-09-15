@@ -1720,3 +1720,34 @@ Codex session ID: 01a0a711-f8d6-7e22-9f94-55977e5bec1f
 Resume in Codex: codex resume 01a0a711-f8d6-7e22-9f94-55977e5bec1f
 ```
 </details>
+
+### Codex 배포 전 재검토 #2 (`25f08cb..354b9d5`, read-only · `task-mu37vggp-7w8rtx`)
+판정: 이전 2건 **CLOSED** · 새 FIX FIRST 없음 · **A·B·C·D·E 전부 MERGE**.
+잔여(Codex · 비차단 · 동의 · 수정 안 함): 오래된 breadcrumb를 `safety_unsaved.stale-*`로 옮긴 직후 재생 커밋 전에 죽으면 그 운영 이벤트는
+stale 파일에만 남는다(기동 순간의 짧은 창 · 전원 차단 원자성 아님). 사람이 stale 파일을 볼 수 있다 — 고치려면 "복사 후 재생 성공 시 원본 삭제" 형태(새 검토 필요).
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+No FIX FIRST findings.
+
+State:
+- Prior MEDIUM queued `NoticeAcknowledged` loss: **CLOSED**. `ops/run_bot.py` now extracts breadcrumb ops before the quarantine/restore decision, replays them through `rt.unrecorded_ops`, and `_retry_unrecorded()` records only `engine_events`.
+- Stale gate re-imposition check: **CLOSED**. In the stale branch, `SafetyGate.from_state(...)` is not called; only the current DB-loaded gate is paused fail-closed. Breadcrumb gate state is not restored.
+- Duplicate replay check: **CLOSED**. `record_ops_event()` uses `(mode, kind, op_id)` lookup before insert, and existing tests cover already-recorded breadcrumb replay.
+- Breadcrumb freshness rules: **CLOSED**. Row-id freshness is still `latest_id > base_state_id`; trip-only-in-breadcrumb still restores fail-closed.
+- Prior MEDIUM D2 `~` runbook bug: **CLOSED**. §9.4 now uses `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E rev-parse HEAD`.
+
+Residual note: I did not run tests because this was a read-only review and pytest would create cache/temp artifacts. One non-blocking recovery nuance remains: if the process dies after moving a stale breadcrumb to `safety_unsaved.stale-*` but before replay commits, those ops would only be in the stale file. I do not see this as a stated merge blocker, but it is not power-fail atomic during that tiny startup window.
+
+Final verdicts:
+- A run_events: **MERGE**
+- B notices/restore: **MERGE**
+- C health: **MERGE**
+- D LiveChecklist: **MERGE**
+- E runbook §9: **MERGE**
+
+Codex session ID: 01a0a717-1974-7462-bb39-40fb61b76ede
+Resume in Codex: codex resume 01a0a717-1974-7462-bb39-40fb61b76ede
+```
+</details>

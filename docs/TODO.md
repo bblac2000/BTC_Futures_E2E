@@ -45,7 +45,7 @@
 5h. [ ] 보류: `engine_events` op_id 조회 인덱스(스키마 v3) · shard `roll_failed` health 경보 · 키 `ipRestrict` 기동 확인 · [x] 짝 없는 start/connect → `dirty_previous_run`(#15 ⑤)
 5k. [ ] LIVE 체크리스트 추가(#15 ③④): 규칙 주기 재조회 ≥6h·24h 초과 규칙 진입 금지 · 일시정지 사유 집합화
 5l. [ ] prune 시각: D2(09-19) 뒤 VPS `list-timers` 실측 → 모든 E2E 타이머에서 ≥30분 떨어진 시각 · 별도 변경(런북 §9.6)
-5m. [ ] 배포: Codex 배포 전 배치 MERGE → Restart B 게이트 종료(09-18 00:16 UTC) → D1 09-18 · D2 09-19(00:35–02:30 UTC) · 사용자: rclone·OWNER_IDS·캡처 → §9.1 로컬 점검 → 화이트리스트
+5m. [ ] 배포: ✅ Codex 배포 전 배치 MERGE(2026-09-16) → Restart B 게이트 종료(09-18 00:16 UTC) → D1 09-18 · D2 09-19(00:35–02:30 UTC) · 사용자: rclone·OWNER_IDS·캡처 → §9.1 로컬 점검 → 화이트리스트
 5g. [ ] VPS 배포(런북 `docs/runbook_vps.md`) — 사용자 논의 후 · 외부 heartbeat · Drive 사본 재검증 도구 · 대장 reconcile 도구
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [x] layer 8: health 스로틀 구조 · `data_stores` allowlist(설계 #131) · [ ] shard `roll_failed` 대장 이벤트를 health가 읽는 경보(상태 파일에 없음)
 7. [x] VPS 템플릿: 봇 전용 Linux 사용자 user 유닛(`ops/systemd/`)·런북 — **배포는 Codex 검토 + 사용자 논의 후**
@@ -54,3 +54,5 @@
 ## ⚠️ 알고 있는 위험
 - ~~패키지명 `telegram/` 가림 위험~~ → 2026-09-15 `notify/`로 개명 완료.
 - 패키지명 `data/`는 코드 패키지다. 런타임 데이터는 `var/`(git 미추적).
+
+5n. [ ] 비차단 잔여(Codex 배포 전 재검토 #2): 오래된 breadcrumb 격리 이동 뒤 재생 커밋 전 사망 시 운영 이벤트가 stale 파일에만 남음 — 복사 후 재생 성공 시 삭제로 바꿀지 결정
