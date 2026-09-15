@@ -95,3 +95,20 @@ def test_validator_rejects_matrix_violations(patch):
 def test_validator_accepts_both_position_side():
     O.validate_order_params({"symbol": "BTCUSDT", "side": "SELL", "type": "MARKET", "quantity": "0.001",
                             "positionSide": "BOTH", "reduceOnly": "true"})
+
+
+def test_private_params_builder_is_not_used_outside_orders_module():
+    """Codex 재검토 F2 — `_params`(side 직접 지정)는 유지보수상 우회로다. orders.py 밖에서 참조하면 실패."""
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    hits = []
+    for d in ("exchange", "sizing", "paper", "db", "data", "notify", "safety", "ops", "strategies"):
+        for py in (root / d).rglob("*.py"):
+            if py.as_posix().endswith("exchange/orders.py"):
+                continue
+            for node in ast.walk(ast.parse(py.read_text(encoding="utf-8"))):
+                name = getattr(node, "attr", None) or getattr(node, "id", None)
+                if name == "_params":
+                    hits.append(f"{py.relative_to(root)}:{getattr(node, 'lineno', '?')}")
+    assert hits == [], hits

@@ -172,6 +172,54 @@ def test_live_hedge_switch_preflight_is_account_wide_not_just_btc(rules):
     assert acct2.posts == []
 
 
+def test_live_account_preflight_row_without_position_amt_aborts_before_post(rules):
+    """🔴 Codex 재검토 F1 — 행에 positionAmt가 없으면 0으로 치지 않는다. 계정 전역 POST 전에 중단."""
+    broken = {"symbol": "ETHUSDT", "positionSide": "LONG", "marginType": "cross"}      # positionAmt 없음
+    acct = FakeAccount(margin_type="isolated", dual=True, other_rows=[broken])
+    _abort(acct, rules)
+    assert acct.posts == []
+
+
+def test_live_margin_switch_row_without_position_amt_aborts_before_post(rules):
+    class NoAmt(FakeAccount):
+        def get(self, path, params=None, *, signed=False):
+            r = super().get(path, params, signed=signed)
+            if path == "/fapi/v2/positionRisk":
+                return Response(200, [{k: v for k, v in row.items() if k != "positionAmt"} for row in r.data], {})
+            return r
+    acct = NoAmt(margin_type="cross")
+    _abort(acct, rules)
+    assert acct.posts == []
+
+
+def test_live_transport_failure_after_a_mutating_post_is_a_startup_abort(rules):
+    """🔴 Codex 재검토 F3 — POST가 거래소에 닿아 상태를 바꾼 뒤 타임아웃이 나면 결과를 **모른다**.
+    그래도 결말은 항상 StartupAbort(진입 금지·청산 허용)이고 사유에 '상태 불명'이 남아야 한다."""
+    from exchange.errors import TransportError
+
+    class Flaky(FakeAccount):
+        def post(self, path, params=None, *, signed=True):
+            r = super().post(path, params, signed=signed)          # 상태는 바뀌었다
+            if path == "/fapi/v1/leverage":
+                raise TransportError("POST /fapi/v1/leverage: TimeoutError: read timed out")
+            return r
+    e = _abort(Flaky(margin_type="cross"), rules)
+    assert "상태 불명" in e.reason
+    #  raw OSError를 던지는 다른 클라이언트 구현이어도 새어 나가지 않는다
+    class RawOS(FakeAccount):
+        def post(self, path, params=None, *, signed=True):
+            raise TimeoutError("read timed out")
+    _abort(RawOS(margin_type="cross"), rules)
+
+
+def test_paper_bad_position_amt_is_a_warning_not_a_crash(rules):
+    """Codex 재검토 신규 — PAPER의 포지션 다리 스캔이 try 밖에서 InvalidOperation을 던졌다."""
+    acct = FakeAccount(margin_type="isolated", position_amt="not-a-number")
+    res = run_startup_gate(acct, rules, Mode.PAPER, leverage=50)
+    assert res.entries_allowed and acct.posts == []
+    assert any("읽을 수 없" in w for w in res.warnings)
+
+
 def test_live_unexpected_response_shape_is_a_startup_abort_not_a_bare_exception(rules):
     """🔴 Codex Q5 — 응답 모양이 어긋나도 결과는 항상 StartupAbort(진입 금지·청산 허용)여야 한다."""
     acct = FakeAccount(margin_type="isolated", bad_leverage_response=True)

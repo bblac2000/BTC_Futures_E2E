@@ -23,7 +23,7 @@ from typing import NoReturn
 
 from exchange.client import ReadOnlyClient
 from exchange.client_types import RestClient
-from exchange.errors import BinanceAPIError, CredentialsMissing, StartupAbort
+from exchange.errors import BinanceAPIError, CredentialsMissing, StartupAbort, TransportError
 from exchange.rules import RuntimeRules
 
 NO_NEED_TO_CHANGE_MARGIN = -4046
@@ -79,11 +79,18 @@ def _bool(data: object, key: str) -> bool:
     return data[key]
 
 
+def _amt(row: dict) -> Decimal:
+    """positionAmt 엄격 해석 — 🔴 Codex 재검토 F1: 필드가 없으면 0으로 치지 않는다(fail-closed)."""
+    if "positionAmt" not in row:
+        raise TypeError(f"positionRisk 행에 positionAmt 없음: {row!r}")
+    return Decimal(str(row["positionAmt"]))
+
+
 def _account_flat(client: RestClient) -> tuple[bool, str]:
     """계정 전역 설정(positionSide/dual)을 바꾸기 전 — **모든 USDⓈ-M 심볼**의 포지션·미체결이 0인가."""
     rows = client.get("/fapi/v2/positionRisk", signed=True).data
     legs = [f"{r.get('symbol')}/{r.get('positionSide', 'BOTH')}={r.get('positionAmt')}" for r in rows
-            if Decimal(str(r.get("positionAmt", "0"))) != 0]
+            if _amt(r) != 0]
     if legs:
         return False, f"포지션 보유({', '.join(legs)})"
     orders = client.get("/fapi/v1/openOrders", signed=True).data
@@ -95,7 +102,7 @@ def _account_flat(client: RestClient) -> tuple[bool, str]:
 def _flat(client: RestClient, symbol: str, rows: list[dict]) -> tuple[bool, str]:
     """모든 행(헤지면 두 다리)의 positionAmt가 0이고 미체결이 없어야 flat."""
     open_legs = [f"{r.get('positionSide', 'BOTH')}={r.get('positionAmt')}" for r in rows
-                 if Decimal(str(r.get("positionAmt", "0"))) != 0]
+                 if _amt(r) != 0]
     if open_legs:
         return False, f"포지션 보유 중({', '.join(open_legs)})"
     orders = client.get("/fapi/v1/openOrders", {"symbol": symbol}, signed=True).data
@@ -123,8 +130,10 @@ def _paper(client: RestClient, rules: RuntimeRules, leverage: int) -> GateResult
         res.dual_side_position = _bool(client.get("/fapi/v1/positionSide/dual", signed=True).data, "dualSidePosition")
         res.multi_assets_margin = _bool(client.get("/fapi/v1/multiAssetsMargin", signed=True).data, "multiAssetsMargin")
         rows = _symbol_rows(client, sym)
-    except (CredentialsMissing, BinanceAPIError, KeyError, TypeError, AttributeError) as e:
-        res.warnings.append(f"계정 상태를 읽을 수 없다(PAPER는 계속): {e}")
+        legs = [f"{r.get('positionSide', 'BOTH')}={r.get('positionAmt')}" for r in rows if _amt(r) != 0]
+    except (CredentialsMissing, BinanceAPIError, TransportError, OSError,
+            KeyError, TypeError, AttributeError, InvalidOperation) as e:
+        res.warnings.append(f"계정 상태를 읽을 수 없다(PAPER는 계속): {type(e).__name__}: {e}")
         return res
     res.margin_type_before = str(rows[0].get("marginType"))
     res.isolated_confirmed = _is_isolated(rows)
@@ -134,8 +143,6 @@ def _paper(client: RestClient, rules: RuntimeRules, leverage: int) -> GateResult
         res.warnings.append("multiAssetsMargin=true — LIVE는 이 상태로 기동하지 않는다")
     if not res.isolated_confirmed:
         res.warnings.append(f"marginType={res.margin_type_before} — LIVE 전환 시 ISOLATED 강제(§0.4). PAPER는 SET 금지")
-    legs = [f"{r.get('positionSide', 'BOTH')}={r.get('positionAmt')}" for r in rows
-            if Decimal(str(r.get("positionAmt", "0"))) != 0]
     if legs:
         res.warnings.append(f"실계정에 {sym} 포지션 {', '.join(legs)} 존재 — 페이퍼와 무관하나 기록")
     return res
@@ -205,6 +212,9 @@ def _live(client: RestClient, rules: RuntimeRules, leverage: int) -> GateResult:
         res.actions.append(f"leverage → {leverage}x")
     except (CredentialsMissing, BinanceAPIError) as e:
         abort(f"계정 조회/설정 실패: {e}")
+    except (TransportError, OSError) as e:
+        #  🔴 Codex 재검토 F3 — POST 뒤 끊겼으면 계정이 바뀌었는지 모른다. 진입 금지로 끝내고 사람이 재조회한다.
+        abort(f"전송 실패 — 계정 상태 불명(직전 POST 반영 여부 모름 · actions={res.actions}) · 재조회 후 재기동: {e}")
     except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation) as e:
         #  🔴 Codex 검토 Q5: 예상 밖 응답 모양도 **항상** StartupAbort(진입 금지·청산 허용)로 끝난다
         abort(f"거래소 응답 모양 해석 불가: {type(e).__name__}: {e}")

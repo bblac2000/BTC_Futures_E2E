@@ -72,6 +72,19 @@ def test_error_json_code_and_msg_are_preserved():
     assert (e.value.status, e.value.code) == (400, -4164) and "notional" in e.value.msg
 
 
+@pytest.mark.parametrize("exc", [TimeoutError("read timed out"), ConnectionResetError("reset"),
+                                 urllib.error.URLError("dns failure")])
+def test_transport_failures_become_transport_error_with_unknown_outcome(exc):
+    """🔴 Codex 재검토 F3 — HTTPError가 아닌 전송 실패는 '보냈는지 모름'이다. 이름 있는 예외로 올린다."""
+    from exchange.errors import TransportError
+
+    def opener(req, timeout):
+        raise exc
+    with pytest.raises(TransportError) as e:
+        _client(opener).post("/fapi/v1/leverage", {"symbol": "BTCUSDT", "leverage": "50"})
+    assert "/fapi/v1/leverage" in str(e.value) and type(exc).__name__ in str(e.value)
+
+
 def test_minus_1021_marks_time_sync_stale():
     ts = TimeSync()
     ts.record(local_send_ms=0, server_ms=10, local_recv_ms=20)

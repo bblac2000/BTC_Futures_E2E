@@ -15,7 +15,8 @@
    → ①`atexit`으로 미완 발송 스레드를 **join**하고 ②응답 JSON의 `ok`를 **검증**해 성공/실패를
      반환하며 ③실패는 stderr로도 남긴다.
 
-🚫 이 모듈은 명령 수신(getUpdates·콜백)을 하지 않는다 — 그건 layer 6 `telegram/` 명령 계층이다.
+🚫 이 모듈은 명령 수신(getUpdates·콜백)을 하지 않는다 — 그건 layer 6 `notify/` 명령 계층이다.
+   (패키지명: `telegram/`은 PyPI `python-telegram-bot`의 import 이름을 가리므로 2026-09-15 `notify/`로 개명)
 """
 from __future__ import annotations
 

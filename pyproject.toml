@@ -33,7 +33,7 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.pyright]
-include = ["exchange", "sizing", "paper", "db", "data", "telegram", "safety", "ops", "strategies", "tests"]
+include = ["exchange", "sizing", "paper", "db", "data", "notify", "safety", "ops", "strategies", "scripts", "tests"]
 exclude = ["var", ".venv", "**/__pycache__"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"

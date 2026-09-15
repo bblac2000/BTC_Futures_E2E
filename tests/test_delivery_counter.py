@@ -5,8 +5,8 @@
 #   - ported only the pure judgement-rule and replay tests; dropped every test that imports
 #     e2e.l2_collector / ops.vps_health / e2e.quality / tests.test_prune (not in this repo —
 #     the #138 flush tests come back with ShardWriter at layer 5, health throttle at layer 8)
-#   - stream kinds remapped to this repo's DELIVERY (kline1m, markprice)
-#   - threshold-lock test asserts this repo's PROVISIONAL values (docs/design_v1.md §5)
+#   - stream kinds remapped to this repo's DELIVERY (kline1m_update, kline1m_close, markprice)
+#   - threshold-lock test asserts registry row #1 (docs/trial_registry.md)
 # ───────────────────────────────────────────────────────────────────────────
 """전달 감시 테스트 — 깨진 스트림의 증상은 예외가 아니라 **0**이다(E2E #132·#133·#134)."""
 from __future__ import annotations
@@ -63,10 +63,11 @@ def _write_shards(root, kind, ts_list, *, col=None, extra=None):
 
 # ── 임계 고정 ──────────────────────────────────────────────────────────
 def test_thresholds_are_exactly_the_pre_committed_values():
-    """🔒 데이터를 보기 전에 커밋한 값(PROVISIONAL). 바꾸려면 **레지스트리 행이 먼저**다."""
+    """🔒 레지스트리 #1(2026-09-15, 데이터 관측 0건에서 커밋). 바꾸려면 **새 레지스트리 행이 먼저**다."""
     got = {k: (s.ws_suffix, s.grace_sec, s.min_per_min, s.live) for k, s in DELIVERY.items()}
     assert got == {
-        "kline1m": ("@kline_1m", 120, 1, True),
+        "kline1m_update": ("@kline_1m", 120, 1, True),
+        "kline1m_close": ("@kline_1m", 120, 0, True),
         "markprice": ("@markPrice@1s", 120, 1, True),
     }
     assert set(TS_COLUMN) == set(DELIVERY)
@@ -80,7 +81,7 @@ def test_every_monitored_stream_is_market_tier_and_fits_one_socket():
 
 def test_kinds_for_streams_round_trips_and_reports_unknowns():
     kinds, unknown = D.kinds_for_streams(["btcusdt@kline_1m", "btcusdt@markPrice@1s", "btcusdt@trade"])
-    assert kinds == ("kline1m", "markprice") and unknown == ("btcusdt@trade",)
+    assert kinds == ("kline1m_update", "kline1m_close", "markprice") and unknown == ("btcusdt@trade",)
 
 
 # ── 판정 규칙 ───────────────────────────────────────────────────────
@@ -94,16 +95,16 @@ def test_a_stream_that_stops_is_reported_by_age_and_by_empty_minute():
 
 def test_a_stream_that_never_delivered_is_stalled_only_after_grace_from_start():
     """한 번도 안 온 스트림: *판단 보류*로 영원히 두지 않되, **막 켠 순간**에 울리지도 않는다."""
-    c = DeliveryCounter(("markprice", "kline1m"), start_ms=10 * M)
+    c = DeliveryCounter(("markprice", "kline1m_update"), start_ms=10 * M)
     assert c.stalled(10 * M + 1_000) == []
-    assert c.stalled(10 * M + 120_001) == ["markprice", "kline1m"]
+    assert c.stalled(10 * M + 120_001) == ["markprice", "kline1m_update"]
 
 
 def test_streams_are_judged_independently_not_aggregated():
-    c = DeliveryCounter(("kline1m", "markprice"), start_ms=0)
+    c = DeliveryCounter(("kline1m_update", "markprice"), start_ms=0)
     now = 10 * M
     for i in range(600):
-        c.observe("kline1m", now - (599 - i) * 250)
+        c.observe("kline1m_update", now - (599 - i) * 250)
     assert c.stalled(now) == ["markprice"]
 
 
@@ -128,9 +129,42 @@ def test_a_minute_that_started_before_observation_is_not_evidence():
 def test_unknown_streams_raise_instead_of_being_dropped():
     with pytest.raises(KeyError):
         DeliveryCounter(("nope",), start_ms=0)
-    c = DeliveryCounter(("kline1m",), start_ms=0)
+    c = DeliveryCounter(("kline1m_update",), start_ms=0)
     with pytest.raises(KeyError):
         c.observe("markprice", 0)
+
+
+# ── 레지스트리 #1: kline 감시 둘 ─────────────────────────────────────
+def test_close_monitor_ignores_the_59_999_boundary_jitter_that_a_minute_rule_would_flag():
+    """🔴 마감 이벤트 E는 봉 종료 T(xx:59.999)와 같을 수 있다. 한 마감이 앞 분에 찍히면 다음 벽시계 분이 0건 —
+    분당 규칙이면 가짜 정지. `kline1m_close`는 min_per_min=0이라 **나이만** 본다(최대 간격 ~60초 < 120초)."""
+    closes = [1 * M + 5, 2 * M + 3, 3 * M - 1, 4 * M + 40, 5 * M + 2]   # 3분대 마감이 2분대 59.999에 찍힘
+    c = DeliveryCounter(("kline1m_close",), start_ms=0)
+    for t in closes:
+        c.observe("kline1m_close", t)
+    now = 4 * M + 10_000                     # 직전 벽시계 분(3분대)에 마감 0건
+    assert c.snapshot(now)["kline1m_close"]["prev_minute_count"] == 0
+    assert c.stalled(now) == [], "분 검사가 없으니 경계 흔들림으로 울리지 않는다"
+
+
+def test_updates_flowing_but_bars_not_closing_is_caught_only_by_the_close_monitor():
+    """업데이트(x=false)는 계속 오는데 마감(x=true)이 멈춘 경우 — update 감시는 정상, close 감시만 정지."""
+    c = DeliveryCounter(("kline1m_update", "kline1m_close"), start_ms=0)
+    c.observe("kline1m_close", 1 * M + 5)                  # 마지막 마감
+
+    clock = [1 * M + 5]
+
+    def feed_updates_until(t_end):
+        while clock[0] <= t_end:
+            c.observe("kline1m_update", clock[0])
+            clock[0] += 250
+
+    feed_updates_until(3 * M + 5)
+    assert c.stalled(3 * M + 5) == []                      # 마지막 마감 후 정확히 120,000ms — 아직 아님(> 규칙)
+    feed_updates_until(3 * M + 6)
+    assert c.stalled(3 * M + 6) == ["kline1m_close"]       # 업데이트는 흐르는데 마감만 멈춤
+    feed_updates_until(5 * M)
+    assert c.stalled(5 * M) == ["kline1m_close"]
 
 
 # ── 재생 어댑터 ─────────────────────────────────────────────────────
@@ -151,9 +185,9 @@ def test_replay_judges_exactly_like_the_live_counter(tmp_path):
 
 
 def test_scan_reads_the_writer_column_not_recv_ms(tmp_path):
-    _write_shards(tmp_path, "kline1m", [T0 + 1000, T0 + 2000],
+    _write_shards(tmp_path, "kline1m_update", [T0 + 1000, T0 + 2000],
                   extra={"recv_ms": lambda t: t + 999_999})
-    sc = scan_window(tmp_path, "kline1m", T0, T0 + 10_000)
+    sc = scan_window(tmp_path, "kline1m_update", T0, T0 + 10_000)
     assert (sc.rows, sc.first_ms, sc.last_ms) == (2, T0 + 1000, T0 + 2000)
 
 
@@ -197,5 +231,5 @@ def test_c4_boundary_silence_at_both_ends_counts_even_with_no_interior_gap(tmp_p
 
 
 def test_an_expected_stream_with_no_rows_is_not_ok():
-    summ = silence_summary("kline1m", [D.WindowScan("kline1m", T0, T0 + 3_600_000)])
+    summ = silence_summary("kline1m_update", [D.WindowScan("kline1m_update", T0, T0 + 3_600_000)])
     assert summ == dict(summ, rows=0, ok=False, silences_beyond_grace=1, max_silence_sec=3600.0)

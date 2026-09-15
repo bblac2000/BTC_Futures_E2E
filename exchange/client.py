@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import http.client
 import json
 import time
 import urllib.error
@@ -18,7 +19,7 @@ from collections.abc import Callable
 from typing import Any
 
 from exchange.client_types import Response, RestClient
-from exchange.errors import BinanceAPIError, CredentialsMissing, ReadOnlyViolation
+from exchange.errors import BinanceAPIError, CredentialsMissing, ReadOnlyViolation, TransportError
 from exchange.ratelimit import RateLimitCounter
 from exchange.timesync import TimeSync
 
@@ -85,6 +86,9 @@ class BinanceRestClient:
             if code == TIMESTAMP_ERROR and self.time_sync is not None:
                 self.time_sync.invalidate()
             raise BinanceAPIError(e.code, code, msg, path) from e
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+            #  🔴 Codex 재검토 F3 — HTTP 응답 없이 끊겼다 = 처리 여부 불명. 이름 있는 예외로 올린다.
+            raise TransportError(f"{method} {path}: {type(e).__name__}: {e} — 거래소 도달·처리 여부 불명") from e
         self._observe(hdrs)
         return Response(status, json.loads(body) if body else None, hdrs)
 

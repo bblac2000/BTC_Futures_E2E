@@ -27,6 +27,11 @@ class ReadOnlyViolation(RuntimeError):
     """PAPER(읽기 전용) 클라이언트로 계정 변경 요청을 보내려 했다."""
 
 
+class TransportError(RuntimeError):
+    """HTTP 응답을 받지 못한 전송 실패(타임아웃·연결 끊김·DNS). 🔴 **요청이 거래소에 닿아 처리됐는지 모른다** —
+    POST였다면 계정 상태가 바뀌었을 수 있으므로 호출자는 재조회 전까지 상태를 '불명'으로 다룬다."""
+
+
 class CredentialsMissing(RuntimeError):
     """서명 요청에 필요한 API 키/시크릿이 없다."""
 

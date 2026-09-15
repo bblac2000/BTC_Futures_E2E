@@ -160,7 +160,7 @@ def build_stream_url(tier: str, streams, *, combined: bool = True) -> str:
 #       `/public/...`을 문자열로 박으면 검증이 통째로 비활성된다. 그럼 ①만 막는 검사는
 #       "고쳤다"고 말하면서 같은 구멍을 남긴다.
 #  BTC_Futures_E2E: 이 저장소의 패키지 전부.
-SCAN_DIRS = ("exchange", "sizing", "paper", "db", "data", "telegram", "safety", "ops", "strategies")
+SCAN_DIRS = ("exchange", "sizing", "paper", "db", "data", "notify", "safety", "ops", "strategies", "scripts")
 #  ⚠️ `tests/`는 **legacy 검사만** 받는다(Codex Q5). 테스트는 `build_stream_url()`로 만든
 #     티어 URL 문자열을 정당하게 단언하므로 `hardcoded_tier`를 걸면 오탐이 되고,
 #     오탐이 쌓이면 사람이 검사를 끈다. 반면 **legacy URL을 목킹한 테스트는 프로덕션이

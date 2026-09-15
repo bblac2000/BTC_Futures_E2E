@@ -19,7 +19,7 @@ uv run python -m ops.stream_tiers --scan  # two-way WS URL scan (CI runs this to
 TDD: write the test, see it fail, then implement.
 
 ## Architecture (build order — strategy-independent layers first)
-1 `exchange/` runtime rules → 2 `sizing/` → 3 `paper/` → 4 `db/` → 5 `data/` → 6 `telegram/` → 7 `safety/` → 8 `ops/`. `strategies/` only after 1–8 pass, and only after a pre-registration row in `docs/trial_registry.md` (append-only).
+1 `exchange/` runtime rules → 2 `sizing/` → 3 `paper/` → 4 `db/` → 5 `data/` → 6 `notify/` → 7 `safety/` → 8 `ops/`. `strategies/` only after 1–8 pass, and only after a pre-registration row in `docs/trial_registry.md` (append-only).
 - `exchange/rules.py` parses exchange responses into Decimal dataclasses (`RuntimeRules`). Missing data raises `RulesError` — never default. `loader.py` fetches or loads snapshots; `store.py` persists raw payloads to `runtime_rules`.
 - `exchange/normalize.py` → `orders.py`: floor qty → recheck MIN_NOTIONAL after flooring → split by MARKET_LOT maxQty; `Direction` and `Side` are distinct types so a direction can never reach `side`. Orders are built and validated, not sent.
 - `exchange/gate.py`: LIVE mutates the account (one-way, ISOLATED confirmed by re-read, leverage) and raises `StartupAbort` (entries off, exits on) on any failure. PAPER wraps the client in `ReadOnlyClient`, so it makes zero POSTs.

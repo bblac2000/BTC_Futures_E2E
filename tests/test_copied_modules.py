@@ -8,7 +8,7 @@ import sqlite3
 import pytest
 
 from data import manifest
-from telegram import sender
+from notify import sender
 
 
 @pytest.fixture

@@ -2,9 +2,9 @@
 # Copied from: /home/cms/project/E2E_Hybrid_Bot/ops/delivery_counter.py
 # Source commit: 98da74d (E2E HEAD f1e7d86, 2026-09-14) · copied 2026-09-15
 # Local changes:
-#   - DELIVERY / TS_COLUMN redefined for this bot's streams (kline1m, markprice). E2E's #134
+#   - DELIVERY / TS_COLUMN redefined for this bot's streams (kline1m_update, kline1m_close, markprice). E2E's #134
 #     numbers are untouched in E2E; the values here are this repo's own pre-commitment
-#     (docs/design_v1.md §5 — PROVISIONAL until a registry row fixes them before layer 5 runs).
+#     (docs/trial_registry.md row #1, 2026-09-15).
 #   - removed E2E_COLLECT_DERIVS / derivs_from_env / enabled_kinds(derivs) (no public/market
 #     switch here — this bot only uses the market tier). enabled_kinds() keeps the live filter.
 #   - consumer table in the docstring rewritten for this repo; judgement rule, live adapter
@@ -51,10 +51,12 @@ BUCKET_MS = 60_000
 
 #  스트림(라이터 kind) → shard 경계를 정하는 열. 재생 어댑터가 같은 값을 세게 한다.
 #  🔴 layer 5 `ShardWriter(..., ts_index=...)`와 어긋나면 재생과 라이브가 **다른 시계**를 센다.
-#     kline은 형성 중 업데이트(x=false)까지 전부 이벤트 시각 `E`로 센다 — 닫힌 봉만 세면
-#     분당 1건이라 `min_per_min` 검사가 사문화된다.
+#     `kline_1m` 한 스트림이 kind 둘을 낸다(레지스트리 #1):
+#       kline1m_update — 모든 push(x=false·x=true)의 이벤트 시각 `E`
+#       kline1m_close  — 마감(x=true)만의 이벤트 시각 `E`
 TS_COLUMN = {
-    "kline1m": "event_time",
+    "kline1m_update": "event_time",
+    "kline1m_close": "event_time",
     "markprice": "event_time",
 }
 
@@ -73,11 +75,14 @@ class DeliverySpec:
     live: bool = True       # 라이브 카운터가 볼 수 있는가(writer 스레드 파생이면 False)
 
 
-#  🔒 PROVISIONAL (2026-09-15, 데이터 수집 전 커밋) — docs/design_v1.md §5.
-#  근거: markPrice@1s는 2026-09-04 로컬 600초 실측 601틱·결손 0, kline은 형성 중 ~250ms 갱신(v6 §10).
-#  E2E #134와 같은 (120초, 분당 1건) 형태를 쓴다. layer 5 가동 전에 레지스트리 행으로 확정한다.
+#  🔒 레지스트리 #1 (2026-09-15 · 사용자 확정 · 이 봇의 스트림 데이터 관측 0건에서 커밋) — 숫자를 여기서 바꾸지 말 것.
+#  - kline1m_update: 스트림 침묵 감지. 형성 중 push ~250ms(v6 §10)라 분당 1건은 느슨한 하한.
+#  - kline1m_close : "업데이트는 오는데 봉이 안 닫힘" 감지. 🔴 min_per_min=0 — 마감은 분당 정확히 1회라
+#    분당 규칙을 걸면 E=T(xx:59.999) 경계 흔들림 하나로 가짜 정지가 난다. 나이 규칙만(120초 = 마감 2회).
+#  - markprice     : 2026-09-04 로컬 600초 실측 601틱·결손 0. E2E #134와 같은 (120초, 분당 1건).
 DELIVERY: dict[str, DeliverySpec] = {s.kind: s for s in (
-    DeliverySpec("kline1m", "@kline_1m", 120, 1),
+    DeliverySpec("kline1m_update", "@kline_1m", 120, 1),
+    DeliverySpec("kline1m_close", "@kline_1m", 120, 0),
     DeliverySpec("markprice", "@markPrice@1s", 120, 1),
 )}
 

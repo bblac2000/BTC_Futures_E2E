@@ -30,7 +30,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ⏸ |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ⏸ (`runtime_rules` DDL은 임시로 `exchange/store.py`) |
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s 같은 소켓 · 스트림별 전달 감시 · manifest | ⏸ (`ops/delivery_counter.py`·`data/manifest.py` 복사 완료) |
-| 6 | `telegram/` 명령·확인·재전송·만료 | ⏸ (`telegram/sender.py` 복사 완료) |
+| 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ⏸ (`notify/sender.py` 복사 완료) |
 | 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ⏸ |
 | 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
 | – | `strategies/` 플러그인(피처 in → 목표 포지션 out). 첫 전략은 `docs/trial_registry.md`에 사전등록 **후** 백테스트 열람 | 🚫 1~8 통과 전 금지 |
@@ -45,10 +45,10 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 |---|---|---|---|---|
 | `ops/stream_tiers.py` | `ops/stream_tiers.py` | `4718287` | 복사 + 출처 헤더 | 변경: `SCAN_DIRS`만 이 저장소 패키지로. `@trade` measured 근거·fail-closed·ALLOWLIST 1개 유지 |
 | `tests/test_stream_tiers.py` | `tests/test_stream_tiers.py` | `4718287` | 복사·적응 | `e2e.l2_collector` import 테스트 2개 제외, 봇 스트림(kline_1m+markPrice@1s) 테스트 추가 |
-| `ops/delivery_counter.py` | `ops/delivery_counter.py` | `98da74d` | 복사 + 출처 헤더 | 판정 규칙·라이브/재생 어댑터 로직 동일. `DELIVERY`를 이 봇 스트림으로 재정의(§5 PROVISIONAL), `E2E_COLLECT_DERIVS` 제거 |
+| `ops/delivery_counter.py` | `ops/delivery_counter.py` | `98da74d` | 복사 + 출처 헤더 | 판정 규칙·라이브/재생 어댑터 로직 동일. `DELIVERY`를 이 봇 스트림으로 재정의(§5 · 레지스트리 #1), `E2E_COLLECT_DERIVS` 제거 |
 | `tests/test_delivery_counter.py` | `tests/test_delivery_counter.py` | `d0d6426` | 부분 복사 | 순수 판정·재생 테스트만. l2_collector·vps_health·quality 의존 테스트(#138 포함)는 layer 5/8에서 복원 |
 | `e2e/manifest.py` | `data/manifest.py` | `23e5005` | 복사 + 출처 헤더 | DB 경로 주입(`var/manifest.sqlite`). register_shard 무예외·mark_pruned 행 보존 유지 |
-| `e2e/paper/notify.py` (F-TGDAEMON 수정본) | `telegram/sender.py` | `a60f4f8` | 복사 + 출처 헤더 | 응답 `ok` 검증 + atexit join 유지. prefix `[BTC]`, opener 주입(테스트) |
+| `e2e/paper/notify.py` (F-TGDAEMON 수정본) | `notify/sender.py` | `a60f4f8` | 복사 + 출처 헤더 | 응답 `ok` 검증 + atexit join 유지. prefix `[BTC]`, opener 주입(테스트) |
 | `e2e/l2_collector.py` `ShardWriter`(:143-191)·`WriterThread` 종료 플러시(:193-303, #138 `final_flush_failed`→`stop_dirty`) | `data/` (layer 5) | `90d47aa` | **패턴 — 미복사** | 60초 shard·tmp→atomic rename·writer별 독립 종료 플러시. 여기서 테스트할 수 없는 800줄 결합 코드라 layer 5에서 이식 |
 | `ops/vps_health.py` 경보 구조(:742-819 `STATE`/`STATE_ONCE`, `problem_items` :498) | `ops/` (layer 8) | `90d47aa` | **패턴 — 미복사** | 반복형 = 고정 스로틀 키(날짜·숫자 없음)·3h / 확정 사실 = 하루 1통 / 발송 실패 시 상태 미갱신. 텔레그램 도달성 재시도 1회(:261) |
 | `ops/data_stores.py` allowlist prune 모델 | `ops/` (layer 8) | — | **원본 없음** | ⚠️ f1e7d86에 **코드로 존재하지 않는다**(`git log --all` 0건). 설계만 있음: `docs/설계_prune확장_2026-09-12.md`(`f836d16`, 레지스트리 #131, Codex 검토 완료·단계 0→4). 현행 코드는 `ops/prune_local.py`(`e6e5125`, denylist `NEVER_TOUCH`). layer 8에서 설계 v2대로 `deletion_mode="drive_verified_prune"`·30일·파생물 `expired_local_derivative` 별도 구현 |
@@ -56,11 +56,14 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 | `docs/바이낸스문서API_2026_v6.md` | `docs/바이낸스문서API_2026_v6.md` | `175c356` | **원문 그대로**(md5 `02c31418…` 일치) | 부기 정정 포함(§10 forceOrder largest/1초·/market/ws 티어, §WebSocket Base·:989 kline 예제). 🚫여기서 수정 금지 — 새 정정은 날짜·출처 달린 부기로만 |
 | 테스트 스냅샷(exchangeInfo·leverageBracket·commissionRate·fundingInfo) | `tests/fixtures/snapshots/` | VolumeClockBot `6d0129d` | 원문 그대로(md5 일치) | 2026-09-02 mainnet read-only 캡처. positionSideDual·multiAssetsMargin은 **합성**(캡처 없음, v6 §1.0(A) 값) — 라이브 전 실캡처로 교체. `PROVENANCE.md` |
 
-## 5. PROVISIONAL 사전확약 (데이터 수집 전 커밋)
-| 대상 | 값 | 근거 | 확정 조건 |
-|---|---|---|---|
-| `ops/delivery_counter.DELIVERY["kline1m"]` | grace 120 s · min_per_min 1 · 이벤트시각 `E` 전 업데이트 계수 | kline 형성 중 ~250 ms 갱신(v6 §10) | layer 5 가동 **전**에 `trial_registry.md` 행으로 확정. 결과 본 뒤 변경 금지 |
-| `ops/delivery_counter.DELIVERY["markprice"]` | grace 120 s · min_per_min 1 | markPrice@1s 로컬 600 s 실측 601틱·결손 0(2026-09-04) · E2E #134 동형 | 같음 |
+## 5. 데이터 전달 감시 임계 — **레지스트리 #1로 확정**(2026-09-15)
+| kind | 스트림·계수 대상 | min_per_min | grace_sec | 감지 대상 |
+|---|---|---|---|---|
+| `kline1m_update` | `@kline_1m` 모든 push(x=false·x=true) | 1 | 120 | 스트림 침묵 |
+| `kline1m_close` | `@kline_1m` x=true만 | **0** | 120(= 마감 2회) | 업데이트는 오는데 봉이 안 닫힘 — 분당 검사를 끈 이유는 xx:59.999 경계 흔들림 가짜 정지 |
+| `markprice` | `@markPrice@1s` | 1 | 120 | 스트림 침묵 |
+
+근거·전문은 `docs/trial_registry.md` #1. 🚫 결과를 본 뒤 변경 금지.
 
 ## 6. layer 1 구현 요약 (`exchange/`)
 - `rules.py` 응답 → 불변 dataclass(Decimal). 필터·브라켓 누락/불연속은 `RulesError`(fail-closed). fundingInfo 부재 심볼은 `present=False`(cap 추정 안 함). rate limit은 `exchangeInfo.rateLimits`.
@@ -76,7 +79,7 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 ## 7. 검토 상태
 | 대상 | 검토 | 상태 |
 |---|---|---|
-| layer 1 `exchange/gate.py` LIVE 분기(계정 설정 변경) · `client.py` 서명/POST · `orders.py`/`normalize.py` | Codex 독립 검토 read-only (2026-09-15, job `task-mu1zv0h4-qazyjb`) | ✅ **완료** — Q1·Q2 OK · Q3·Q4·Q5 ISSUE → 전부 채택·수정·테스트(125 green). 원문·조치표 `docs/ops_log.md`. ⚠️ 수정분(계정 전역 헤지 사전검사·Intent 기반 주문 생성기·모양 예외→StartupAbort)은 **Codex 재검토 미실시** |
+| layer 1 `exchange/gate.py` LIVE 분기(계정 설정 변경) · `client.py` 서명/POST · `orders.py`/`normalize.py` | Codex 독립 검토 read-only (2026-09-15, job `task-mu1zv0h4-qazyjb`) | ✅ **완료** — Q1·Q2 OK · Q3·Q4·Q5 ISSUE → 전부 채택·수정·테스트(125 green). 원문·조치표 `docs/ops_log.md`. 재검토(`task-mu20lg9y-h4uua9`): F1 PARTIAL · F2 CLOSED · F3 PARTIAL → 동의 항목 수정(전송 실패→StartupAbort '상태 불명' · positionAmt 엄격). algo 미체결 사전검사는 문서 확인 후(TODO). 재수정분은 3차 검토 미실시 |
 
 ## 8. 미결·결정 표 (open-decisions.md 원문 복사 · md5 `ef25c7f5…` 시점)
 
