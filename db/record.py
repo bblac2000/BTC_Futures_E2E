@@ -462,11 +462,17 @@ def wide_features(con: sqlite3.Connection, table: str, lo_ms: int, hi_ms: int, *
     return [{"bar_open_ms": t, "features": f} for t, f in out.items()]
 
 
-def save_safety_state(con: sqlite3.Connection, name: str, state: Mapping[str, Any], *, ts_ms: int, mode: str) -> None:
+def save_safety_state(con: sqlite3.Connection, name: str, state: Mapping[str, Any], *, ts_ms: int, mode: str) -> int:
+    """append-only · 행 id를 돌려준다 — id가 단조 증가하는 저장 세대다(시각은 이벤트·벽시계가 섞여 순서 판정에 쓰지 않는다)."""
     mode = _mode(mode)
     state_json = _json(dict(state))
     with _tx(con):
-        _insert(con, "safety_state", {"mode": mode, "name": name, "ts_ms": ts_ms, "state_json": state_json})
+        return _insert(con, "safety_state", {"mode": mode, "name": name, "ts_ms": ts_ms, "state_json": state_json})
+
+
+def latest_safety_state_id(con: sqlite3.Connection, name: str, *, mode: str) -> int | None:
+    row = con.execute("SELECT max(id) FROM safety_state WHERE mode=? AND name=?", (_mode(mode), name)).fetchone()
+    return None if row is None or row[0] is None else int(row[0])
 
 
 def load_safety_state(con: sqlite3.Connection, name: str, *, mode: str) -> dict[str, Any] | None:

@@ -281,26 +281,60 @@ def test_unreadable_breadcrumb_fails_closed(tmp_path):
     assert body["paused_by"] == "system:restart_with_unsaved_safety_state" and crumb.exists(), "해석 못 한 파일은 사람이 본다"
 
 
-def test_a_breadcrumb_older_than_the_db_state_is_quarantined_not_restored(tmp_path):
+def _gate_state(*, tripped=None, paused_by=None):
+    return {"paused_by": paused_by, "reconcile": {"blocker": None, "sticky": False},
+            "kill_switch": {"tripped": tripped, "consecutive_losses": 0, "liquidations": 0, "vanished": 0,
+                            "last_flat_wallet": "1000", "day": None, "day_start_equity": None, "resumed_by": None}}
+
+
+def _db_with_state_rows(tmp_path):
     cfg = config(tmp_path)
     clock = Clock(T0 + 10 * 60_000 + 1000)
     assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=65) == 0          # DB에 safety_state 행이 생긴다
     con = sqlite3.connect(cfg.db_path)
-    (db_ts,) = con.execute("SELECT max(ts_ms) FROM safety_state").fetchone()
+    (last_id, last_ts) = con.execute("SELECT max(id), max(ts_ms) FROM safety_state").fetchone()
+    return cfg, clock, con, last_id, last_ts
+
+
+def test_a_breadcrumb_superseded_by_a_later_durable_save_is_quarantined_not_restored(tmp_path):
+    """신선도는 **행 id**로 판정한다(시각 도메인이 섞이면 틀린다 · Codex L8 재검토 #3). 기준 id 뒤에 저장된 행이 있고
+    breadcrumb에 DB에 없는 트립도 없으면 오래된 것."""
+    cfg, clock, con, last_id, last_ts = _db_with_state_rows(tmp_path)
     crumb = cfg.var_dir / "run" / "safety_unsaved.json"
-    old = {"paused_by": None, "reconcile": {"blocker": None, "sticky": False},
-           "kill_switch": {"tripped": {"ts_ms": 1, "reason": "liquidation", "detail": "old"}, "consecutive_losses": 0,
-                           "liquidations": 1, "vanished": 0, "last_flat_wallet": "1000", "day": None,
-                           "day_start_equity": None, "resumed_by": None}}
-    crumb.write_text(json.dumps({"ts_ms": db_ts - 1, "safety_gate": old, "ops": []}))
+    crumb.write_text(json.dumps({"ts_ms": last_ts + 999_999, "base_state_id": last_id - 1,
+                                 "safety_gate": _gate_state(paused_by="telegram:old"), "ops": []}))
     tg = FakeTelegram()
     clock.t += 60_000
     assert run(cfg, clock=clock, tg=tg, seconds=5) == 0
     body = json.loads(con.execute("SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
-    assert body["kill_switch"]["tripped"] is None, "DB가 더 새롭다 — 옛 breadcrumb로 덮지 않는다"
-    assert body["paused_by"] == "system:restart_with_unsaved_safety_state"
+    assert body["paused_by"] == "system:restart_with_unsaved_safety_state", "격리해도 진입은 멈춘다"
     assert not crumb.exists() and list((cfg.var_dir / "run").glob("safety_unsaved.stale-*.json"))
     assert any("오래된" in t for t in tg.texts())
+
+
+def test_a_breadcrumb_trip_missing_from_the_db_is_always_restored(tmp_path):
+    cfg, clock, con, last_id, last_ts = _db_with_state_rows(tmp_path)
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    trip = {"ts_ms": 1, "reason": "liquidation", "detail": "unsaved"}
+    crumb.write_text(json.dumps({"ts_ms": 1, "base_state_id": last_id - 1, "safety_gate": _gate_state(tripped=trip),
+                                 "ops": []}))
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    body = json.loads(con.execute("SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
+    assert body["kill_switch"]["tripped"]["reason"] == "liquidation", "트립은 fail-closed로 복원"
+
+
+def test_codex_mixed_clock_scenario_a_newer_breadcrumb_with_an_older_event_ts_is_restored(tmp_path):
+    """DB 최신 행은 벽시계(늦은 시각), breadcrumb는 시장 이벤트 시각(이른 시각) — 기준 id가 최신이면 복원."""
+    cfg, clock, con, last_id, last_ts = _db_with_state_rows(tmp_path)
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    trip = {"ts_ms": last_ts - 5000, "reason": "daily_loss", "detail": "db outage"}
+    crumb.write_text(json.dumps({"ts_ms": last_ts - 5000, "base_state_id": last_id, "safety_gate": _gate_state(tripped=trip),
+                                 "ops": []}))
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    body = json.loads(con.execute("SELECT state_json FROM safety_state ORDER BY id DESC LIMIT 1").fetchone()[0])
+    assert body["kill_switch"]["tripped"]["reason"] == "daily_loss" and not crumb.exists()
 
 
 def test_breadcrumb_replay_does_not_duplicate_events_already_in_the_db(tmp_path):

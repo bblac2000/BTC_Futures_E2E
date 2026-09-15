@@ -83,8 +83,8 @@ class SafetyGate:
         return {"paused_by": self.paused_by, "kill_switch": self.kill_switch.to_state(),
                 "reconcile": self.reconcile.to_state()}
 
-    def save(self, con: sqlite3.Connection, *, ts_ms: int, mode: str) -> None:
-        R.save_safety_state(con, STATE_NAME, self.to_state(), ts_ms=ts_ms, mode=mode)
+    def save(self, con: sqlite3.Connection, *, ts_ms: int, mode: str) -> int:
+        return R.save_safety_state(con, STATE_NAME, self.to_state(), ts_ms=ts_ms, mode=mode)
 
     @classmethod
     def load(cls, con: sqlite3.Connection, limits: KillSwitchLimits, stale: StaleDataGuard, *, mode: str,

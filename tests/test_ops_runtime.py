@@ -419,6 +419,7 @@ def test_unsaved_safety_state_leaves_a_breadcrumb_outside_the_db_until_durable(r
     crumb = json.loads(crumb_path.read_text())
     assert crumb["safety_gate"]["kill_switch"]["tripped"]["reason"] == "daily_loss"
     assert [o["kind"] for o in crumb["ops"]] == ["KillSwitchTripped"]
+    assert crumb["base_state_id"] == real.execute("SELECT max(id) FROM safety_state").fetchone()[0], "마지막 durable 행 id"
     rt.con = real
     clock.t += 1000
     rt.safety_tick(clock.t)

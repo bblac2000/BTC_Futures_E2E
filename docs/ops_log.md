@@ -1284,3 +1284,42 @@ C. safety #11-#13: **FIX FIRST**
 D. prune/sync/data stores: **MERGE**
 E. health/systemd/runbook: **MERGE**
 ```
+
+### Codex 재검토 #3: breadcrumb 신선도·멱등 (`231122a..4e7c758`, read-only · 세션 `01a0a5de-c740-75a2-9329-303e2d797a2a`)
+판정: A·B·C FIX FIRST · D·E MERGE.
+
+| # | 지적 | 동의 | 조치 |
+|---|---|---|---|
+| 멱등 재생 | CLOSED | — | — |
+| 새 1 MEDIUM | 신선도를 `ts_ms`로 판정 — 이벤트 시각(breadcrumb)과 벽시계(재시도·종료 저장)가 섞여 **진짜 새 트립이 격리될 수 있다**(Codex가 /dev/shm에서 재현) | ✅ 동의 — 내가 넣은 `db_ts >= crumb_ts`가 원인 | 신선도 = **행 id**: `save_safety_state`가 id 반환 → 런타임 `saved_state_id` → breadcrumb `base_state_id`. 기동 시 DB 최신 id > 기준 id **이고** breadcrumb에만 있는 트립이 없을 때만 격리 · 기준 id 없음(옛 형식)·트립만 breadcrumb에 있음 → 복원(fail-closed). Codex 시나리오 그대로 테스트 |
+| 성능 메모 | `engine_events`에 op_id 조회 인덱스 없음 | 기록 | 운영 이벤트는 하루 수십 건 규모 — 인덱스는 새 스키마 단계(v3)가 필요해 보류, 보고 항목 |
+
+```
+Codex session ID: `01a0a5de-c740-75a2-9329-303e2d797a2a`
+
+**Per-Finding Status**
+1. Re-review #2 finding #1: **PARTIAL**. The breadcrumb restore path exists, but a real newer breadcrumb can still be quarantined as stale because freshness is based on mixed-domain `ts_ms`.
+2. New #1 stale breadcrumb override: **PARTIAL**. Old breadcrumbs no longer blindly override DB state, but the `db_ts >= crumb_ts` test can misclassify.
+3. New #2 duplicate ops replay: **CLOSED** for new/fixed breadcrumbs. `op_id` is generated in `ops/runtime.py:417`, persisted into breadcrumbs at `ops/runtime.py:487`, replayed/fallbacked at `ops/run_bot.py:247`, and deduped in `db/record.py:342`. Legacy breadcrumbs without `op_id` get deterministic fallback IDs, but rows already inserted by pre-fix code without an `op_id` cannot be deduped retroactively.
+
+**New Findings**
+1. **MEDIUM**: Real unsaved trip can be quarantined as stale due to mixed timestamp domains.
+   Evidence: startup uses `max(ts_ms)` from `safety_state` and quarantines when `db_ts >= crumb_ts` at `ops/run_bot.py:237`. Breadcrumb `ts_ms` is written from event/retry time at `ops/runtime.py:417` and `ops/runtime.py:483`, while DB safety saves may use wall-clock retry/shutdown time at `ops/runtime.py:270` and `ops/run_bot.py:325`. Scenario: DB has a later wall-clock normal safety row, then a DB-outage trip writes a breadcrumb with older market-event `ts_ms`; restart quarantines it, leaving `kill_switch.tripped` lost, though entries are paused. Reproduced in `/dev/shm`: latest DB state remained `tripped=None`, pause set, breadcrumb quarantined.
+   Fix: do not decide breadcrumb staleness solely from `ts_ms`. Use a monotonic safety-state generation/latest row id, or compare state content and restore/fail-closed whenever the breadcrumb contains a trip/blocker not present in DB. At minimum, avoid treating equal timestamps as stale.
+
+**Idempotency / Perf Notes**
+`json_extract(payload_json, '$.op_id')` is functionally correct in this environment; the full suite passed. There is no index on `engine_events` for this lookup (`db/schema.py:202`), so idempotent inserts scan growing history by `mode/kind/op_id`. That is a scaling concern, not the merge blocker here.
+
+**Verification**
+Requested command passed:
+`TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python -m pytest -q -p no:cacheprovider tests/`
+
+Worktree remained clean before and after (`git status --short` empty).
+
+**Area Verdicts**
+A. engine/db: **FIX FIRST**
+B. runtime/runner/threading/telegram: **FIX FIRST**
+C. safety #11-#13: **FIX FIRST**
+D. prune/sync/data stores: **MERGE**
+E. health/systemd/runbook: **MERGE**
+```

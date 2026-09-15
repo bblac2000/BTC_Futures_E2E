@@ -230,17 +230,20 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
     crumb_note: str | None = None
     keep_crumb = False
     if cfg.breadcrumb_path.exists():
-        #  Codex L8 재검토 #1·#2: 지난 실행이 DB에 못 쓴 안전 상태. **DB 최신 행보다 새로울 때만** 복원하고, 오래됐으면 격리한다.
-        #  어느 경우든 진입을 멈춘다(fail-closed · 해제는 사람의 /start).
+        #  Codex L8 재검토 #1·#2·#3: 지난 실행이 DB에 못 쓴 안전 상태. 신선도 = **행 id**(시각 아님):
+        #  breadcrumb의 기준 id(`base_state_id`) 뒤에 durable 저장이 있었고 **breadcrumb에만 있는 트립이 없으면** 오래된 것 → 격리.
+        #  그 밖(기준 id가 최신 · id 없음(옛 형식) · DB에 없는 트립을 가짐)은 복원한다. 어느 경우든 진입을 멈춘다(해제는 사람의 /start).
         try:
             crumb = json.loads(cfg.breadcrumb_path.read_text())
             crumb_ts = int(crumb["ts_ms"])
-            db_ts = con.execute("SELECT max(ts_ms) FROM safety_state WHERE mode=? AND name=?",
-                                (cfg.mode.value, SAFETY_GATE_STATE)).fetchone()[0]
-            if db_ts is not None and db_ts >= crumb_ts:
+            base_id = crumb.get("base_state_id")
+            latest_id = R.latest_safety_state_id(con, SAFETY_GATE_STATE, mode=cfg.mode.value)
+            crumb_trip = (crumb["safety_gate"].get("kill_switch") or {}).get("tripped")
+            trip_only_in_crumb = crumb_trip is not None and gate.kill_switch.tripped is None
+            if isinstance(base_id, int) and latest_id is not None and latest_id > base_id and not trip_only_in_crumb:
                 stale = cfg.breadcrumb_path.with_name(f"safety_unsaved.stale-{crumb_ts}.json")
                 cfg.breadcrumb_path.replace(stale)
-                crumb_note = f"오래된 breadcrumb(ts {crumb_ts} ≤ DB {db_ts}) — 복원 안 함 · {stale.name}로 격리"
+                crumb_note = f"오래된 breadcrumb(기준 행 {base_id} < DB 최신 {latest_id}) — 복원 안 함 · {stale.name}로 격리"
             else:
                 gate = SafetyGate.from_state(crumb["safety_gate"], REGISTERED_KILL_SWITCH, StaleDataGuard(counter),
                                              wallet=wallet)
@@ -253,6 +256,7 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
         gate.pause("system:restart_with_unsaved_safety_state")
     engine = Engine(rules, PaperSender(rules), mode=cfg.mode, wallet=wallet, limits=SizingLimits())
     rt = BotRuntime(engine=engine, gate=gate, con=con, symbol=cfg.symbol, clock_ms=clock_ms, status_path=cfg.status_path)
+    rt.saved_state_id = R.latest_safety_state_id(con, SAFETY_GATE_STATE, mode=cfg.mode.value)
     if not keep_crumb:
         rt.breadcrumb_path = cfg.breadcrumb_path                         # 해석 못 한 breadcrumb는 경로를 주지 않아 지우지 않는다
     if crumb_note is not None:

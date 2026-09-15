@@ -269,7 +269,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 - `Engine.entries_blocked`는 **사유 목록** · `/start`가 `clear_blocks`로 해제(일일 손실 날은 무변경) · `cancel_pending`(결정 뒤 게이트 닫힘 → `EntrySkipped(entries_blocked)`) · `equity(mark)` = 지갑 + 미실현.
 - `ExitReason.STALE_DATA` — PAPER stale 청산의 체결 기준가는 **마지막으로 받은 mark**(`orders.ref_mark`로 분리 가능).
 
-Codex L8 1차 반영: 운영 이벤트·안전 상태 저장 실패도 보관·재시도 + `db:unrecorded_ops`·`db:unsaved_safety_state` 차단 · 봉 DB 읽기 실패는 피드 밖으로 던지지 않고 `db:read_failed` 차단(다음 봉 성공으로 해제) · prune은 모든 대상의 원격 md5가 없으면 그날 전체 보류 · 폴 스레드는 루프 소유 `fast_poll` 이벤트만 읽는다 · LIVE 동기 읽기는 §10 체크리스트로 명시 보류. 재검토 #1 반영: 저장 안 된 안전 상태는 DB 밖 breadcrumb(`var/run/safety_unsaved.json`)에 남고, 재기동 때 복원 + 진입 일시정지(해석 불가도 일시정지 · 파일 보존).
+Codex L8 1차 반영: 운영 이벤트·안전 상태 저장 실패도 보관·재시도 + `db:unrecorded_ops`·`db:unsaved_safety_state` 차단 · 봉 DB 읽기 실패는 피드 밖으로 던지지 않고 `db:read_failed` 차단(다음 봉 성공으로 해제) · prune은 모든 대상의 원격 md5가 없으면 그날 전체 보류 · 폴 스레드는 루프 소유 `fast_poll` 이벤트만 읽는다 · LIVE 동기 읽기는 §10 체크리스트로 명시 보류. 재검토 #1 반영: 저장 안 된 안전 상태는 DB 밖 breadcrumb(`var/run/safety_unsaved.json`)에 남고, 재기동 때 복원 + 진입 일시정지(해석 불가도 일시정지 · 파일 보존). 재검토 #2·#3 반영: 운영 이벤트 `op_id` 멱등 · breadcrumb 신선도는 **행 id**(`base_state_id` vs DB 최신 `safety_state.id`)로 판정, breadcrumb에만 있는 트립은 항상 복원 · 보류: `engine_events` op_id 조회 인덱스(스키마 v3 필요).
 
 운영 경보 값(게이트 아님 · health): 상태 파일 나이 > 120초(레지스트리 #1 grace 재사용) · sync 마커 > 3시간 · prune 마커 > 8일 · 텔레그램 폴 마지막 성공 > 10분 · 디스크 여유 < 5 GB · 반복형 스로틀 3시간(E2E 값).
 

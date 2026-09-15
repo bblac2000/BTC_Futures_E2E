@@ -21,8 +21,9 @@
 - 킬스위치·stale·차단 해제 같은 운영 사건은 `engine_events`에 `record_ops_event`로 남긴다. **운영 이벤트·안전 상태 저장도**
   실패하면 보관·재시도하고 저장될 때까지 진입 금지(`db:unrecorded_ops` · `db:unsaved_safety_state` · Codex L8 #1) —
   DB가 잠긴 사이 킬스위치가 발동하고 재기동하면 트립이 사라지는 경로를 막는다. 저장되지 않은 동안에는 **DB 밖 breadcrumb**
-  (`var/run/safety_unsaved.json`, 원자적)에 게이트 상태·보관 이벤트를 남기고, DB에 다 들어간 뒤에만 지운다 — 러너가 재기동 때
-  읽어 트립을 복원하고 진입을 멈춘다(Codex L8 재검토 #1).
+  (`var/run/safety_unsaved.json`, 원자적)에 게이트 상태·보관 이벤트·**마지막 durable safety_state 행 id**(`base_state_id`)를
+  남기고, DB에 다 들어간 뒤에만 지운다 — 러너가 재기동 때 읽어 트립을 복원하고 진입을 멈춘다(Codex L8 재검토 #1·#3:
+  신선도는 시각이 아니라 행 id로 판정한다 — 이벤트 시각과 벽시계가 섞인다).
 
 ## 사용자 결정 반영 (레지스트리 #11·#12·#13 · 2026-09-16)
 - `/stop` = 진입 차단 + 전량 청산 · `/close` = 청산만 · `/pause` = 진입 차단, 포지션 유지.
@@ -125,6 +126,7 @@ class BotRuntime:
         self.unrecorded_ops: list[tuple[str, str, int, dict[str, Any] | None, str]] = []   # (kind, detail, ts, payload, op_id)
         self.state_save_failed = False
         self.db_read_failed = False
+        self.saved_state_id: int | None = None                    # 마지막으로 DB에 들어간 safety_state 행 id(러너가 기동 시 채운다)
         self.breadcrumb_path: Path | None = None                  # 러너가 var/run/safety_unsaved.json으로 정한다
         self.fast_poll = threading.Event()                        # 루프 스레드가 세운다 · 폴 스레드는 읽기만
         self.db_errors = 0
@@ -468,7 +470,7 @@ class BotRuntime:
             self._clear_breadcrumb_if_durable()
             return
         try:
-            self.gate.save(self.con, ts_ms=ts_ms, mode=self.mode.value)
+            self.saved_state_id = self.gate.save(self.con, ts_ms=ts_ms, mode=self.mode.value)
             self._saved_state = state
             self.state_save_failed = False
             self._clear_breadcrumb_if_durable()
@@ -484,7 +486,7 @@ class BotRuntime:
         """DB 밖 fail-closed 기록 — 원자적 · 실패하면 로그만(디스크까지 죽었으면 할 수 있는 게 없다)."""
         if self.breadcrumb_path is None:
             return
-        body = {"ts_ms": ts_ms, "safety_gate": self.gate.to_state(),
+        body = {"ts_ms": ts_ms, "base_state_id": self.saved_state_id, "safety_gate": self.gate.to_state(),
                 "ops": [{"kind": k, "detail": d, "ts_ms": t, "payload": p, "op_id": i} for k, d, t, p, i in self.unrecorded_ops]}
         tmp = self.breadcrumb_path.with_suffix(".tmp")
         try:
