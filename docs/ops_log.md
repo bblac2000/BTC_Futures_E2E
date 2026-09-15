@@ -1062,3 +1062,36 @@ Verification: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRE
 Codex session ID: 01a0a4f5-12c9-7af1-b02c-efcb0b4b7994
 Resume in Codex: codex resume 01a0a4f5-12c9-7af1-b02c-efcb0b4b7994
 ```
+
+## 2026-09-15 — Codex 재검토 #2: layer 6·7 (`e2167cb`, read-only · `task-mu2mqfkh-o1j9e7`)
+판정: 재검토 #1 발견 2건 **CLOSED** · 새 발견 없음 · 부분 소실 킬스위치 발동 "acceptable/safe". **(1) 채택 출처 · (2) 텔레그램 강제 청산 · (3) 킬스위치 · (4) 대사·stale·rate — 전부 MERGE.** (Codex가 전체 테스트 통과 확인)
+
+### Codex 재검토 #2 원문 (verbatim)
+```
+No new findings. Both re-review #1 findings are **CLOSED**.
+
+**Per-Finding Status**
+1. **CLOSED** — Downward exit-sync no longer overwrites quantity with an amendment. `_exit` emits `PositionVanished` for the missing slice, only emits `PositionSynced` when exchange qty increased, then closes the exchange-visible qty. Evidence: [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:397), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:403), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:420), [tests/test_paper_engine.py](/home/cms/project/BTC_Futures_E2E/tests/test_paper_engine.py:702).
+
+2. **CLOSED** — Telegram callback deadline now matches tick cancellation at the boundary: `now_ms >= cancel_deadline_ms(p)`. Evidence: [notify/bot.py](/home/cms/project/BTC_Futures_E2E/notify/bot.py:160), [notify/bot.py](/home/cms/project/BTC_Futures_E2E/notify/bot.py:229), [tests/test_notify_bot.py](/home/cms/project/BTC_Futures_E2E/tests/test_notify_bot.py:306).
+
+**Regression Checks**
+`paper/engine.py::_exit`: downward path is now `EntriesBlocked` diagnostic, then `PositionVanished`, then `PositionClosed`; vanished qty is recorded with unknown PnL, while the remaining exchange qty gets normal close PnL/commission wallet accounting. Upward path still emits `PositionSynced` before close and charges estimated extra entry commission. See [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:384).
+
+`db/record.py`: vanished + close sequences work with `_remaining()` as latest open amendment minus close rows; partial vanish leaves remaining qty, then the close flattens it. Evidence: [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:181), [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:257), [tests/test_db.py](/home/cms/project/BTC_Futures_E2E/tests/test_db.py:498).
+
+Kill switch on partial vanish: **acceptable/safe**. Any exchange-side disappearance has unknown PnL/provenance, so tripping `position_vanished` is conservative and human-resumable. Evidence: [safety/killswitch.py](/home/cms/project/BTC_Futures_E2E/safety/killswitch.py:63), [safety/killswitch.py](/home/cms/project/BTC_Futures_E2E/safety/killswitch.py:92).
+
+`notify/bot.py` boundary: fixed and covered at boundary -1ms, exact boundary, and tick cancellation at +12s.
+
+**Area Verdicts**
+1. Adoption provenance: **MERGE**
+2. Telegram forced close: **MERGE**
+3. Kill switch + human resume: **MERGE**
+4. Reconcile/stale/rate guard: **MERGE**
+
+Verification passed: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python -m pytest -q -p no:cacheprovider tests/`. Worktree stayed clean.
+
+Codex session ID: 01a0a4f9-50c9-7e02-878f-f5148dddd3e7
+Resume in Codex: codex resume 01a0a4f9-50c9-7e02-878f-f5148dddd3e7
+```

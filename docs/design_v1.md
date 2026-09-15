@@ -30,8 +30,8 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ✅ 구현·테스트(351) · Codex LiveSender MERGE · 엔진 MERGE(검토 4회) — **사용자 확인 대기**(§12) |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ✅ 구현·테스트(§14) · `runtime_rules` DDL을 v1로 흡수 — Codex 검토 대상 아님(자금·삭제·라이브 무관) · 기록 배선은 layer 8 |
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex MERGE(검토 2회 · `task-mu2kq6ib-uro1pe`·`task-mu2l1ukd-e0sy2c`) |
-| 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ✅ 구현·테스트(§15) — Codex 배치(6+7+채택) 대상 · 배선은 layer 8 |
-| 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ✅ 구현·테스트(§16) · 킬스위치 값 **레지스트리 #10 PENDING** — Codex 배치 대상 · 배선은 layer 8 |
+| 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ✅ 구현·테스트(§15) · Codex MERGE(검토 3회) · 배선은 layer 8 |
+| 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ✅ 구현·테스트(§16) · Codex MERGE(검토 3회) · 킬스위치 값 **레지스트리 #10 PENDING** · 배선은 layer 8 |
 | 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
 | – | `strategies/` 플러그인(피처 in → 목표 포지션 out). 첫 전략은 `docs/trial_registry.md`에 사전등록 **후** 백테스트 열람 | 🚫 1~8 통과 전 금지 |
 
