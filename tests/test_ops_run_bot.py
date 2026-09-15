@@ -545,3 +545,11 @@ def test_safe_error_also_strips_json_colon_and_schemeless_signed_fields(message)
     text = RB.safe_error(RuntimeError(message), secrets=list(KEYS.values()))
     for bad in ("deadbeef", "1789", "5000", "dummy-key-AAAA"):
         assert bad not in text, (message, text)
+
+
+@pytest.mark.parametrize("junk", ["/" * 40_000, "a/" * 20_000, "/a" * 20_000 + "?", "signature=" * 10_000])
+def test_safe_error_stays_linear_on_pathological_text(junk):
+    """Codex L8b 재검토 #2: 스킴 없는 경로 정규식이 긴 `/` 문자열에서 초선형이었다."""
+    t = time.perf_counter()
+    RB.safe_error(RuntimeError(junk + " signature=deadbeef"), secrets=list(KEYS.values()))
+    assert time.perf_counter() - t < 0.2

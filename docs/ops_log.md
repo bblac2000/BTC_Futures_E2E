@@ -1515,3 +1515,38 @@ Codex session ID: 01a0a6bb-7167-70b1-b4da-da15aeec3184
 Resume in Codex: codex resume 01a0a6bb-7167-70b1-b4da-da15aeec3184
 ```
 </details>
+
+### Codex 재검토 #2: `safe_error` 형식 확장 (`2171383..8a0799a`, read-only · `task-mu34fop8-lvqfo4`)
+판정: 이전 PARTIAL **CLOSED** · A·B·D MERGE · C FIX FIRST(새 발견 1). 과잉 가림 없음(`code=-2015`·`msg` 유지).
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 새 MEDIUM | 스킴 없는 경로 정규식이 긴 `/` 반복 입력에서 초선형(40k자 ~6초) | ✅ | 경로 조각은 `/` + 한 글자 이상 · 경로 시작 앞 lookbehind · 키 값 치환 뒤 **2000자로 먼저 자른 다음** 정규식 · 병리 입력 4종 < 0.2초 테스트 |
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+[MEDIUM] `_URL_QUERY` has quadratic worst-case behavior on long slash-only text before the 300-char cap runs.  
+Evidence: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:185) has an unanchored scheme-less path alternative where `/` is both the start token and allowed inside the repeated path class. A local regex probe on synthetic strings showed `/` repeated 10k -> ~0.38s, 20k -> ~1.51s, 40k -> ~5.97s. This is not classic exponential catastrophic backtracking, but it is super-linear enough for `safe_error` to stall on a crafted/very odd exception string. Fix first by avoiding regex for scheme-less URL stripping or making the path start more selective.
+
+**Carried PARTIAL**
+CLOSED for the original sanitizer coverage gap.  
+Evidence: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:185) now strips scheme-less path queries, and [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:188) handles `=`, `:`, JSON/dict-ish quoting, and case-insensitive `recvWindow`. The requested 5-form test is present at [tests/test_ops_run_bot.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_run_bot.py:536).
+
+Over-redaction check: `code=-2015` and `msg=...` survive in normal text/JSON body forms; only URL query contents are stripped, which matches the existing sanitizer contract.
+
+**Area Verdicts**
+A stale #14: MERGE. Only `markprice` is in `CLOSE_STREAMS`, and kline stalls hold/alert while blocking entries.
+
+B restart restore: MERGE. DB/snapshot agreement includes `entry_commission`; liquidation is recomputed on restore.
+
+C rules source + error sanitisation: FIX FIRST. Leak coverage is closed, but `_URL_QUERY` needs the super-linear regex fix.
+
+D dry-run harness: MERGE. Child env strips Binance keys unless `--use-binance-key`.
+
+I did not run pytest because this was a read-only review; I only ran bytecode-free local regex probes.
+
+Codex session ID: 01a0a6be-fc35-72e3-a1c5-179505e7ae34
+Resume in Codex: codex resume 01a0a6be-fc35-72e3-a1c5-179505e7ae34
+```
+</details>

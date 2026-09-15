@@ -182,7 +182,9 @@ class RulesLoad:
 
 
 #  스킴이 있든 없든 경로 뒤 쿼리 전체(`https://h/p?…` · `/fapi/v1/p?…`)
-_URL_QUERY = re.compile(r"((?:https?://[^\s?'\"]+)|(?:/[A-Za-z0-9_./-]+))\?[^\s'\"]*")
+#  경로 조각은 `/` + 한 글자 이상 — `/`만 반복되는 입력에서 시작점마다 되짚지 않게(Codex L8b 재검토 #2 초선형) · 입력은 먼저 자른다
+_URL_QUERY = re.compile(r"((?:https?://[^\s?'\"/]+(?:/[A-Za-z0-9_.-]+)*)|(?:(?<![\w/])(?:/[A-Za-z0-9_.-]+)+))\?[^\s'\"]*")
+SAFE_ERROR_SCAN_CHARS = 2000
 _APIKEY_HEADER = re.compile(r"(?i)['\"]?x-mbx-apikey['\"]?\s*[:=]\s*['\"]?[^'\"\s,}]*['\"]?")
 #  서명 재료: `k=v`(쿼리) · `"k":v` / `'k': 'v'` / `k: v`(JSON·dict·헤더식) — 대소문자 무시
 _SIGNED_PARAM = re.compile(r"(?i)['\"]?\b(signature|timestamp|recvwindow)\b['\"]?\s*[:=]\s*['\"]?[^&\s'\",}]*['\"]?&?")
@@ -192,6 +194,10 @@ def safe_error(e: BaseException, *, secrets: list[str]) -> str:
     """사람에게 보이는 오류 문구(알림·상태 파일·stderr) — 서명 요청 재료를 구조적으로 지운다(Codex L8b #3):
     URL 쿼리 전체 · API 키 헤더 · signature/timestamp/recvWindow 파라미터 · 키·시크릿 값 그 자체. 300자로 자른다."""
     text = f"{type(e).__name__}: {e}"
+    for s in secrets:                                               # 값 그대로 먼저(자르기 전에 — 잘린 조각이 남지 않게)
+        if s:
+            text = text.replace(s, "<redacted>")
+    text = text[:SAFE_ERROR_SCAN_CHARS]
     text = _URL_QUERY.sub(r"\1", text)
     text = _APIKEY_HEADER.sub("<apikey-header>", text)
     text = _SIGNED_PARAM.sub("<signed>", text)
