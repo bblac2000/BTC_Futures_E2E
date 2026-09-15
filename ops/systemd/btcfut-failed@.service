@@ -1,0 +1,9 @@
+# OnFailure 알림 — 코드는 테스트 가능한 파일(ops/notify_failure.py)에 둔다. 유닛에 파이썬 코드를 박지 않는다(E2E 2026-08-15).
+[Unit]
+Description=BTC_Futures_E2E failure notice for %i
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/BTC_Futures_E2E
+EnvironmentFile=%h/BTC_Futures_E2E/.env
+ExecStart=%h/BTC_Futures_E2E/.venv/bin/python -m ops.notify_failure %i

@@ -1,0 +1,14 @@
+# 🔴 삭제 유닛 — Codex 검토 대상. Drive에 checksum으로 확인된 30일 밖 shard만(allowlist store) · 대장 기록 수 ≠ 삭제 수면 실패.
+# ⚠️ 첫 배포는 이 유닛을 enable하지 않는다 — 런북 §6: dry-run 결과를 사람이 본 뒤에만 --apply 타이머를 켠다.
+[Unit]
+Description=BTC_Futures_E2E local shard prune (Drive-verified only)
+After=network-online.target
+OnFailure=btcfut-failed@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/BTC_Futures_E2E
+EnvironmentFile=%h/BTC_Futures_E2E/.env
+ExecStart=%h/BTC_Futures_E2E/.venv/bin/python -m ops.prune --apply --max-days 7 --var-dir %h/BTC_Futures_E2E/var
+Nice=15
+IOSchedulingClass=idle

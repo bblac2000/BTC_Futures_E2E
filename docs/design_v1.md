@@ -32,7 +32,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex MERGE(검토 2회 · `task-mu2kq6ib-uro1pe`·`task-mu2l1ukd-e0sy2c`) |
 | 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ✅ 구현·테스트(§15) · Codex MERGE(검토 3회) · 배선은 layer 8 |
 | 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ✅ 구현·테스트(§16) · Codex MERGE(검토 3회) · 킬스위치 값 **레지스트리 #10 PENDING** · 배선은 layer 8 |
-| 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
+| 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ✅ 런타임·러너·템플릿·런북 구현·테스트(§17) · 페이퍼 드라이런(실제 공개 피드·실제 텔레그램) · Codex 배치 검토 — 결과 §17 · **VPS 배포는 사용자 논의 후** |
 | – | `strategies/` 플러그인(피처 in → 목표 포지션 out). 첫 전략은 `docs/trial_registry.md`에 사전등록 **후** 백테스트 열람 | 🚫 1~8 통과 전 금지 |
 
 ⚠️ 상시 발견: 30분 이하 신호는 대부분 비용 게이트(G2)에서 실패했다. 1m 의사결정 전략은 **비용 차감 후 순엣지**를 명시적으로 보여야 한다.
@@ -244,5 +244,33 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | `safety/gate.py` | `SafetyGate` — 차단 사유 전부 나열 · `/pause` · `/start`(일시정지·킬스위치·sticky 대사 해제, 피드 정지는 못 풂 → 남은 사유 알림) · 저장/복원(`safety_state`) |
 
 - LIVE 청산 감지: 거래소 청산은 `PositionClosed(LIQUIDATION)`로 오지 않는다 → `PositionVanished`(청산 경로) · 봉마다 대사에서 내부≠0·거래소=0(`SafetyGate.observe_reconcile`)을 청산 1회로 보고 발동(Codex L6·7 #2).
-- 사용자 결정 대기: 킬스위치 x·n 값(레지스트리 #10) · stale 중 포지션 자동 청산 여부(현재 보유+알림) · 대사 불일치 자동 해제 여부(현재 수량 불일치는 사람만).
-- 아직 없음: 봉마다 호출하는 배선·알림 발송·엔진 `entries_blocked` 연결 — layer 8.
+- ~~사용자 결정 대기~~ → **2026-09-16 확정**: 킬스위치 값 레지스트리 #11(5%·5회·청산 1·소실 1) · stale 자동 청산 #12(#1 grace 초과 → MARKET reduceOnly) · 운영 통제 #13(`/stop`·`/close`·`/pause` 의미 · 대사 수량 불일치 사람만 해제 · 일일 손실 날 `/start` 무변경 "blocked by daily-loss limit until 00:00 UTC").
+- 배선은 §17(layer 8).
+
+## 17. layer 8 `ops/` + 기동 배선 (2026-09-16)
+| 모듈 | 역할 |
+|---|---|
+| `ops/runtime.py` | `BotRuntime` — 피드·엔진·`SafetyGate`·DB·`CommandBot`의 **단일 소유자**(asyncio 루프 스레드). 진입 게이트 하나(엔진 ∪ 안전 ∪ DB·지갑 재동기화) · 벽시계 1초 `safety_tick`(stale #12 청산·텔레그램 inbox 처리·상태 파일) · 봉마다(기록·LIVE 소실/지갑 재동기화·3자 대사·일일 손실 equity·account_snapshots·상태 저장은 바뀔 때만) · `BotController` 구현 |
+| `ops/run_bot.py` | PAPER 전용 기동(LIVE → 종료 코드 4) · 인스턴스 락 · 규칙 = 공개 GET(exchangeInfo·fundingInfo) + 캡처 스냅샷(leverageBracket·commissionRate) → `runtime_rules` 기록 · 지갑·안전 상태 복원 · REST 백필 · shard 기록기 · 텔레그램 스레드 · SIGTERM 정상 종료(clean/dirty) |
+| `ops/telegram_link.py` | 폴 스레드(`fetch` → inbox, 백오프 1·2·5·10·30·60초) · 발송 스레드(outbox → API, `message_id`로 배달 집계) — 엔진 상태를 만지지 않는다 |
+| `ops/data_stores.py` | 저장소 표(allowlist): `raw_live` shard만 `drive_verified_prune` · sqlite(봇 DB·manifest)는 `never` · 원격 = `BTCFUT_DRIVE_REMOTE`(E2E 폴더 거부) |
+| `ops/drive_sync.py` | `rclone copy --checksum --min-age 90s` + sqlite 온라인 백업 → `copyto` · 원격 삭제 없음 · 실패 시 마커 미갱신 |
+| `ops/prune.py` | 🔴 삭제: `=`만 · 그날 하나라도 미검증이면 전체 보류 · 삭제 전 원격 md5 · 대장 기록 수 ≠ 삭제 수 → 실패 · `.parquet`만 · 심볼릭 링크 불추종 · 기본 dry-run · 보존 30일 · 최대 7일/회 |
+| `ops/health.py` | 상태 파일·마커·디스크 → 고정 키 문제 목록 · 반복형 3h 스로틀 · 확정 사실 하루 1회 · 발송 실패 시 상태 미갱신 · digest |
+| `ops/notify_failure.py` | `OnFailure=` 알림(유닛에 코드 박지 않음) |
+| `ops/systemd/` | 봇 사용자 user 유닛 템플릿: bot(Nice 10·IO best-effort 7·MemoryMax 700M) · health-alert 5분 · digest 00:30 UTC · sync 매시 :20 · prune 일 03:30 UTC(첫 배포 미설치) · failed@ |
+| `docs/runbook_vps.md` | 사용자 생성·설치·수집기 우선 확인·기동 후 대조표(vps-ops §8)·prune 켜기 절차·정지/재기동 |
+
+엔진·안전 변경(같은 배치 · Codex 검토):
+- `PositionReduced` — 부분 청산 체결·손익·잔량 → `orders` + `positions` close 행(detail `partial`) → DB 남은 수량 = 엔진 잔량 → 대사가 사람 없이 맞는다(사용자 2026-09-16). 킬스위치 연속 손실은 flat이 되는 `PositionClosed`에서만.
+- `Engine.vanish` — LIVE 봉 대사에서 거래소 flat · 내부 보유 → 주문 없이 내부 close(`PositionVanished` 전량) + 진입 차단. 손익은 거래소 지갑 재동기화(`sync_wallet` → `WalletResynced` + `KillSwitch.sync_flat_wallet` + account_snapshots source exchange)로 들어온다. 조회 실패면 `exchange:wallet_resync_due` 차단 · 다음 봉 재시도.
+- `Engine.entries_blocked`는 **사유 목록** · `/start`가 `clear_blocks`로 해제(일일 손실 날은 무변경) · `cancel_pending`(결정 뒤 게이트 닫힘 → `EntrySkipped(entries_blocked)`) · `equity(mark)` = 지갑 + 미실현.
+- `ExitReason.STALE_DATA` — PAPER stale 청산의 체결 기준가는 **마지막으로 받은 mark**(`orders.ref_mark`로 분리 가능).
+
+운영 경보 값(게이트 아님 · health): 상태 파일 나이 > 120초(레지스트리 #1 grace 재사용) · sync 마커 > 3시간 · prune 마커 > 8일 · 텔레그램 폴 마지막 성공 > 10분 · 디스크 여유 < 5 GB · 반복형 스로틀 3시간(E2E 값).
+
+알려진 한계(보고 · 결정 필요):
+- **페이퍼 포지션은 재기동 때 엔진에 복원되지 않는다** — DB에 열린 포지션이 남으면 기동 알림 경고 + 대사 sticky로 진입 금지.
+- PAPER 러너는 기동 게이트(`run_startup_gate`)를 부르지 않는다 — 키 없이 계정을 읽을 수 없어서. LIVE 배선 때 필수.
+- LIVE `ExchangeReader`(positionRisk·계좌)는 **프로토콜과 가짜 구현 테스트만** 있다 — 계좌 응답 필드는 v6에 없어(가중치 표만) 공식 문서 렌더링·실캡처 확인이 먼저다.
+- `important_resend` 알림 재전송은 30초 롱폴링 중에는 늦을 수 있다(기본 꺼짐) — 확인 흐름 재전송은 안전 틱(1초)이 돌린다.

@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1~5 수용(사용자 2026-09-15) · ✅ layer 6 `notify/` · ✅ layer 7 `safety/` · ✅ 채택 출처 · ✅ db v2 — Codex MERGE(6+7+채택, 검토 3회) · **layer 8 착수 전 보고·확인 대기**
+- ✅ layer 1~7 수용(사용자 2026-09-16) · ✅ 레지스트리 #11·#12·#13 · ✅ layer 8 `ops/` 런타임·러너·VPS 템플릿·런북 · 페이퍼 드라이런 · **Codex 배치(layer 8 + 부분 청산) → 보고 → VPS 배포 논의 대기**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브 **폐기**(파일만 미사용 보존)
 
 ## 다음
@@ -35,12 +35,15 @@
 4. [x] 전달 감시 임계 → 레지스트리 #1 확정(kline1m_update·kline1m_close·markprice) — layer 5 writer가 kline을 두 kind로 기록해야 재생 어댑터가 같은 값을 센다
 5. [x] layer 4 `db/`: 마이그레이션 도구 · v1(§5 전 테이블 + runtime_rules 흡수) · 이벤트 기록(설계서 §14)
 5a. [x] LIVE 채택 출처: `EntryFilled.adopted`(positionRisk) → open 행 reason `adopted_from_exchange`(사용자 2026-09-15 · 전제 정정: 채택도 EntryFilled를 냈다) — Codex 배치(6+7) 대상
-5d. [ ] 사용자 결정: 레지스트리 #10 킬스위치 x·n 값 · stale 중 포지션 자동 청산 여부 · 대사 불일치 자동 해제 여부 · `/stop`(진입 차단+청산)·`/close`(청산만) 해석 확인
+5d. [x] 사용자 결정(2026-09-16) → 레지스트리 #11(킬스위치 5%·5·1·1) · #12(stale 자동 청산) · #13(명령 의미·대사 해제·일일 손실 /start)
 5c. [x] `_exit` 동기화 기록(`PositionSynced` → root open 수정 행) · LIVE 거래소 수량 소실(`PositionVanished` → 킬스위치) · 채택 추정 수수료 — Codex L6·7 #2~#4
-5b. [ ] layer 8 기동 배선: 엔진 이벤트·마감봉·REST 백필 → `db.record` · `data.shards.Recorder` · account_snapshots 생산자
-6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [ ] layer 8: vps_health 스로틀 구조(`roll_failed` 경보 포함) · `data_stores` allowlist(설계 #131)
-7. [ ] VPS: 봇 전용 Linux 사용자·systemd 유닛 (E2E 수집기와 분리 · 수집기 우선 · 수집기 데이터 디렉터리 금지) — **Codex 검토 대상(수집기 호스트)**
-8. [ ] GitHub 원격 미설정 — CI는 푸시 후에야 실제로 돈다(푸시는 사용자 요청 시에만)
+5b. [x] layer 8 기동 배선(`ops/runtime.py`·`ops/run_bot.py`) — 설계서 §17
+5e. [ ] 페이퍼 14일차 재평가 새 행: #5 · #7 · #9 · **#11**
+5f. [ ] 결정 필요: 페이퍼 포지션 재기동 복원 여부(현재 복원 안 함 → 대사 sticky) · LIVE `ExchangeReader` 계좌 필드 공식 문서 확인
+5g. [ ] VPS 배포(런북 `docs/runbook_vps.md`) — 사용자 논의 후 · 외부 heartbeat · Drive 사본 재검증 도구 · 대장 reconcile 도구
+6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [x] layer 8: health 스로틀 구조 · `data_stores` allowlist(설계 #131) · [ ] shard `roll_failed` 대장 이벤트를 health가 읽는 경보(상태 파일에 없음)
+7. [x] VPS 템플릿: 봇 전용 Linux 사용자 user 유닛(`ops/systemd/`)·런북 — **배포는 Codex 검토 + 사용자 논의 후**
+8. [x] GitHub 원격 설정됨(`bblac2000/BTC_Futures_E2E`) — 푸시는 사용자 요청 시에만
 
 ## ⚠️ 알고 있는 위험
 - ~~패키지명 `telegram/` 가림 위험~~ → 2026-09-15 `notify/`로 개명 완료.

@@ -1,0 +1,9 @@
+[Unit]
+Description=BTC_Futures_E2E prune weekly (Sunday 03:30 UTC, after E2E prune 02:30)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

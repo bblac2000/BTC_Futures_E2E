@@ -308,8 +308,9 @@ def parse_args(argv: list[str] | None = None) -> RunConfig:
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--backfill-minutes", type=int, default=180)
     a = ap.parse_args(argv)
-    return RunConfig(mode=Mode(a.mode), db_path=Path(a.db), snapshot_dir=Path(a.snapshot_dir), capital=Decimal(a.capital),
-                     var_dir=Path(a.var_dir), duration_s=a.duration_s, telegram=not a.no_telegram,
+    #  경로는 절대경로로 — shard 대장(manifest)의 path가 prune의 대조 키다(상대경로면 작업 디렉터리에 따라 어긋난다)
+    return RunConfig(mode=Mode(a.mode), db_path=Path(a.db).resolve(), snapshot_dir=Path(a.snapshot_dir).resolve(),
+                     capital=Decimal(a.capital), var_dir=Path(a.var_dir).resolve(), duration_s=a.duration_s, telegram=not a.no_telegram,
                      backfill_minutes=a.backfill_minutes)
 
 

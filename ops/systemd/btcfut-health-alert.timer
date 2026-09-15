@@ -1,0 +1,9 @@
+[Unit]
+Description=BTC_Futures_E2E health alert every 5 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/5:30 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

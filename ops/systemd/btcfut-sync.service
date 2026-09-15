@@ -1,0 +1,14 @@
+# Drive 복사(원격 삭제 없음) — 원격 루트 = .env의 BTCFUT_DRIVE_REMOTE(이 봇 전용 폴더 · E2E 폴더 거부)
+[Unit]
+Description=BTC_Futures_E2E Drive copy (shards rclone copy --checksum --min-age 90s, sqlite online backup)
+After=network-online.target
+OnFailure=btcfut-failed@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/BTC_Futures_E2E
+EnvironmentFile=%h/BTC_Futures_E2E/.env
+ExecStart=%h/BTC_Futures_E2E/.venv/bin/python -m ops.drive_sync --var-dir %h/BTC_Futures_E2E/var
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=2h

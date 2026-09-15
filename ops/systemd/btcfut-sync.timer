@@ -1,0 +1,9 @@
+[Unit]
+Description=BTC_Futures_E2E Drive copy hourly (:20, away from E2E sync)
+
+[Timer]
+OnCalendar=*-*-* *:20:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

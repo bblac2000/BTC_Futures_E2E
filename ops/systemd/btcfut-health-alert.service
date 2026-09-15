@@ -1,0 +1,10 @@
+[Unit]
+Description=BTC_Futures_E2E health alert (problems only · fixed keys · 3h throttle for recurring, once per day for settled facts)
+OnFailure=btcfut-failed@%n.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/BTC_Futures_E2E
+EnvironmentFile=%h/BTC_Futures_E2E/.env
+ExecStart=%h/BTC_Futures_E2E/.venv/bin/python -m ops.health alert --var-dir %h/BTC_Futures_E2E/var
+Nice=10
