@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1·2 수용 · ✅ layer 3 · ✅ ccxt 전환 수락(사용자 2026-09-15) · ✅ layer 5 마무리(shard·#138·소켓별 이벤트·23h 소켓별 재연결) — Codex MERGE · ✅ layer 4 `db/` — **layer 6 착수 전 보고·확인 대기**
+- ✅ layer 1~5 수용(사용자 2026-09-15) · ✅ layer 6 `notify/` · ✅ layer 7 `safety/` · ✅ 채택 출처 · ✅ db v2 — Codex 배치(6+7+채택) · **layer 8 착수 전 보고·확인 대기**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브 **폐기**(파일만 미사용 보존)
 
 ## 다음
@@ -35,6 +35,7 @@
 4. [x] 전달 감시 임계 → 레지스트리 #1 확정(kline1m_update·kline1m_close·markprice) — layer 5 writer가 kline을 두 kind로 기록해야 재생 어댑터가 같은 값을 센다
 5. [x] layer 4 `db/`: 마이그레이션 도구 · v1(§5 전 테이블 + runtime_rules 흡수) · 이벤트 기록(설계서 §14)
 5a. [x] LIVE 채택 출처: `EntryFilled.adopted`(positionRisk) → open 행 reason `adopted_from_exchange`(사용자 2026-09-15 · 전제 정정: 채택도 EntryFilled를 냈다) — Codex 배치(6+7) 대상
+5d. [ ] 사용자 결정: 레지스트리 #10 킬스위치 x·n 값 · stale 중 포지션 자동 청산 여부 · 대사 불일치 자동 해제 여부 · `/stop`(진입 차단+청산)·`/close`(청산만) 해석 확인
 5c. [ ] `_exit` 동기화로 거래소 수량이 내부보다 클 때 늘어난 부분의 open 기록 — 사용자 판단 대기
 5b. [ ] layer 8 기동 배선: 엔진 이벤트·마감봉·REST 백필 → `db.record` · `data.shards.Recorder` · account_snapshots 생산자
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [ ] layer 8: vps_health 스로틀 구조(`roll_failed` 경보 포함) · `data_stores` allowlist(설계 #131)

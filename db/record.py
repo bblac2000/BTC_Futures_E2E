@@ -23,7 +23,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from exchange.orders import Side
+from exchange.orders import Direction, Side
 from paper.types import (
     EntriesBlocked,
     EntryFilled,
@@ -163,6 +163,28 @@ def _order(con: sqlite3.Connection, f: Fill, *, mode: str, symbol: str, position
         "status": "filled", "request_json": _json(request),
         "response_json": _json(response if response is not None else (raw or None)),
     })
+
+
+@dataclasses.dataclass(frozen=True)
+class DbPosition:
+    """DB가 보는 열린 포지션 — 대사용(layer 7)."""
+    direction: Direction
+    remaining_qty: Decimal
+
+    @property
+    def signed(self) -> Decimal:
+        return self.remaining_qty if self.direction is Direction.LONG else -self.remaining_qty
+
+
+def open_position_state(con: sqlite3.Connection, *, mode: str, symbol: str) -> DbPosition | None:
+    """가장 최근 아직 다 닫히지 않은 open 행의 방향·남은 수량(open − close 합)."""
+    pid = open_position_id(con, mode=_mode(mode), symbol=symbol)
+    if pid is None:
+        return None
+    direction, qty = con.execute("SELECT direction, qty FROM positions WHERE id=?", (pid,)).fetchone()
+    closed = sum((Decimal(q) for (q,) in con.execute(
+        "SELECT qty FROM positions WHERE event='close' AND position_id=?", (pid,))), Decimal())
+    return DbPosition(Direction(direction), Decimal(qty) - closed)
 
 
 def open_position_id(con: sqlite3.Connection, *, mode: str, symbol: str, direction: Any = None) -> int | None:

@@ -30,8 +30,8 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ✅ 구현·테스트(351) · Codex LiveSender MERGE · 엔진 MERGE(검토 4회) — **사용자 확인 대기**(§12) |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ✅ 구현·테스트(§14) · `runtime_rules` DDL을 v1로 흡수 — Codex 검토 대상 아님(자금·삭제·라이브 무관) · 기록 배선은 layer 8 |
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex MERGE(검토 2회 · `task-mu2kq6ib-uro1pe`·`task-mu2l1ukd-e0sy2c`) |
-| 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ⏸ (`notify/sender.py` 복사 완료) |
-| 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ⏸ |
+| 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ✅ 구현·테스트(§15) — Codex 배치(6+7+채택) 대상 · 배선은 layer 8 |
+| 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ✅ 구현·테스트(§16) · 킬스위치 값 **레지스트리 #10 PENDING** — Codex 배치 대상 · 배선은 layer 8 |
 | 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
 | – | `strategies/` 플러그인(피처 in → 목표 포지션 out). 첫 전략은 `docs/trial_registry.md`에 사전등록 **후** 백테스트 열람 | 🚫 1~8 통과 전 금지 |
 
@@ -218,3 +218,29 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 - `orders.slippage_vs_mark_bps` = 불리한 방향 양수(BUY `(체결−mark)/mark`, SELL 반대) × 10⁴ — 레지스트리 #7·#9 14일차 재평가의 원천.
 - ⚠️ 정정(2026-09-15): "채택은 open 이벤트를 내지 않는다"는 **틀린 보고였다** — 채택 시에도 `EntryFilled`(fills=())가 나가 close가 연결된다. 실제 공백은 출처 표시(채택 여부·positionRisk)였고 `adopted` 필드로 메웠다. 남은 작은 경우: 청산 직전 거래소 수량이 내부보다 **커서** 동기화하는 경로(`_exit`) — close 수량 > open 수량으로 기록되고 늘어난 부분의 open 기록은 없다(대사 대상 · 미구현).
 - 아직 없음: 엔진·피드 → DB 배선, 봉 기록 경로(WS 마감봉·REST 백필), account_snapshots 생산자 — layer 8 기동 배선.
+
+
+## 15. layer 6 `notify/` (2026-09-15 · Bot API 10.3 렌더링 확인 — ops_log)
+| 모듈 | 역할 |
+|---|---|
+| `notify/commands.py` | 등록 명령 8개(`start stop pause status position close profit help` — BotCommand 1-32자 소문자 제약) · 한글 별칭(시작·중지·일시정지·상태·포지션·청산·수익·도움말)은 텍스트 · 답장 키보드(메뉴 버튼) · `/cmd@다른봇` 거부 |
+| `notify/bot.py` | 순수 상태기계 `CommandBot` → 행동(`Send`·`Answer`). 주인 ID 화이트리스트(`TELEGRAM_OWNER_IDS`) · 개인 채팅만 · 기동 전 날짜 메시지 무시 |
+| `notify/telegram_api.py` | POST JSON · `ok` 검증 · 토큰을 예외 문구에서 `<token>`으로 가림 · 문서 한도 사전 검사(text 1-4096 · answer 0-200 · callback_data 1-64 bytes) |
+| `notify/poller.py` | getUpdates 롱폴링(offset = 최대 update_id + 1, 응답마다) · 처리 실패도 offset 넘김(재처리로 두 번 청산 방지) · 확인 대기 중 1초 폴링 · `setup()` = setMyCommands + MenuButtonCommands |
+
+- 확인 흐름(open-decisions #9): `/stop`·`/close` → 포지션·uPnL + [예/아니오] → +3·+6·+9초 재전송 → +12초 무응답 취소 "청산 안 됨" · 콜백 nonce 60초 만료 · 모든 콜백에 answer.
+- 이 저장소의 해석(사용자 확인 필요 시 보고): `/stop` 예 = 진입 차단 + 전량 청산, `/close` 예 = 청산만 · 확인 대기는 하나 · flat이면 `/close`는 확인 없이 "포지션 없음" · 컨트롤러 예외는 "실패" 문구.
+- 중요 이벤트 3회 규칙은 `important_resend` 설정(기본 꺼짐) — [확인] 버튼, 3초 간격 3회.
+- 아직 없음: `BotController` 구현(엔진·`SafetyGate`·DB 배선) · 폴링 스레드·백오프 — layer 8.
+
+## 16. layer 7 `safety/` (2026-09-15)
+| 모듈 | 역할 |
+|---|---|
+| `safety/killswitch.py` | 일일 손실(UTC 날짜 첫 equity 기준) · 연속 순손실 n회(직전 flat 지갑 대비 — 수수료·펀딩 포함) · 청산 1회 → 발동(첫 사유 유지) · 사람 `resume`만 해제 · 상태 저장/복원 |
+| `safety/stale.py` | 레지스트리 #1 `DeliveryCounter.stalled()` → 진입 금지 · 미평가도 금지 · 포지션 있으면 `hold_and_alert`(자동 청산 안 함) · 정지 집합이 바뀔 때만 알림 |
+| `safety/reconcile.py` | 부호 있는 수량 3자 대사(LIVE: 내부↔positionRisk↔DB · PAPER: 내부↔DB, 거래소 값 주면 오류) · 수량 불일치 sticky(사람 해제) · 조회 실패는 다음 성공으로 해제 · 사유 종류가 바뀔 때만 알림 |
+| `safety/rate_guard.py` | 어떤 한도든 사용량 ≥ 80% → `relax_polling` 신호(주문은 막지 않음) |
+| `safety/gate.py` | `SafetyGate` — 차단 사유 전부 나열 · `/pause` · `/start`(일시정지·킬스위치·sticky 대사 해제, 피드 정지는 못 풂 → 남은 사유 알림) · 저장/복원(`safety_state`) |
+
+- 사용자 결정 대기: 킬스위치 x·n 값(레지스트리 #10) · stale 중 포지션 자동 청산 여부(현재 보유+알림) · 대사 불일치 자동 해제 여부(현재 수량 불일치는 사람만).
+- 아직 없음: 봉마다 호출하는 배선·알림 발송·엔진 `entries_blocked` 연결 — layer 8.
