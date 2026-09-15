@@ -5,8 +5,9 @@
 - 출처 ② 마지막 엔진 스냅샷(`account_snapshots.raw_json.position` — 봉마다·체결/청산/펀딩마다 쓴다)
 - (LIVE 배선 때 출처 ③ positionRisk가 같은 자리에 붙는다 — 이 파일은 PAPER만 판단한다)
 
-일치 = 스냅샷이 root open 행 이후(`ts_ms ≥`)이고 방향·수량·진입가·레버리지·SL·TP·진입 시각·누적 펀딩이 모두 같고
-다음 펀딩 시각이 있다. 그 밖(스냅샷 없음·옛 형식·더 오래됨·값 불일치·한쪽만 포지션)은 전부 불일치:
+일치 = 스냅샷이 root open 행 이후(`ts_ms ≥`)이고 방향·수량·진입가·레버리지·SL·TP·진입 시각·누적 펀딩·진입 수수료(open 행 합)가
+모두 같고 다음 펀딩 시각이 있다. 추정 청산가는 대조하지 않고 복원 때 **현재 규칙으로 다시 계산**한다(Codex L8b #2) —
+계산할 수 없으면 불일치로 처리한다. 그 밖(스냅샷 없음·옛 형식·더 오래됨·값 불일치·한쪽만 포지션)은 전부 불일치:
 - 엔진은 flat으로 시작 · `SafetyGate.pause(MISMATCH_PAUSE)`(safety_state에 남아 재기동이 풀지 않는다 · 해제는 사람의 /start)
 - DB에 열린 행이 있으면 그 root에 `restart_unrestored` close 행(손익 없음 — 추정하지 않는다). 닫지 않으면 대사 수량 불일치가
   매 봉 다시 sticky로 걸려 /start로도 풀 수 없다.
@@ -21,15 +22,17 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, Literal
 
 from db import record as R
+from exchange.errors import RulesError
 from exchange.orders import Direction
-from paper.types import PositionAbandoned
+from paper.engine import EntryRefused
+from paper.types import PositionAbandoned, PositionRestored
 
 if TYPE_CHECKING:
     from ops.runtime import BotRuntime
 
 MISMATCH_PAUSE = "system:restart_position_mismatch"
 UNRESTORED_REASON = R.RESTART_UNRESTORED
-DECIMAL_FIELDS = ("qty", "entry_price", "sl", "tp", "funding_paid")
+DECIMAL_FIELDS = ("qty", "entry_price", "sl", "tp", "funding_paid", "entry_commission")
 
 
 @dataclass(frozen=True)
@@ -60,11 +63,15 @@ def _db_open_position(con: sqlite3.Connection, *, mode: str, symbol: str) -> dic
         "ORDER BY id DESC LIMIT 1", (root,)).fetchone()
     state = R.open_position_state(con, mode=mode, symbol=symbol)
     assert state is not None
+    commission = sum((Decimal(c) for (c,) in con.execute(
+        "SELECT entry_commission_usdt FROM positions WHERE position_id=? AND event='open' AND entry_commission_usdt IS NOT NULL",
+        (root,))), Decimal())
     funding = sum((Decimal(p) for (p,) in con.execute(
         "SELECT paid_usdt FROM funding_events WHERE mode=? AND symbol=? AND missed=0 AND ts_ms>=?",
         (mode, symbol, root_ts))), Decimal())
     return {"root_id": root, "opened_ms": int(root_ts), "direction": direction, "qty": str(state.remaining_qty),
-            "entry_price": entry_price, "leverage": leverage, "sl": sl, "tp": tp, "funding_paid": str(funding)}
+            "entry_price": entry_price, "leverage": leverage, "sl": sl, "tp": tp, "funding_paid": str(funding),
+            "entry_commission": str(commission)}
 
 
 def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> RestoreDecision:
@@ -104,9 +111,8 @@ def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> 
             diffs.append(f"{k} 스냅샷 {snap.get(k)} ≠ DB {db[k]}")
     if not isinstance(snap.get("next_funding_ms"), int):
         diffs.append("스냅샷 next_funding_ms 없음")
-    for k in ("liq_price_est", "entry_commission"):
-        if _dec(snap.get(k)) is None:
-            diffs.append(f"스냅샷 {k} 해석 불가")
+    if _dec(snap.get("liq_price_est")) is None:
+        diffs.append("스냅샷 liq_price_est 해석 불가")
     if diffs:
         return RestoreDecision("mismatch", f"root {db['root_id']} · {snap_note} · " + " · ".join(diffs), position=snap,
                                db=db, snapshot_id=snap_id)
@@ -122,11 +128,19 @@ def apply_restore(rt: BotRuntime, decision: RestoreDecision, ts_ms: int) -> list
                "snapshot_position": decision.position}
     if decision.action == "restore":
         assert decision.position is not None
-        rt.handle_events(rt.engine.restore_position(decision.position, ts_ms=ts_ms, detail=decision.detail), ts_ms)
+        try:
+            ev = rt.engine.restore_position(decision.position, ts_ms=ts_ms, detail=decision.detail)
+        except (RulesError, ValueError, ArithmeticError, KeyError, TypeError, EntryRefused) as e:
+            decision = RestoreDecision("mismatch", f"{decision.detail} · 복원 실패 {type(e).__name__}: {e}",
+                                       position=decision.position, db=decision.db, snapshot_id=decision.snapshot_id)
+            return apply_restore(rt, decision, ts_ms)
+        rt.handle_events(ev, ts_ms)
         rt.record_ops("RestartRestore", decision.detail, ts_ms, payload)
         p = decision.position
+        restored = next(e for e in ev if isinstance(e, PositionRestored))
+        liq = restored.state["liq_price_est_recomputed"]
         return [f"♻️ 재기동: 포지션 복원 {p['direction']} {p['qty']} @ {p['entry_price']} · {p['leverage']}x · SL {p['sl']}"
-                f" · DB와 마지막 엔진 스냅샷 일치({decision.detail})"]
+                f" · DB와 마지막 엔진 스냅샷 일치({decision.detail}) · 추정 청산가 재계산 {p.get('liq_price_est')} → {liq}"]
     if decision.db is not None:
         d = decision.db
         rt.handle_events([PositionAbandoned(ts_ms, Direction(d["direction"]), Decimal(d["qty"]), Decimal(d["entry_price"]),

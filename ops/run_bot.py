@@ -26,6 +26,7 @@ import contextlib
 import fcntl
 import json
 import logging
+import re
 import signal
 import sqlite3
 import sys
@@ -180,11 +181,33 @@ class RulesLoad:
     fallback_reason: str | None                    # None = 런타임 조회 성공
 
 
-def _redact(text: str, secrets_: list[str]) -> str:
-    for s in secrets_:
+_URL_QUERY = re.compile(r"(https?://[^\s?'\"]+)\?[^\s'\"]*")
+_APIKEY_HEADER = re.compile(r"(?i)['\"]?x-mbx-apikey['\"]?\s*[:=]\s*['\"]?[^'\"\s,}]*['\"]?")
+_SIGNED_PARAM = re.compile(r"(?i)\b(signature|timestamp|recvwindow)=[^&\s'\"]*&?")
+
+
+def safe_error(e: BaseException, *, secrets: list[str]) -> str:
+    """사람에게 보이는 오류 문구(알림·상태 파일·stderr) — 서명 요청 재료를 구조적으로 지운다(Codex L8b #3):
+    URL 쿼리 전체 · API 키 헤더 · signature/timestamp/recvWindow 파라미터 · 키·시크릿 값 그 자체. 300자로 자른다."""
+    text = f"{type(e).__name__}: {e}"
+    text = _URL_QUERY.sub(r"\1", text)
+    text = _APIKEY_HEADER.sub("<apikey-header>", text)
+    text = _SIGNED_PARAM.sub("", text)
+    for s in secrets:
         if s:
             text = text.replace(s, "<redacted>")
-    return text
+    return text[:300]
+
+
+def signed_client_from_keys(key: str, secret: str, *, client_cls: Any = None) -> Any:
+    """키를 실은 클라이언트의 **첫 요청이 권한 조회**가 되게 만든다(Codex L8b #4): 시각 오프셋은 키 없는 클라이언트로 받아 옮긴다."""
+    if client_cls is None:
+        from exchange.ccxt_rest import CcxtRestClient
+        client_cls = CcxtRestClient
+    offset = client_cls().sync_time()
+    inner = client_cls(api_key=key, secret=secret)
+    inner.ex.options["timeDifference"] = offset
+    return ReadOnlyClient(inner)                                         # 키가 있어도 POST 구조적 불가
 
 
 def _snapshot_fetches(snapshot_dir: Path, symbol: str) -> list[RawFetch]:
@@ -199,16 +222,14 @@ def _snapshot_fetches(snapshot_dir: Path, symbol: str) -> list[RawFetch]:
 def load_rules(cfg: RunConfig, *, env: Mapping[str, str], public_client: Any, signed_client: Any) -> RulesLoad:
     """런타임 조회(읽기 전용 키) → 실패하면 스냅샷 fallback. `NotReadOnlyKey`는 삼키지 않는다(호출자가 기동 거부)."""
     key, secret = env.get(KEY_ENV, ""), env.get(SECRET_ENV, "")
+    hide = [key, secret]
     reason: str | None = None
     if signed_client is None:
         if key and secret:
             try:
-                from exchange.ccxt_rest import CcxtRestClient
-                inner = CcxtRestClient(api_key=key, secret=secret)
-                inner.sync_time()
-                signed_client = ReadOnlyClient(inner)                    # 키가 있어도 POST 구조적 불가
+                signed_client = signed_client_from_keys(key, secret)
             except Exception as e:  # noqa: BLE001 — 준비 실패는 fallback 사유
-                reason = f"키 클라이언트 준비 실패 {type(e).__name__}: {e}"
+                reason = f"키 클라이언트 준비 실패 {safe_error(e, secrets=hide)}"
         else:
             reason = f"{KEY_ENV}/{SECRET_ENV} 없음"
     if signed_client is not None:
@@ -220,9 +241,8 @@ def load_rules(cfg: RunConfig, *, env: Mapping[str, str], public_client: Any, si
         except NotReadOnlyKey:
             raise
         except Exception as e:  # noqa: BLE001 — 조회 실패는 fallback + 진입 차단
-            reason = f"런타임 조회 실패 {type(e).__name__}: {e}"
+            reason = f"런타임 조회 실패 {safe_error(e, secrets=hide)}"
     assert reason is not None
-    reason = _redact(reason, [key, secret])
     try:
         rules, fetches, sources = load_rules_public_plus_snapshot(public_client, cfg.snapshot_dir, cfg.symbol)
         return RulesLoad(rules, fetches, sources, RULES_SOURCE_FALLBACK, reason)
@@ -231,7 +251,7 @@ def load_rules(cfg: RunConfig, *, env: Mapping[str, str], public_client: Any, si
         rules = rules_from_snapshots({f.endpoint: {"_meta": {"captured_at_utc": f.fetched_at_utc}, "response": f.payload}
                                       for f in fetches}, cfg.symbol)
         return RulesLoad(rules, fetches, [f"{f.endpoint}=snapshot" for f in fetches], RULES_SOURCE_SNAPSHOT_ONLY,
-                         f"{reason} · 공개 GET도 실패 {type(e).__name__}: {e}")
+                         f"{reason} · 공개 GET도 실패 {safe_error(e, secrets=hide)}")
 
 
 def last_engine_wallet(con: sqlite3.Connection, mode: Mode) -> Decimal | None:
@@ -307,7 +327,7 @@ async def _run_locked(cfg: RunConfig, *, env: Mapping[str, str], owners: frozens
         con.close()
         return EXIT_CONFIG
     except Exception as e:  # noqa: BLE001 — 규칙 없이는 기동하지 않는다
-        msg = _redact(f"{type(e).__name__}: {e}", [env.get(KEY_ENV, ""), env.get(SECRET_ENV, "")])
+        msg = safe_error(e, secrets=[env.get(KEY_ENV, ""), env.get(SECRET_ENV, "")])
         print(f"런타임 규칙 로드 실패: {msg}", file=sys.stderr)
         con.close()
         return EXIT_CONFIG

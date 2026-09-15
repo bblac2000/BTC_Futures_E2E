@@ -26,8 +26,6 @@ from paper.sender import PaperSender
 from paper.types import FundingMissed, PositionRestored
 from safety import config as SC
 from safety.gate import SafetyGate
-from safety.killswitch import KillSwitch
-from safety.reconcile import ReconcileGuard
 from safety.stale import StaleDataGuard
 from sizing.config import SizingLimits
 from tests.test_ops_runtime import STREAMS, Clock, attach_bot, feed, texts, tick
@@ -43,7 +41,7 @@ def build_file(rules, db: Path, *, t0: int, wallet: str = "1000"):
     M.migrate(con)
     counter = DeliveryCounter(STREAMS, start_ms=t0)
     engine = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D(wallet), limits=SizingLimits())
-    gate = SafetyGate(KillSwitch(SC.REGISTERED_KILL_SWITCH, wallet=D(wallet)), StaleDataGuard(counter), ReconcileGuard())
+    gate = SafetyGate.load(con, SC.REGISTERED_KILL_SWITCH, StaleDataGuard(counter), mode="paper", wallet=D(wallet))
     clock = Clock(t0)
     rt = BotRuntime(engine=engine, gate=gate, con=con, symbol="BTCUSDT", clock_ms=clock)
     return rt, counter, clock
@@ -140,7 +138,7 @@ def _tamper_snapshot(db: Path, **changes) -> None:
 
 
 @pytest.mark.parametrize("change", [
-    {"qty": "0.001"}, {"entry_price": "59999"}, {"leverage": 1}, {"sl": "1"}, {"tp": "99999"},
+    {"entry_commission": "0.01"}, {"qty": "0.001"}, {"entry_price": "59999"}, {"leverage": 1}, {"sl": "1"}, {"tp": "99999"},
     {"funding_paid": "0.5"}, {"opened_ms": 1}, {"direction": "SHORT"}, {"next_funding_ms": None},
 ])
 def test_any_disagreement_starts_flat_pauses_entries_alerts_and_closes_the_orphan_row(rules, tmp_path, change):
@@ -215,3 +213,40 @@ def test_restore_mark_missing_stale_alert_is_sent_once_not_every_second(rules, t
         rt.safety_tick(clock.t)
     assert len([m for m in texts(rt) if "받은 mark가 없다" in m]) == 1
     assert rt.engine.position is not None
+
+
+def test_liquidation_estimate_is_recomputed_from_current_rules_not_taken_from_the_snapshot(rules, tmp_path):
+    """Codex L8b #2: 스냅샷의 추정 청산가는 믿지 않는다 — 복원 때 진입가·수량·레버리지·누적 펀딩·현재 규칙으로 다시 계산."""
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    con = sqlite3.connect(db)
+    (true_liq,) = con.execute("SELECT liq_price_est FROM positions WHERE event='open'").fetchone()
+    con.close()
+    _tamper_snapshot(db, liq_price_est="1")
+    rt, _c, _k, decision, msgs = restart(rules, db, t0=t + 5000)
+    assert decision.action == "restore" and rt.engine.position is not None
+    assert rt.engine.position.liq_price_est == D(true_liq), "펀딩 0이면 진입 때 추정과 같다"
+    assert any("추정 청산가 재계산" in m for m in msgs)
+
+
+def test_a_funding_missed_engine_block_survives_a_second_restart_until_a_human_start(rules, tmp_path):
+    """Codex L8b #1: 엔진 차단 사유는 메모리에만 있으면 두 번째 재기동이 지운다 → safety_state에 함께 저장·복원."""
+    db = tmp_path / "bot.sqlite"
+    open_then_crash(rules, db)
+    t = DAY0 + 9 * H                                                 # 08:00 경계를 내려가 있는 동안 지남
+    rt, counter, clock, decision, _m = restart(rules, db, t0=t)
+    assert decision.action == "restore"
+    feed(rt, counter, clock, t, t + 61_000)
+    blocked = [b for b in rt.entry_blockers() if b.startswith("engine:")]
+    assert blocked and "펀딩" in blocked[0]
+    rt.con.close()                                                   # 두 번째 SIGKILL
+    rt2, counter2, clock2, decision2, _m2 = restart(rules, db, t0=t + 70_000)
+    assert decision2.action == "restore"
+    feed(rt2, counter2, clock2, t + 70_000, t + 131_000)
+    assert [b for b in rt2.entry_blockers() if b.startswith("engine:")] == blocked, "차단이 재기동을 넘어 남는다"
+    rt2.resume("telegram:111")
+    assert rt2.entry_blockers() == []
+    rt2.con.close()
+    rt3, counter3, clock3, _d3, _m3 = restart(rules, db, t0=t + 140_000)
+    feed(rt3, counter3, clock3, t + 140_000, t + 201_000)
+    assert rt3.entry_blockers() == [], "사람의 /start 해제도 저장된다"

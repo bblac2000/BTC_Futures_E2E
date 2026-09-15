@@ -66,13 +66,17 @@ def injecting_factory(*, inject: bool, close_after_s: float | None):
     return factory
 
 
+def child_env(env: dict[str, str] | os._Environ, *, use_key: bool) -> dict[str, str]:
+    """자식 프로세스·러너에 넘기는 환경 — `--use-binance-key`가 없으면 바이낸스 키를 지운다(Codex L8b #5)."""
+    return dict(env) if use_key else {k: v for k, v in env.items() if k not in (RB.KEY_ENV, RB.SECRET_ENV)}
+
+
 def child(a: argparse.Namespace) -> int:
     var = Path(a.var_dir).resolve()
     cfg = RB.parse_args(["--mode", "paper", "--var-dir", str(var), "--db", str(var / "bot.sqlite"), "--backfill-minutes", "30"]
                         + (["--duration-s", str(a.duration_s)] if a.duration_s else []))
-    env = RB.load_env_file(ROOT / ".env") | dict(os.environ)
-    if not a.use_binance_key:
-        env = {k: v for k, v in env.items() if k not in (RB.KEY_ENV, RB.SECRET_ENV)}
+    env = child_env(child_env(RB.load_env_file(ROOT / ".env"), use_key=a.use_binance_key) | dict(os.environ),
+                    use_key=a.use_binance_key)
     factory = injecting_factory(inject=a.child == "run1", close_after_s=a.close_after_s)
     return asyncio.run(RB.run(cfg, env=env, feed_factory=factory))
 
@@ -107,7 +111,8 @@ def parent(a: argparse.Namespace) -> int:
         (["--use-binance-key"] if a.use_binance_key else [])
     report_key = "binance key passed to runner (read-only check first)" if a.use_binance_key else "no binance key (fallback)"
     report: dict[str, Any] = {"var_dir": str(var), "rules_key": report_key}
-    p1 = subprocess.Popen(me + ["--child", "run1"], cwd=ROOT)
+    cenv = child_env(os.environ, use_key=a.use_binance_key)
+    p1 = subprocess.Popen(me + ["--child", "run1"], cwd=ROOT, env=cenv)
     t0 = time.time()
     opened_at = None
     while time.time() - t0 < a.run1_max_s:
@@ -134,7 +139,8 @@ def parent(a: argparse.Namespace) -> int:
                       "status_before_kill": {k: before.get(k) for k in ("position", "blockers", "wallet", "counts")} if before else None,
                       "db_after_kill": _db_summary(var)}
     time.sleep(a.gap_s)
-    p2 = subprocess.Popen(me + ["--child", "run2", "--duration-s", str(a.run2_s), "--close-after-s", str(a.run2_s - 60)], cwd=ROOT)
+    p2 = subprocess.Popen(me + ["--child", "run2", "--duration-s", str(a.run2_s), "--close-after-s", str(a.run2_s - 60)], cwd=ROOT,
+                          env=cenv)
     restored_view = None
     t1 = time.time()
     while p2.poll() is None:

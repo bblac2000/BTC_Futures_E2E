@@ -11,6 +11,7 @@ import threading
 import time
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -462,3 +463,71 @@ def test_breadcrumb_replay_does_not_duplicate_events_already_in_the_db(tmp_path)
     assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
     assert con.execute("SELECT count(*) FROM engine_events WHERE kind='KillSwitchTripped'").fetchone()[0] == 1
     assert not crumb.exists()
+
+
+def test_error_text_shown_to_humans_never_carries_signed_request_material():
+    """Codex L8b #3: ccxt 네트워크 예외는 전체 URL(쿼리의 signature·timestamp·recvWindow)을 담는다."""
+    e = RuntimeError("binanceusdm GET https://fapi.binance.com/fapi/v1/leverageBracket?symbol=BTCUSDT&timestamp=1789&"
+                     "recvWindow=5000&signature=abcdef0123 headers {'X-MBX-APIKEY': 'dummy-key-AAAA'} dummy-secret-BBBB")
+    text = RB.safe_error(e, secrets=list(KEYS.values()))
+    for bad in ("signature", "abcdef0123", "timestamp=", "recvWindow", "dummy-key-AAAA", "dummy-secret-BBBB", "?symbol"):
+        assert bad not in text, bad
+    assert text.startswith("RuntimeError") and "fapi.binance.com/fapi/v1/leverageBracket" in text
+
+
+def test_signed_client_checks_permissions_before_any_other_keyed_request():
+    """Codex L8b #4: 키를 실은 클라이언트의 첫 요청은 apiRestrictions — 시각 동기화는 키 없는 클라이언트로."""
+    log: list[tuple] = []
+
+    class FakeCcxt:
+        def __init__(self, *, api_key=None, secret=None, **kw):
+            self.keyed = api_key is not None
+            self.ex = SimpleNamespace(options={})
+            log.append(("init", self.keyed))
+
+        def sync_time(self):
+            log.append(("sync_time", self.keyed))
+            self.ex.options["timeDifference"] = 7
+            return 7
+
+        def get(self, path, params=None, *, signed=False):
+            log.append(("get", self.keyed, path))
+            if path == "/sapi/v1/account/apiRestrictions":
+                return Response(200, READ_ONLY | {"enableFutures": True})
+            raise AssertionError(f"권한 확인 전 요청 {path}")
+
+    import pytest as _pytest
+    with _pytest.raises(RB.NotReadOnlyKey):
+        client = RB.signed_client_from_keys(KEYS["BINANCE_API_KEY"], KEYS["BINANCE_API_SECRET"], client_cls=FakeCcxt)
+        RB.check_permissions(client)
+    keyed = [c for c in log if c[0] != "init" and c[1]]
+    assert keyed == [("get", True, "/sapi/v1/account/apiRestrictions")]
+    assert ("sync_time", False) in log
+
+
+def test_signed_lookup_transport_error_alert_and_status_are_sanitised(tmp_path, capsys):
+    from exchange.errors import TransportError
+
+    class Leaky(FakeSigned):
+        def get(self, path, params=None, *, signed=False):
+            if path == "/fapi/v1/leverageBracket":
+                raise TransportError(f"GET {path}: RequestTimeout: binanceusdm GET https://fapi.binance.com{path}?"
+                                     f"timestamp=1&recvWindow=5000&signature=deadbeef {KEYS['BINANCE_API_KEY']}")
+            return super().get(path, params, signed=signed)
+
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    tg = FakeTelegram()
+    assert run(cfg, clock=clock, tg=tg, seconds=5, signed=Leaky()) == 0
+    blob = cfg.status_path.read_text() + " ".join(tg.texts()) + "".join(capsys.readouterr())
+    assert "rules_from_snapshot" in blob
+    for bad in ("deadbeef", "signature", KEYS["BINANCE_API_KEY"]):
+        assert bad not in blob, bad
+
+
+def test_dryrun_harness_strips_binance_keys_from_child_environments_unless_asked():
+    import importlib
+    H = importlib.import_module("scripts.dryrun_restart_restore")
+    base = {"PATH": "/bin", **KEYS, "TELEGRAM_BOT_TOKEN": "t"}
+    assert set(H.child_env(base, use_key=False)) == {"PATH", "TELEGRAM_BOT_TOKEN"}
+    assert H.child_env(base, use_key=True) == base

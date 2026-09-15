@@ -223,10 +223,16 @@ class Engine:
                            None if state["tp"] is None else Decimal(state["tp"]), Decimal(state["liq_price_est"]),
                            Decimal(state["entry_commission"]), int(state["opened_ms"]), None,
                            Decimal(state["funding_paid"]), bool(state["liq_alerted"]))
+        #  Codex L8b #2: 스냅샷의 추정 청산가는 쓰지 않는다 — 현재 규칙으로 다시 계산(`_refresh_liquidation`과 같은 식).
+        #  계산할 수 없으면 복원하지 않는다(RulesError를 호출자에게).
+        n = pos.qty * pos.entry_price
+        pos.liq_price_est = liquidation_estimate(pos.direction, pos.entry_price, n, pos.leverage, self.rules,
+                                                 taker=self.rules.commission.taker + pos.funding_paid / n).price
         self.position = pos
         self._last_tick = None
         self._restored_next_funding_ms = nf
-        return [PositionRestored(ts_ms, pos.direction, pos.qty, pos.entry_price, detail, dict(state))]
+        return [PositionRestored(ts_ms, pos.direction, pos.qty, pos.entry_price, detail,
+                                 dict(state) | {"liq_price_est_recomputed": str(pos.liq_price_est)})]
 
     def sync_wallet(self, ts_ms: int, wallet: Decimal, *, source: str, detail: str) -> WalletResynced:
         if not isinstance(wallet, Decimal):

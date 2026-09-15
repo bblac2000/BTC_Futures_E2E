@@ -24,6 +24,9 @@ class SafetyGate:
     def __init__(self, kill_switch: KillSwitch, stale: StaleDataGuard, reconcile: ReconcileGuard):
         self.kill_switch, self.stale, self.reconcile = kill_switch, stale, reconcile
         self.paused_by: str | None = None
+        #  엔진 진입 차단 사유(펀딩 경계 누락·주문 결과 불명 등)의 저장본 — 런타임이 저장 전에 채우고 기동 때 엔진에 되돌린다
+        #  (Codex L8b #1: 메모리에만 있으면 재기동이 차단을 지운다). 해제는 사람의 /start(엔진 clear_blocks → 다음 저장).
+        self.engine_blocks: list[str] = []
 
     def pause(self, actor: str) -> str:
         if not actor:
@@ -81,7 +84,7 @@ class SafetyGate:
 
     def to_state(self) -> dict:
         return {"paused_by": self.paused_by, "kill_switch": self.kill_switch.to_state(),
-                "reconcile": self.reconcile.to_state()}
+                "reconcile": self.reconcile.to_state(), "engine_blocks": list(self.engine_blocks)}
 
     def save(self, con: sqlite3.Connection, *, ts_ms: int, mode: str) -> int:
         return R.save_safety_state(con, STATE_NAME, self.to_state(), ts_ms=ts_ms, mode=mode)
@@ -100,4 +103,5 @@ class SafetyGate:
         rec.restore(state.get("reconcile") or {})
         gate = cls(KillSwitch.from_state(limits, state["kill_switch"], wallet=wallet), stale, rec)
         gate.paused_by = state.get("paused_by")
+        gate.engine_blocks = [str(r) for r in state.get("engine_blocks") or []]
         return gate

@@ -113,6 +113,9 @@ class BotRuntime:
         if (engine.mode is Mode.LIVE) != (exchange is not None):
             raise ValueError("LIVE는 거래소 읽기(ExchangeReader)가 필요하고 PAPER는 받지 않는다(레지스트리 #6)")
         self.engine, self.gate, self.con, self.symbol = engine, gate, con, symbol
+        for r in gate.engine_blocks:                               # 저장된 엔진 차단 사유를 되돌린다(Codex L8b #1)
+            if r not in engine.entries_blocked:
+                engine.entries_blocked.append(r)
         self.mode = engine.mode
         self.clock_ms, self.exchange, self.rate_guard, self.status_path = clock_ms, exchange, rate_guard, status_path
         self.bot: CommandBot | None = None
@@ -352,6 +355,8 @@ class BotRuntime:
         self._record(events, tp, ts_ms)
         for e in events:
             self._alert_event(e, alert_exits=alert_exits)
+        if any(isinstance(e, EntriesBlocked) for e in events):
+            self.save_state(ts_ms)                                 # 엔진 차단도 재기동을 넘어 남긴다(Codex L8b #1)
         if any(isinstance(e, SNAPSHOT_EVENTS) for e in events):
             self.snapshot(ts_ms, type(next(e for e in events if isinstance(e, SNAPSHOT_EVENTS))).__name__)
             if self.mode is Mode.LIVE and any(isinstance(e, EntryFilled | PositionClosed | PositionReduced) for e in events):
@@ -473,6 +478,7 @@ class BotRuntime:
             logger.error("거래소 스냅샷 기록 실패: %s", ex)
 
     def save_state(self, ts_ms: int) -> None:
+        self.gate.engine_blocks = list(self.engine.entries_blocked)
         state = json.dumps(self.gate.to_state(), sort_keys=True)
         if state == self._saved_state:
             self.state_save_failed = False
@@ -495,6 +501,7 @@ class BotRuntime:
         """DB 밖 fail-closed 기록 — 원자적 · 실패하면 로그만(디스크까지 죽었으면 할 수 있는 게 없다)."""
         if self.breadcrumb_path is None:
             return
+        self.gate.engine_blocks = list(self.engine.entries_blocked)
         body = {"ts_ms": ts_ms, "base_state_id": self.saved_state_id, "safety_gate": self.gate.to_state(),
                 "ops": [{"kind": k, "detail": d, "ts_ms": t, "payload": p, "op_id": i} for k, d, t, p, i in self.unrecorded_ops]}
         tmp = self.breadcrumb_path.with_suffix(".tmp")

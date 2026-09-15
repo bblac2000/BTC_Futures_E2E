@@ -1382,3 +1382,90 @@ Result: exit code `0`, full suite passed.
 | shard | update 5파일 666행 · close 2파일 4행 · markprice 5파일 250행 | update 5파일 527행 · close 3파일 4행 · markprice 5파일 249행 |
 | 텔레그램 | 발송 2 · **배달 2**(message_id 응답) · 폴 오류 0 · send_errors 0 | 발송 2 · **배달 2** · 폴 오류 0 · send_errors 0 |
 | 참고 | 첫 백그라운드 실행은 환경(메모리 경고)이 SIGTERM으로 끊었고 러너가 38초 만에 clean 종료·정지 알림까지 했다(정상 종료 경로 실측) — 그 데이터는 버리고 전경으로 재실행 | — |
+
+## 2026-09-16 — 사용자 결정 #14 · (a) 페이퍼 재기동 복원 · (ii) 런타임 규칙 · Codex 배치
+
+**사용자 지시(2026-09-16)**: layer 8 수용 · 11커밋 푸시(`0f2e0e8..db13657` 완료) · #12 정정(markprice만 청산) → 대체 행 ·
+(a) DB 열린 행 + 마지막 엔진 스냅샷 일치 시에만 복원, 불일치면 flat·진입 차단·알림 · (ii) 읽기 전용 키로 런타임 조회,
+스냅샷은 fixture + 진입 차단 fallback(`rules_from_snapshot`) · health 값 승인(sync >3h · prune >8d · 텔레그램 폴 10분 · 디스크 <5GB) ·
+배포는 E2E Restart B(09-17 00:12 UTC) 24h 게이트 뒤(earliest 09-18) · 라이브 호스트 변경 하루 1건.
+
+**정정(2026-09-16, 이전 기록 수정 없이 덧붙임)**: 위 layer 8 항목의 해석 기록 "#12 stale data = 세 스트림 전부"는 사용자가
+**markprice만**으로 정정 → 레지스트리 #14(`a899a1a`).
+
+**구현**: `a899a1a` #14 · `1608073` (a)·(ii)·드라이런 하네스 · Codex 1차 반영 커밋(아래).
+해석 기록(보고 대상):
+- 불일치 시 DB의 열린 행은 `restart_unrestored` close 행(손익 없음)으로 닫는다 — 닫지 않으면 대사 sticky가 매 봉 다시 걸려 /start로 풀 수 없다. 킬스위치는 세지 않는다(거래 결과 아님).
+- 불일치 차단은 `SafetyGate.pause("system:restart_position_mismatch")`(safety_state에 저장 · /start로 해제).
+- 키 권한 조회가 **전송 오류**로 실패하면 기동 거부가 아니라 fallback + 진입 차단(권한이 확인된 거래 권한 키만 종료 코드 4).
+- 런타임 규칙은 기동 때만 읽는다(주기 재조회 없음 — TODO 5f).
+
+### Codex 검토: #14 + (a) + (ii) + 하네스 (`db13657..1608073`, read-only · `task-mu33w506-t6zb9q`)
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 1 HIGH | 복원 뒤 FundingMissed 엔진 차단이 메모리에만 있어 두 번째 재기동에서 사라진다 | ✅ | 엔진 차단 사유 전체를 `safety_state.engine_blocks`로 저장·기동 때 엔진에 복원 · EntriesBlocked마다 저장 · /start 해제도 저장 |
+| 2 HIGH | 복원 대조가 `entry_commission`·`liq_price_est`를 검증하지 않는다 | ✅ | 진입 수수료 = open 행 합과 대조 · 추정 청산가는 복원 때 현재 규칙으로 재계산(계산 불가 → 불일치) · 알림에 재계산 값 |
+| 3 MEDIUM | fallback 사유에 ccxt 예외의 서명 URL(signature·timestamp·recvWindow)이 남아 알림·상태 파일로 간다 | ✅ | `safe_error`: URL 쿼리·API 키 헤더·서명 파라미터·키 값 구조적 제거 · 300자 |
+| 4 MEDIUM | 키를 실은 클라이언트의 첫 요청이 `sync_time`(권한 조회 전) | ✅ | 시각 오프셋은 키 없는 클라이언트로 받아 옮김 → 키 클라이언트의 첫 요청 = apiRestrictions |
+| 5 LOW | 하네스가 자식 프로세스 환경에서 키를 지우지 않는다 | ✅ | `child_env`로 Popen·러너 환경 모두 정리 |
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+Read-only review complete. I did not modify files, did not use the network, and did not read `.env`. Tests passed: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q` with only read-only cache warnings.
+
+1. [HIGH] FundingMissed entry block is lost after a second restart
+
+Evidence: [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:151), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:154), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:292), [safety/gate.py](/home/cms/project/BTC_Futures_E2E/safety/gate.py:82), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:203)
+
+Scenario: restore crosses a funding boundary, first tick emits `FundingMissed` and adds an engine block. That block is only `Engine.entries_blocked`; it is not in `safety_state`, not in `position_state`, and not restored from `engine_events`/`funding_events`. After any later snapshot advances `next_funding_ms`, a second restart can restore the position with no engine block and allow entries even though funding was never settled.
+
+Suggested fix: persist unresolved engine blocks, or specifically treat any open-position `funding_events.missed=1` after the root open as a restored engine/safety blocker until human `/start`.
+
+2. [HIGH] Restore agreement does not verify restored risk fields
+
+Evidence: [ops/restore.py](/home/cms/project/BTC_Futures_E2E/ops/restore.py:101), [ops/restore.py](/home/cms/project/BTC_Futures_E2E/ops/restore.py:105), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:208), [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:221), [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:224)
+
+Scenario: DB and snapshot can agree on direction/qty/entry/leverage/SL/TP/opened/funding, while the snapshot carries a stale or corrupted `liq_price_est` or `entry_commission`. The restore code only checks those fields are parseable, then the engine adopts them. At 50–100x this can make paper liquidation ordering and liquidation-loss accounting wrong after restart.
+
+Suggested fix: include `entry_commission_usdt` in the DB comparison, and either recompute `liq_price_est` from entry + funding + current rules during restore or record/compare an explicit liquidation-estimate state row.
+
+3. [MEDIUM] Signed-rule fallback can leak signed request material
+
+Evidence: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:183), [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:222), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:530), [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:163), `.venv/lib/python3.12/site-packages/ccxt/base/exchange.py:649`
+
+Scenario: `_redact` only replaces literal key/secret values. ccxt network exceptions include the full request URL; signed GET URLs include `timestamp`, `recvWindow`, and `signature`. That fallback reason is put into alerts and `status.json`.
+
+Suggested fix: sanitize exception text structurally: strip query params such as `signature`, `timestamp`, `recvWindow`, redact API headers, and avoid storing raw ccxt exception strings in user-visible status/alerts.
+
+4. [MEDIUM] Permission check is not the first use of the key-configured client
+
+Evidence: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:206), [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:208), [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:216), [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:100)
+
+Scenario: with `BINANCE_API_KEY/SECRET`, the runner constructs `CcxtRestClient` and calls `inner.sync_time()` before `check_permissions`. That is a GET, not a POST, but it violates the stated “apiRestrictions check before refusal” ordering for a non-read-only key.
+
+Suggested fix: move `sync_time()` after `check_permissions(ReadOnlyClient(inner))`, or perform time sync through a no-key public client before constructing the signed client.
+
+5. [LOW] Dry-run harness does not actually keep keys out of child processes by default
+
+Evidence: [scripts/dryrun_restart_restore.py](/home/cms/project/BTC_Futures_E2E/scripts/dryrun_restart_restore.py:73), [scripts/dryrun_restart_restore.py](/home/cms/project/BTC_Futures_E2E/scripts/dryrun_restart_restore.py:74), [scripts/dryrun_restart_restore.py](/home/cms/project/BTC_Futures_E2E/scripts/dryrun_restart_restore.py:110), [scripts/dryrun_restart_restore.py](/home/cms/project/BTC_Futures_E2E/scripts/dryrun_restart_restore.py:137)
+
+Scenario: parent `Popen` inherits `os.environ`, and the child reads `.env` before stripping Binance keys for `RB.run`. The runner still receives a stripped env unless `--use-binance-key`, and systemd does not call this script, but the docstring guarantee “only passes keys with `--use-binance-key`” is not true at process-env level.
+
+Suggested fix: pass an explicit sanitized `env=` to both child `Popen` calls unless `--use-binance-key`, and avoid loading Binance keys from `.env` in child mode when the flag is absent.
+
+Area verdicts:
+
+A. MERGE. Stale close behavior matches registry #14.
+
+B. FIX FIRST. Findings 1 and 2 affect restart safety/accounting.
+
+C. FIX FIRST. Findings 3 and 4 should be fixed before using real keys.
+
+D. FIX FIRST. Production/systemd reachability and entry gate look OK, but key stripping claim needs correction before running the harness with real credentials.
+
+Codex session ID: 01a0a6b1-1364-7c32-aaac-21e78d60ae19
+Resume in Codex: codex resume 01a0a6b1-1364-7c32-aaac-21e78d60ae19
+```
+</details>
+
