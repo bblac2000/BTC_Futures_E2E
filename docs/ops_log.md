@@ -1550,3 +1550,36 @@ Codex session ID: 01a0a6be-fc35-72e3-a1c5-179505e7ae34
 Resume in Codex: codex resume 01a0a6be-fc35-72e3-a1c5-179505e7ae34
 ```
 </details>
+
+### Codex 재검토 #3: 정규식 선형화 (`8a0799a..cd8a0d7`, read-only · `task-mu34l6ya-gc8o0g`)
+판정: 이전 MEDIUM **CLOSED** · 새 발견 없음 · **A·B·C·D 전부 MERGE**.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+None.
+
+Prior MEDIUM `_URL_QUERY` super-linear issue: **CLOSED**. Evidence: [_URL_QUERY](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:186) no longer lets `/` be both the start token and repeated path body for scheme-less paths, and `safe_error` now caps scan input at 2000 chars after literal secret replacement and before regex passes: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:197). The regression test is present at [tests/test_ops_run_bot.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_run_bot.py:550).
+
+Local probes, no network:
+`/` repeated 10k/20k/40k/80k took ~0.00011s / 0.00009s / 0.00011s / 0.00023s. The committed pathological cases all stayed sub-millisecond in my run.
+
+Cap/leak checks:
+A full configured secret cannot be partially exposed by the 2000-char scan cap because exact secret replacement happens before that cap. A signed field visible in the returned 300 chars is inside the regex scan window and is redacted before the final return cap. Probe with separated `signature=` crossing the 300-char output boundary returned `<signed>` and no signature/value fragment.
+
+URL-query stripping still works:
+`https://host/path?timestamp=...&signature=...`, `/path?timestamp=...&signature=...`, and `/fapi/v1/leverageBracket?...` all kept the path and removed the query/signature material.
+
+Area verdicts:
+A stale #14: **MERGE**  
+B restart restore: **MERGE**  
+C rules source + error sanitization: **MERGE**  
+D dry-run harness: **MERGE**
+
+I did not modify files, read `.env`, use the network, or print real secrets. Worktree stayed clean.
+
+Codex session ID: 01a0a6c2-e7cf-7243-b4e5-a62bbec146fd
+Resume in Codex: codex resume 01a0a6c2-e7cf-7243-b4e5-a62bbec146fd
+```
+</details>
