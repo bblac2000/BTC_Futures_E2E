@@ -48,6 +48,7 @@ H = 3_600_000
 
 V1_TABLES = {"bars_1m", "features_base", "features_adv", "features_custom", "feature_definitions", "decisions",
              "orders", "positions", "funding_events", "account_snapshots", "runtime_rules", "engine_events"}
+V2_TABLES = {"safety_state"}
 
 
 @pytest.fixture
@@ -68,15 +69,15 @@ def columns(c, table) -> set[str]:
 
 # ── 마이그레이션 ─────────────────────────────────────────────────────────────
 def test_fresh_database_migrates_to_the_latest_version_with_every_section_5_table(con):
-    assert M.current_version(con) == MIGRATIONS[-1].version == 1
-    assert tables(con) == V1_TABLES | {"schema_version"}
-    (row,) = con.execute("SELECT version, name, sql_sha256 FROM schema_version").fetchall()
-    assert row[0] == 1 and row[2] == MIGRATIONS[0].sha256
+    assert M.current_version(con) == MIGRATIONS[-1].version == 2
+    assert tables(con) == V1_TABLES | V2_TABLES | {"schema_version"}
+    rows = con.execute("SELECT version, sql_sha256 FROM schema_version ORDER BY version").fetchall()
+    assert rows == [(m.version, m.sha256) for m in MIGRATIONS]
 
 
 def test_migrate_is_idempotent(con):
     assert M.migrate(con) == []
-    assert con.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == 1
+    assert con.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0] == len(MIGRATIONS)
 
 
 def test_steps_are_numbered_contiguously_from_one():
@@ -124,7 +125,8 @@ def test_legacy_runtime_rules_database_is_absorbed_with_rows_intact():
         M.migrate(c)                                                  # 호출자 작업을 대신 커밋하지 않는다
     c.commit()
     M.migrate(c)
-    assert M.current_version(c) == 1 and c.execute("SELECT load_id FROM runtime_rules").fetchall() == [("L",)]
+    assert M.current_version(c) == MIGRATIONS[-1].version
+    assert c.execute("SELECT load_id FROM runtime_rules").fetchall() == [("L",)]
 
 
 def test_store_goes_through_the_migration_tool_not_its_own_ddl():
@@ -139,12 +141,12 @@ def test_cli_status_reports_the_version(tmp_path, capsys):
     db = tmp_path / "bot.sqlite"
     assert M.main([str(db)]) == 0
     assert M.main([str(db), "--status"]) == 0
-    assert "version 1" in capsys.readouterr().out
+    assert f"version {MIGRATIONS[-1].version}" in capsys.readouterr().out
 
 
 # ── 스키마 규칙 ──────────────────────────────────────────────────────────────
 def test_every_table_has_a_mode_column_that_rejects_other_values(con):
-    for t in V1_TABLES - {"feature_definitions"}:
+    for t in (V1_TABLES | V2_TABLES) - {"feature_definitions"}:
         assert "mode" in columns(con, t), t
         sql = con.execute("SELECT sql FROM sqlite_master WHERE name=?", (t,)).fetchone()[0]
         assert "CHECK (mode IN ('paper','live'))" in sql, t
@@ -237,7 +239,7 @@ def test_liquidation_close_has_no_orders_and_an_orphan_close_is_recorded_not_dro
                         D("0"), D("0.1"), D("987.5"))
     R.record_events(con, [ev], mode="live", symbol="BTCUSDT")         # 채택 포지션처럼 open 행이 없다
     assert con.execute("SELECT event, reason, position_id, exit_price, direction, detail FROM positions").fetchall() == [
-        ("close", "liquidation", None, None, "SHORT", "open 행 없음(채택·기록 전 포지션)")]
+        ("close", "liquidation", None, None, "SHORT", R.ORPHAN_CLOSE)]
     assert con.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
 
 
@@ -364,3 +366,89 @@ def test_a_close_never_links_to_an_open_position_of_the_other_direction(con, rul
     R.record_events(con, [short_close], mode="paper", symbol="BTCUSDT")
     assert con.execute("SELECT position_id, detail FROM positions WHERE event='close'").fetchall() == [(None, R.ORPHAN_CLOSE)]
     assert R.open_position_id(con, mode="paper", symbol="BTCUSDT", direction=Direction.LONG) is not None
+
+
+def test_adopted_entry_open_row_carries_the_exchange_position_as_source_of_truth(con):
+    """사용자 결정(2026-09-15): 채택 포지션의 open 행 = reason 'adopted_from_exchange' · 채택 시점 positionRisk(수량·평균가·청산가·원문)."""
+    from dataclasses import replace
+
+    from paper.types import PositionRisk
+    pr = PositionRisk(D("0.033"), D("60000.5"), D("59700.1"), raw={"positionAmt": "0.033", "liquidationPrice": "59700.1"})
+    base = _entry_filled_event()
+    ev = replace(base, fills=(), adopted=pr, post_fill=replace(base.post_fill, qty=D("0.033"), entry_price=D("60000.5")))
+    R.record_events(con, [ev], mode="live", symbol="BTCUSDT")
+    (row,) = con.execute("SELECT event, reason, qty, entry_price, liq_price_exchange, detail, position_id, id"
+                         " FROM positions").fetchall()
+    assert row[:5] == ("open", "adopted_from_exchange", "0.033", "60000.5", "59700.1")
+    assert json.loads(row[5]) == {"positionRisk": {"liquidationPrice": "59700.1", "positionAmt": "0.033"}}
+    assert row[6] == row[7] and con.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+    close = PositionClosed(DAY0 + 5000, Direction.LONG, ExitReason.SL, D("0.033"), D("60000.5"), D("59800"), (), D("-6.6"),
+                           D("0"), D("0"), D("990"))
+    R.record_events(con, [close], mode="live", symbol="BTCUSDT")
+    assert con.execute("SELECT position_id FROM positions WHERE event='close'").fetchone()[0] == row[7]
+
+
+_CACHED: list = []
+
+
+def _entry_filled_event():
+    if not _CACHED:
+        from exchange.loader import rules_from_snapshots
+        from tests.conftest import SYMBOL, load_snapshot
+        snap = {n: load_snapshot(n) for n in ("exchangeInfo", "leverageBracket", "commissionRate", "fundingInfo",
+                                              "positionSideDual", "multiAssetsMargin")}
+        _, ev = run_engine(rules_from_snapshots(snap, SYMBOL))
+        _CACHED.append(next(x for x in ev if isinstance(x, EntryFilled)))
+    return _CACHED[0]
+
+
+# ── v2 (사용자 2026-09-15): 피처 인덱스 · 넓은 형식 내보내기 · safety_state ─────────────────────
+def test_v1_database_upgrades_to_v2_without_touching_v1_rows(monkeypatch):
+    c = sqlite3.connect(":memory:")
+    M.migrate(c, target=1)
+    c.execute("INSERT INTO engine_events(mode, symbol, ts_ms, kind) VALUES ('paper','BTCUSDT',1,'x')")
+    c.commit()
+    assert M.migrate(c) == [2] and c.execute("SELECT kind FROM engine_events").fetchall() == [("x",)]
+
+
+def test_feature_tables_have_the_bar_name_version_index(con):
+    """사용자: (bar_ts, name, params_version) 인덱스 — 이 스키마의 봉 시각 열 이름은 `bar_open_ms`."""
+    for t in ("features_base", "features_adv"):
+        idx = {r[1]: [c[2] for c in con.execute(f"PRAGMA index_info('{r[1]}')")]
+               for r in con.execute(f"PRAGMA index_list('{t}')")}
+        assert ["bar_open_ms", "name", "params_version"] in idx.values(), (t, idx)
+        plan = " ".join(r[3] for r in con.execute(
+            f"EXPLAIN QUERY PLAN SELECT value FROM {t} WHERE bar_open_ms=? AND name=? AND params_version=?", (1, "a", 1)))
+        assert "INDEX" in plan, plan
+
+
+def test_wide_export_round_trips_a_bars_feature_set(con):
+    R.register_feature(con, "atr_1m", 1, "features_base", {"period": 14})
+    R.register_feature(con, "atr_1m", 2, "features_base", {"period": 20})
+    R.register_feature(con, "rsi_1m", 1, "features_base", {"period": 14})
+    R.register_feature(con, "regime", 3, "features_adv", {"k": 2})
+    bars = {DAY0: {("atr_1m", 1): D("35.2"), ("atr_1m", 2): D("33.9"), ("rsi_1m", 1): D("51.25")},
+            DAY0 + 60_000: {("atr_1m", 1): D("35.4"), ("rsi_1m", 1): None}}
+    for t, vals in bars.items():
+        R.record_features(con, "features_base", t, vals, mode="paper", symbol="BTCUSDT")
+    R.record_features(con, "features_adv", DAY0, {("regime", 3): D("2")}, mode="paper", symbol="BTCUSDT")
+    R.record_features(con, "features_base", DAY0, {("atr_1m", 1): D("99")}, mode="live", symbol="BTCUSDT")   # 다른 모드
+    wide = R.wide_features(con, "features_base", DAY0, DAY0 + 120_000, mode="paper", symbol="BTCUSDT")
+    assert [w["bar_open_ms"] for w in wide] == [DAY0, DAY0 + 60_000]
+    back = {w["bar_open_ms"]: {R.parse_feature_key(k): v for k, v in w["features"].items()} for w in wide}
+    assert back == bars                                                  # Decimal·None 그대로 왕복
+    assert R.feature_key("atr_1m", 2) == "atr_1m@v2" and R.parse_feature_key("atr_1m@v2") == ("atr_1m", 2)
+    assert R.wide_features(con, "features_base", DAY0 + 60_000, DAY0 + 60_000, mode="paper", symbol="BTCUSDT") == []
+    assert R.wide_features(con, "features_adv", DAY0, DAY0 + 1, mode="paper", symbol="BTCUSDT") == [
+        {"bar_open_ms": DAY0, "features": {"regime@v3": D("2")}}]
+    with pytest.raises(ValueError):
+        R.wide_features(con, "features_custom", DAY0, DAY0 + 1, mode="paper", symbol="BTCUSDT")
+
+
+def test_safety_state_is_append_only_history_and_latest_wins(con):
+    assert R.load_safety_state(con, "kill_switch", mode="paper") is None
+    R.save_safety_state(con, "kill_switch", {"tripped": None, "n": 1}, ts_ms=DAY0, mode="paper")
+    R.save_safety_state(con, "kill_switch", {"tripped": "liquidation", "n": 2}, ts_ms=DAY0 + 1, mode="paper")
+    R.save_safety_state(con, "kill_switch", {"tripped": None, "n": 0}, ts_ms=DAY0 + 2, mode="live")
+    assert R.load_safety_state(con, "kill_switch", mode="paper") == {"tripped": "liquidation", "n": 2}
+    assert con.execute("SELECT COUNT(*) FROM safety_state").fetchone()[0] == 3

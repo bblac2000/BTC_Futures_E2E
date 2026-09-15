@@ -210,6 +210,23 @@ CREATE TABLE IF NOT EXISTS engine_events(
 );
 """
 
+#  v2 (사용자 결정 2026-09-15): 피처 긴 형식 수용 → (봉 시각, name, params_version) 조회 인덱스 ·
+#  layer 7 안전 상태(킬스위치 등) — 재시작해도 트립이 풀리지 않게 **append-only 이력**, 최신 행이 현재 상태.
+V2 = f"""
+CREATE INDEX IF NOT EXISTS idx_features_base_bar_name_ver ON features_base(bar_open_ms, name, params_version);
+CREATE INDEX IF NOT EXISTS idx_features_adv_bar_name_ver ON features_adv(bar_open_ms, name, params_version);
+
+CREATE TABLE IF NOT EXISTS safety_state(
+    id INTEGER PRIMARY KEY,
+    {MODE},
+    name TEXT NOT NULL,                 -- kill_switch | ...
+    ts_ms INTEGER NOT NULL,
+    state_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_safety_state_latest ON safety_state(mode, name, id);
+"""
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "section5_tables_and_runtime_rules", V1),
+    Migration(2, "feature_index_and_safety_state", V2),
 )

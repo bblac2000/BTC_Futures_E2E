@@ -252,6 +252,7 @@ class Engine:
         qty = sum((f.qty for f in fills), Decimal())
         commission = sum((f.commission for f in fills), Decimal())
         entry = _vwap(fills) if fills else ref_mark
+        adopted: PositionRisk | None = None
         if failure is not None and self.mode is Mode.LIVE:
             #  응답을 못 받은 조각이 실제로는 체결됐을 수 있다 → 거래소 수량을 채택해 SL 감시를 한다(방치 금지)
             pr, blocked = self._read_position(ts_ms)
@@ -263,6 +264,7 @@ class Engine:
                 extra = abs(pr.amt) - qty
                 commission += extra * pr.entry_price * self.rules.commission.taker
                 qty, entry = abs(pr.amt), pr.entry_price
+                adopted = pr
             elif pr is not None and abs(pr.amt) != qty:
                 ev.append(self._block(ts_ms, f"진입 불명 후 거래소 수량 {pr.amt} ≠ 확인 체결 {qty} — 채택 안 함, 대사 필요"))
         if qty == 0:
@@ -277,7 +279,7 @@ class Engine:
         live_ev: list[object] = []
         if self.mode is Mode.LIVE:
             post, live_ev = self._live_after_entry(ts_ms, d, post)
-        ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post))
+        ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post, adopted=adopted))
         ev += live_ev
         if not post.gate_ok:
             #  #5는 사전확약 게이트 — 실제 체결 기준으로 깨지면 즉시 청산(Codex L3 검토 4 · 기록만 하는 완화 없음)

@@ -39,7 +39,8 @@ from sizing.position import SizingDecision
 
 MODES = ("paper", "live")
 FEATURE_TABLES = ("features_base", "features_adv")
-ORPHAN_CLOSE = "open 행 없음(채택·기록 전 포지션)"
+ORPHAN_CLOSE = "open 행 없음(기록 전 포지션)"
+ADOPTED_FROM_EXCHANGE = "adopted_from_exchange"
 
 
 class TransactionOpen(RuntimeError):
@@ -190,6 +191,10 @@ def _entry_filled(con: sqlite3.Connection, ev: EntryFilled, mode: str, symbol: s
         "liq_price_est": _v(pf.liq_price_est),
         "entry_commission_usdt": _v(sum((f.commission for f in ev.fills), Decimal())),
     }
+    if ev.adopted is not None:
+        #  사용자 결정(2026-09-15): 채택 포지션의 출처 = 채택 시점 positionRisk
+        row |= {"reason": ADOPTED_FROM_EXCHANGE, "liq_price_exchange": _v(ev.adopted.liquidation_price),
+                "detail": _json({"positionRisk": ev.adopted.raw})}
     row |= {f"pf_{f.name}": _v(getattr(pf, f.name)) for f in dataclasses.fields(pf) if f.name != "liquidation_check"}
     lc = pf.liquidation_check
     if lc is not None:
@@ -318,3 +323,44 @@ def record_custom_features(con: sqlite3.Connection, bar_open_ms: int, payload: M
     with _tx(con):
         _insert(con, "features_custom", {"mode": mode, "symbol": symbol, "bar_open_ms": bar_open_ms,
                                          "schema_version": schema_version, "payload_json": payload_json})
+
+
+# ── 넓은 형식 내보내기(재생·백테스트) · 안전 상태 — v2 ────────────────────────────────
+def feature_key(name: str, params_version: int) -> str:
+    return f"{name}@v{params_version}"
+
+
+def parse_feature_key(key: str) -> tuple[str, int]:
+    name, _, ver = key.rpartition("@v")
+    if not name or not ver.isdigit():
+        raise ValueError(f"피처 키 {key!r} — name@v<정수>")
+    return name, int(ver)
+
+
+def wide_features(con: sqlite3.Connection, table: str, lo_ms: int, hi_ms: int, *, mode: str,
+                  symbol: str) -> list[dict[str, Any]]:
+    """`[lo_ms, hi_ms)` 봉마다 `{"bar_open_ms", "features": {"name@vN": Decimal|None}}` — 봉 시각 오름차순.
+    뷰가 아니라 조회 함수인 이유: SQL은 동적인 (name, params_version) 집합을 열로 피벗할 수 없다."""
+    mode = _mode(mode)
+    if table not in FEATURE_TABLES:
+        raise ValueError(f"피처 테이블 {table!r} — {FEATURE_TABLES}")
+    out: dict[int, dict[str, Decimal | None]] = {}
+    for t, name, ver, value in con.execute(
+            f"SELECT bar_open_ms, name, params_version, value FROM {table} WHERE mode=? AND symbol=? "
+            "AND bar_open_ms >= ? AND bar_open_ms < ? ORDER BY bar_open_ms, name, params_version",
+            (mode, symbol, lo_ms, hi_ms)):
+        out.setdefault(int(t), {})[feature_key(name, int(ver))] = None if value is None else Decimal(value)
+    return [{"bar_open_ms": t, "features": f} for t, f in out.items()]
+
+
+def save_safety_state(con: sqlite3.Connection, name: str, state: Mapping[str, Any], *, ts_ms: int, mode: str) -> None:
+    mode = _mode(mode)
+    state_json = _json(dict(state))
+    with _tx(con):
+        _insert(con, "safety_state", {"mode": mode, "name": name, "ts_ms": ts_ms, "state_json": state_json})
+
+
+def load_safety_state(con: sqlite3.Connection, name: str, *, mode: str) -> dict[str, Any] | None:
+    row = con.execute("SELECT state_json FROM safety_state WHERE mode=? AND name=? ORDER BY id DESC LIMIT 1",
+                      (_mode(mode), name)).fetchone()
+    return None if row is None else json.loads(row[0])

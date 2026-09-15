@@ -210,7 +210,11 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 
 - 모든 데이터 테이블 `mode` CHECK(paper|live) · 가격·수량·비율 TEXT(Decimal 원문, float → `TypeError`) · bool 0/1 CHECK.
 - 테스트가 **이벤트 필드 ⊆ 열**을 잠근다(`SizingDecision`→decisions · `PostFillCheck`→`positions.pf_*` · `LiquidationCheck`→`positions.lc_*` · `Fill`→orders · `PositionClosed`→positions · `FundingSettled`→funding_events). 필드를 추가하면 새 마이그레이션 단계가 필요하다.
-- 피처: 긴 형식 `(name, params_version, value)` + `feature_definitions`(같은 이름·버전에 다른 파라미터 → `FeatureDefinitionConflict`). 스킬 §5의 "넓은 열" 대신 고른 이유: 피처마다 마이그레이션이 필요 없고 `(name, params_version)` 추적이 행 단위로 강제된다.
+- 피처: 긴 형식 `(name, params_version, value)` + `feature_definitions`(같은 이름·버전에 다른 파라미터 → `FeatureDefinitionConflict`).
+  **스킬 §5(피처마다 열)에서 의도적으로 벗어난다 — 사용자 수용 2026-09-15.** 이유: ① 피처를 추가·버전업할 때마다 마이그레이션 단계가 필요 없다 ② `(name, params_version)` 추적이 행 단위로 강제된다(같은 이름에 다른 정의를 덮어쓸 열 자체가 없다) ③ 한 봉의 피처 집합이 전략마다 달라도 스키마가 같다.
+  v2: `(bar_open_ms, name, params_version)` 인덱스(두 피처 테이블) · 재생·백테스트용 넓은 형식은 `db.record.wide_features()`(키 `name@vN`, 값 Decimal/None — SQL 뷰로는 동적 피벗 불가라 조회 함수) · 봉 하나의 피처 집합 왕복 테스트.
+- v2 `safety_state`: 킬스위치 등 안전 상태의 append-only 이력(최신 행 = 현재) — 재시작이 트립을 풀지 않게.
+- LIVE 채택: `EntryFilled.adopted`(채택 시점 positionRisk) → open 행 `reason='adopted_from_exchange'`·`liq_price_exchange`·positionRisk 원문(`detail`).
 - `orders.slippage_vs_mark_bps` = 불리한 방향 양수(BUY `(체결−mark)/mark`, SELL 반대) × 10⁴ — 레지스트리 #7·#9 14일차 재평가의 원천.
-- ⚠️ 알려진 공백: LIVE 채택(주문 결과 불명 후 거래소 수량 채택)은 layer 3이 open 이벤트를 내지 않는다 → 그 포지션의 close 행은 `position_id` NULL + 사유로 기록(버리지 않음). 채택 이벤트 추가는 layer 3 변경이라 별도(LiveSender·엔진 → Codex).
+- ⚠️ 정정(2026-09-15): "채택은 open 이벤트를 내지 않는다"는 **틀린 보고였다** — 채택 시에도 `EntryFilled`(fills=())가 나가 close가 연결된다. 실제 공백은 출처 표시(채택 여부·positionRisk)였고 `adopted` 필드로 메웠다. 남은 작은 경우: 청산 직전 거래소 수량이 내부보다 **커서** 동기화하는 경로(`_exit`) — close 수량 > open 수량으로 기록되고 늘어난 부분의 open 기록은 없다(대사 대상 · 미구현).
 - 아직 없음: 엔진·피드 → DB 배선, 봉 기록 경로(WS 마감봉·REST 백필), account_snapshots 생산자 — layer 8 기동 배선.

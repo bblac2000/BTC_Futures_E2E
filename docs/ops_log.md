@@ -940,3 +940,23 @@ I did not run tests, per the read-only/no-modification constraint.
 Codex session ID: 01a0a4ce-2f74-7ac1-81fe-f2384dc1fb3b
 Resume in Codex: codex resume 01a0a4ce-2f74-7ac1-81fe-f2384dc1fb3b
 ```
+
+## 2026-09-15 — 사용자 결정: layer 4·5 수용 · 피처 긴 형식 수용 · 채택 open 이벤트 · klines 1000 승인 → layer 6·7
+
+### 보고 원문 재게시(사용자 요청 — 보고 세 줄이 단어 중간에서 잘려 도착)
+- "Dropped rows (queue full) now make the shutdown record `stop_dirty`." — 기록 위치: 위 layer 5 이식 표 `Collector._shutdown_record` 행("큐 포화 드롭 > 0도 `stop_dirty`").
+- "Features: stored one row per value, keyed by `(name, params_version)`, instead of the skill's one column per feature. That way a new feature needs no migration, and redefining an existing name and version is refused." — 이 줄은 설계서 §14에만 있었다 → 여기 추가.
+- "Codex also flagged four `db/` issues, and all four are fixed: nested floats weren't refused; bar dedup ignored the mark/index/funding fields; a recorder could commit the caller's transaction; a close was linked to an open position without checking direction." — 기록 위치: 위 Codex 재검토 표(db #1~#4).
+
+### 전제 정정 — LIVE 채택
+지난 보고의 "채택 포지션은 open 이벤트가 없어 close가 연결되지 않는다"는 **틀렸다.** 엔진은 채택 시에도 `EntryFilled(fills=())`를 내고 그 `post_fill`이 채택 수량·거래소 평균가를 담는다 → close는 이미 open 행에 연결됐다(확인: 채택 테스트에서 `of(ev, EntryFilled)` = 1건, fills=()). 빠져 있던 것은 **출처**(채택이라는 표시·채택 시점 positionRisk)였다.
+조치: 두 번째 open 이벤트를 만들지 않고(open 행이 둘이면 `open_position_id` 연결이 깨진다) `EntryFilled.adopted: PositionRisk | None`을 추가 → db open 행 `reason='adopted_from_exchange'` · `liq_price_exchange` · `detail = {"positionRisk": 원문}`. 사용자 결정의 목표("모든 close 행이 open 행에 연결 · 진리원 = 채택 시점 positionRisk")를 이 형태로 충족.
+남은 경우(미구현 · 사용자 판단): `_exit`이 청산 직전 거래소 수량이 **더 크면** 그 수량으로 동기화 — close 수량이 open 수량보다 크게 기록되고 늘어난 부분의 open 기록은 없다.
+
+### Telegram Bot API — 공식 문서 렌더링 확인 (playwright · 2026-09-15 · `https://core.telegram.org/bots/api` · 최신 변경 "August 24, 2026 — Bot API 10.3")
+- 요청: `https://api.telegram.org/bot<token>/METHOD_NAME` · GET/POST · `application/json` 허용 · 응답 JSON은 항상 Boolean `ok`, 실패 시 `description`·`error_code`(내용은 바뀔 수 있음)·선택 `parameters`.
+- `getUpdates`: `offset` = 이전에 받은 최대 update_id + 1("An update is considered confirmed as soon as getUpdates is called with an offset higher than its update_id") · `limit` 1-100 · `timeout` 초(롱폴링, 0=숏폴링은 테스트용) · `allowed_updates` 목록(생략 시 이전 설정 유지) · 웹훅이 설정돼 있으면 동작 안 함 · "recalculate offset after each server response".
+- `BotCommand.command`: **1-32자, 영문 소문자·숫자·밑줄만** → 한글 별칭은 명령으로 등록할 수 없다(텍스트·답장 키보드로 처리). `description` 1-256자. `setMyCommands` 최대 100개.
+- `setChatMenuButton(chat_id?, menu_button)` · `MenuButtonCommands {type:"commands"}` = 명령 목록을 여는 메뉴 버튼(기본값도 명령 목록).
+- `InlineKeyboardButton.callback_data`: **1-64 bytes**. `CallbackQuery`: "Telegram clients will display a progress bar until you call answerCallbackQuery. It is, therefore, necessary to react by calling answerCallbackQuery even if no notification to the user is needed" → **모든 콜백에 answer**(거부·만료 포함). `answerCallbackQuery.text` 0-200자.
+- `sendMessage.text` 1-4096자 · `reply_markup` = InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply. `ReplyKeyboardMarkup`: `keyboard`(KeyboardButton 행), `is_persistent`, `resize_keyboard`, `input_field_placeholder` 1-64자 · 텍스트 버튼은 누르면 그 텍스트가 메시지로 전송.

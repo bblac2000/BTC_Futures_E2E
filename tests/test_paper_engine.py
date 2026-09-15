@@ -306,6 +306,7 @@ def test_live_fill_exactly_at_the_registry_7_estimate_passes_the_post_fill_gate(
     (fill,) = of(ev, EntryFilled)
     assert fill.decision.entry == quote and all(f.price == quote for f in fill.fills)
     assert fill.post_fill.entry_price == quote and fill.post_fill.gate_ok and fill.post_fill.sl_before_liquidation
+    assert fill.adopted is None, "정상 체결은 채택이 아니다"
     assert of(ev, PositionClosed) == [] and e.position is not None and not e.entries_blocked
 
 
@@ -361,6 +362,10 @@ def test_live_entry_outcome_unknown_adopts_the_exchange_position(rules):
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
     assert e.entries_blocked and of(ev, EntriesBlocked)
     assert e.position is not None and e.position.qty == D("0.033") and e.position.entry_price == D("60000.5")
+    #  사용자 결정(2026-09-15): 채택은 open 이벤트에 **출처 = 채택 시점 positionRisk**를 싣는다(close가 연결될 open 행)
+    (opened,) = of(ev, EntryFilled)
+    assert opened.fills == () and opened.adopted is not None and opened.adopted.amt == D("0.033")
+    assert opened.adopted.entry_price == D("60000.5") and opened.post_fill.qty == D("0.033")
     (c,) = of(e.on_tick(tick(DAY0 + 2000, e.position.sl - 1)), PositionClosed)
     assert c.reason is ExitReason.SL
 

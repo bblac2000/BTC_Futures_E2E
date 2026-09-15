@@ -92,6 +92,9 @@ class EntryFilled:
     fills: tuple[Fill, ...]
     leverage: int
     post_fill: PostFillCheck
+    #  LIVE 채택(주문 결과 불명 → 거래소 수량이 확인 체결보다 큼)일 때 **채택 시점 positionRisk** — 수량·평균가의 진리원.
+    #  이 이벤트가 채택 포지션의 open 행이다(db: reason='adopted_from_exchange'). 정상 체결은 None.
+    adopted: PositionRisk | None = None
 
 
 @dataclass(frozen=True)
