@@ -44,7 +44,8 @@
 5j. [ ] VPS 배포 시점: E2E Restart B(2026-09-17 00:12 UTC) 24h 게이트 종료 뒤(earliest 09-18) · 라이브 호스트 변경 하루 1건
 5h. [ ] 보류: `engine_events` op_id 조회 인덱스(스키마 v3) · shard `roll_failed` health 경보 · 키 `ipRestrict` 기동 확인 · [x] 짝 없는 start/connect → `dirty_previous_run`(#15 ⑤)
 5k. [ ] LIVE 체크리스트 추가(#15 ③④): 규칙 주기 재조회 ≥6h·24h 초과 규칙 진입 금지 · 일시정지 사유 집합화
-5l. [ ] prune 켜기 전: 봇 prune 타이머(일 03:30 UTC)가 E2E `e2e-integrity`(일 03:30, 추적 사본 기준)와 겹친다 — VPS 실제 타이머 대조 후 시각 결정
+5l. [ ] prune 시각: D2(09-19) 뒤 VPS `list-timers` 실측 → 모든 E2E 타이머에서 ≥30분 떨어진 시각 · 별도 변경(런북 §9.6)
+5m. [ ] 배포: Codex 배포 전 배치 MERGE → Restart B 게이트 종료(09-18 00:16 UTC) → D1 09-18 · D2 09-19(00:35–02:30 UTC) · 사용자: rclone·OWNER_IDS·캡처 → §9.1 로컬 점검 → 화이트리스트
 5g. [ ] VPS 배포(런북 `docs/runbook_vps.md`) — 사용자 논의 후 · 외부 heartbeat · Drive 사본 재검증 도구 · 대장 reconcile 도구
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [x] layer 8: health 스로틀 구조 · `data_stores` allowlist(설계 #131) · [ ] shard `roll_failed` 대장 이벤트를 health가 읽는 경보(상태 파일에 없음)
 7. [x] VPS 템플릿: 봇 전용 Linux 사용자 user 유닛(`ops/systemd/`)·런북 — **배포는 Codex 검토 + 사용자 논의 후**

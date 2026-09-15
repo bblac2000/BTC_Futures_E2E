@@ -572,14 +572,20 @@ def test_a_previous_run_with_start_or_connect_but_no_stop_is_recorded_as_dirty_e
     manifest.log_event(RB.RUN_EVENT_SOURCE, "start", "run 2 (SIGKILL 흉내)")
     manifest.log_event("feed", "connect", "wss://… (SIGKILL 흉내)")
     clock.t += 60_000
-    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    tg = FakeTelegram()
+    assert run(cfg, clock=clock, tg=tg, seconds=5) == 0
+    starts = [t for t in tg.texts() if t.startswith("🟢 기동")]
+    assert len(starts) == 1 and "dirty_previous_run" in starts[0], "사용자 2026-09-16: 기동 알림에 한 줄 언급(health 알림과 별개)"
+    assert not [t for t in tg.texts() if "dirty_previous_run" in t and not t.startswith("🟢 기동")], "봇이 따로 보내지 않는다"
     status = json.loads(cfg.status_path.read_text())
     facts = [f for f in status["confirmed_facts"] if f["kind"] == "dirty_previous_run"]
     assert len(facts) == 1 and facts[0]["daily"] is False and facts[0]["date"]
     con = sqlite3.connect(cfg.db_path)
     assert con.execute("SELECT count(*) FROM engine_events WHERE kind='DirtyPreviousRun'").fetchone()[0] == 1
     clock.t += 60_000
-    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    tg3 = FakeTelegram()
+    assert run(cfg, clock=clock, tg=tg3, seconds=5) == 0
+    assert not any("dirty_previous_run" in t for t in tg3.texts() if t.startswith("🟢 기동")), "새로 판정한 기동에서만 언급"
     kinds = [k for _s, k in _dirty_events(cfg.var_dir)]
     assert kinds.count("dirty_previous_run") == 1, "표시한 뒤의 재기동은 다시 dirty로 세지 않는다"
     assert kinds[-2:] == ["start", "stop"]

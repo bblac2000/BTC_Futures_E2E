@@ -5,7 +5,8 @@ SIGKILL·OOM·전원 차단은 `stop`도 `stop_dirty`도 남기지 않는다 →
 뒤에 `start`나 `connect`가 있으면 직전 실행을 `dirty_previous_run`으로 기록한다(대장 + 봇 DB 운영 이벤트).
 - 기록 자체가 종결 표시다 → 다음 기동은 같은 실행을 다시 세지 않는다.
 - `stop_dirty`는 이미 기록된 dirty다(두 번 세지 않는다).
-- 알림은 **한 번**: 상태 파일 `confirmed_facts`(최근 24시간의 `dirty_previous_run`, 키 = 기록 시각)를 health가 once 키로 보낸다
+- 기동 알림(🟢)에 **한 줄 언급**(새로 판정한 기동에서만 · 사용자 2026-09-16) — 확정 사실 알림과 별개.
+- 확정 사실 알림은 **한 번**: 상태 파일 `confirmed_facts`(최근 24시간의 `dirty_previous_run`, 키 = 기록 시각)를 health가 once 키로 보낸다
   (발송 성공 뒤에만 기록 — 텔레그램 실패 시 다음 주기 재시도).
 """
 from __future__ import annotations

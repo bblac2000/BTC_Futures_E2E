@@ -94,14 +94,16 @@ free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
 - LIVE 배선(`ExchangeReader` 실구현 · 계좌 응답 필드는 공식 문서·실캡처 확인 필요) — 설계서 §10 체크리스트·사용자 승인 전 금지.
 
 ## 9. 배포 창 — E2E Restart A/B와 같은 모양 (준비만 · 실행은 사용자 지시 후)
-> 규칙(사용자 2026-09-16): 가장 이른 날 **2026-09-18**, E2E Restart B(09-17 00:12 UTC)의 24h 게이트가 닫힌 뒤 · **라이브 호스트 변경 하루 1건**.
-> 🔴 수집기 호스트 변경 = 이 절 포함 Codex 배포 전 배치 MERGE 후. 명령마다 E2E에 닿지 않는지 먼저 본다.
-> 제안: 변경을 **D1(사용자·코드·환경 · 봇 미기동)**과 **D2(유닛 설치·기동)** 두 날로 나눈다 — 하루 1건 규칙의 해석(사용자 확인 필요).
+> 확정(사용자 2026-09-16): **D1 = 2026-09-18**(사용자·코드·환경·VPS 드라이런 · 유닛 없음) · **D2 = 2026-09-19**(유닛 설치·기동) ·
+> 둘 다 **00:35–02:30 UTC** 창 안, 그날 E2E 00:10 판정 뒤 · **라이브 호스트 변경 하루 1건**.
+> 🔴 어떤 배포 단계도 ① 이 절 포함 Codex 배포 전 배치 **MERGE** 전, ② E2E Restart B 게이트가 닫히기(**2026-09-18 00:16 UTC**) 전에는 하지 않는다.
+> 명령마다 E2E에 닿지 않는지 먼저 본다.
 
 ### 9.0 전제 — 하나라도 아니면 창을 열지 않는다
 - E2E Restart B 24h 게이트 판정이 닫혔다(E2E 쪽 보고로 확인 — 이 봇은 판정하지 않는다).
 - Codex 배포 전 배치 MERGE · 배포 커밋 해시 `D` 고정(브랜치가 아니라 해시).
-- 사용자 측 완료: 봇 사용자 rclone remote · `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행 · 키 IP 화이트리스트(**마지막**).
+- 사용자 측 완료(D1 전): 봇 사용자 rclone remote · `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
+- 키 IP 화이트리스트는 **마지막 — §9.1 로컬 점검이 끝난 뒤** 켠다(사용자 2026-09-16).
 - ⚠️ 화이트리스트가 켜지면 로컬(WSL) 키 조회는 실패한다 → 로컬 키 드라이런은 화이트리스트 **전**에 끝낸다.
   `ipRestrict=true` 확인은 **VPS에서** 캡처 `--dry-run`으로(로컬에서는 -2015로 실패하는 것이 정상).
 
@@ -113,9 +115,9 @@ uv run pytest -q && uv run ruff check . && uv run pyright && uv run python -m op
 V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 240 --var-dir $V --db $V/bot.sqlite
 ```
 - 기록: `D` · 테스트 수 · `status.json` = `exit_code 0` · `shutdown stop` · `delivered == sent` · `confirmed_facts []`.
-- 규칙 출처: 키 화이트리스트 **전**이면 `rules.source runtime:signed` · `blockers []`.
-  화이트리스트 **뒤**면 로컬은 `fallback:public+snapshot` + `blockers ["rules_from_snapshot"]`이 **정상** —
-  `runtime:signed`는 VPS에서만 확인한다(§9.3 5단계).
+- 규칙 출처: 이 점검은 화이트리스트 **전**에 한다 → `rules.source runtime:signed` · `blockers []`.
+  (화이트리스트가 이미 켜졌다면 로컬은 `fallback:public+snapshot` + `blockers ["rules_from_snapshot"]`이 정상 — 그때는 VPS에서만 확인.)
+- 끝나면 사용자에게 알린다 → 사용자가 키 IP 화이트리스트를 켠다.
 - 유닛 파일: `git diff <마지막 Codex 검토 커밋>..D -- ops/systemd/` 가 비어 있다(아니면 검토부터).
 - STOP: 하나라도 실패 · worktree는 창이 끝난 뒤 `git worktree remove`.
 
@@ -128,10 +130,10 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 - 봇 흔적 없음(첫 배포): `id btcfut` 실패 · `/home/btcfut` 없음.
 - 타이머 겹침 표(추적 사본 기준 — 위 실측으로 교체): E2E quality 00:10 · gate-notify 00:15(휴면) · health-digest 00:30 ·
   health-alert :00/:30 · sync :07 · prune 일 02:30 · integrity 일 03:30 ↔ 봇 health-alert 5분 · digest 00:30 · sync :20 ·
-  prune 일 03:30(**설치 안 함** · 켜기 전 E2E integrity와 겹침 해소 — TODO 5l).
+  prune 일 03:30(**설치 안 함** — §9.6).
 - STOP: E2E 유닛 중 failed/inactive · 디스크 여유 < 5 GB + 봇 예상 증가분 · 호스트 불일치.
 
-### 9.3 창 D1 — 봇 사용자·코드·환경 (첫 번째 변경 · 봇 유닛 없음)
+### 9.3 창 D1 (2026-09-18) — 봇 사용자·코드·환경 (첫 번째 변경 · 봇 유닛 없음)
 시각: E2E 00:10 UTC 전일 판정이 기록되고 E2E health의 00:25 판정 대기가 끝난 뒤 **00:35 UTC 이후** 시작 ·
 02:30 UTC 전 종료(일요일 E2E prune). 판정이 늦거나 FAIL이면 그날 창은 열지 않는다.
 1. §0 호스트 확인 → 9.2 E2E 기준선 **재기록**(창 시작 시점).
@@ -141,7 +143,7 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 5. VPS 드라이런 240초(§2 사전 검사 · 유닛 없이) → 9.1과 같은 기준 + `confirmed_facts []`.
 6. 9.5 보고 → **멈춘다**(유닛 설치는 다음 날).
 
-### 9.4 창 D2 — 유닛 설치·기동 (두 번째 변경 · 다음 날)
+### 9.4 창 D2 (2026-09-19) — 유닛 설치·기동 (두 번째 변경)
 시각: 9.3과 같은 규칙.
 1. §0 호스트 확인 · E2E 기준선 재기록 · `git -C ~/BTC_Futures_E2E rev-parse HEAD` == `D`.
 2. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
@@ -161,6 +163,12 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 | 텔레그램(D2) | 기동 알림 수신 · `delivered == sent` · `poll_errors 0` · `/status` 왕복 |
 | 데이터(D2) | `bars_1m` 증가 · shard 파일 증가 · 첫 :20 `LAST_SYNC.txt` · health-alert `none/throttled` |
 | 24시간 뒤 | health digest 수신 · 반복 경보 없음 · E2E 판정 영향 없음 |
+
+### 9.6 prune 시각 (D2 뒤 · 별도 변경 · 사용자 2026-09-16)
+- prune 타이머는 D1·D2에 설치하지 않는다.
+- D2 뒤 VPS에서 `sudo -u ubuntu XDG_RUNTIME_DIR=/run/user/$(id -u ubuntu) systemctl --user list-timers --all`로 **설치된 E2E 타이머를 실측**
+  (추적 파일 금지) → **모든 E2E 타이머에서 30분 이상 떨어진** 시각을 고른다(봇 타이머와도 겹치지 않게).
+- 시각 변경은 템플릿 커밋 + Codex → §6 절차(dry-run 출력 사용자 확인) → 별도 날의 라이브 호스트 변경.
 
 롤백(봇만): btcfut 사용자로 `systemctl --user disable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer`.
 E2E에 닿는 명령은 롤백에도 없다. 봇 사용자·데이터 삭제는 사람 확인 + Codex(삭제) 후.

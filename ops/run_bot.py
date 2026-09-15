@@ -2,8 +2,8 @@
 
 순서: 인스턴스 락 → DB 마이그레이션 → 런타임 규칙(+ `runtime_rules` 기록) → 지갑 복원(마지막 엔진 스냅샷) →
 안전 상태 복원(`safety_state`) → **포지션 복원(DB 열린 행 + 마지막 엔진 스냅샷이 일치할 때만, `ops.restore`)** →
-REST 백필(마감 봉 · 공개 GET) → **직전 실행 종료 판정(`ops.run_events` — stop 없는 start/connect → `dirty_previous_run`) ·
-대장 `start`** → shard 기록기 → 텔레그램(명령·알림) → 피드 + 1초 안전 틱.
+텔레그램(명령·알림) → **직전 실행 종료 판정(`ops.run_events` — stop 없는 start/connect → `dirty_previous_run`, 기동 알림에 한 줄) ·
+대장 `start`** → 기동 알림 → REST 백필(마감 봉 · 공개 GET) → shard 기록기 → 피드 + 1초 안전 틱.
 종료(SIGTERM/SIGINT/`--duration-s`): 피드 정지 → 기록기 종료 기록(clean/dirty) → 스냅샷·상태 저장 → 텔레그램 정지 알림.
 
 🔒 **LIVE는 이 러너로 기동하지 않는다** — 라이브 체크리스트(설계서 §10)·사용자 승인 전에는 `LiveSender`를 만드는 경로 자체가
@@ -406,11 +406,23 @@ async def _run_locked(cfg: RunConfig, *, env: Mapping[str, str], owners: frozens
         link.start()
         rt.status_extra = link.stats
 
+    dirty: str | None = None
+    try:
+        #  기동 알림보다 먼저 판정한다 — 새로 판정한 dirty는 기동 알림에 한 줄(사용자 2026-09-16) · 확정 사실 알림은 health가 한 번
+        dirty = run_events.previous_run_dirty()
+        if dirty is not None:
+            run_events.mark_dirty(dirty)
+            rt.record_ops("DirtyPreviousRun", dirty, now, {"source": "manifest.events"})
+        rt.run_facts = run_events.recent_dirty_facts()
+        run_events.log_start(f"mode={cfg.mode.value} symbol={cfg.symbol} rules={loaded.db_source}")
+    except Exception as e:  # noqa: BLE001 — 대장 조회 실패는 알리고 계속(수집·안전 경로와 무관)
+        rt.alert(f"⚠️ 직전 실행 종료 판정 실패(대장): {type(e).__name__}: {e}", important=True)
     if crumb_note is not None:
         rt.alert(f"🛑 재기동: 지난 실행의 저장되지 않은 안전 상태 breadcrumb {crumb_note} · 신규 진입 일시정지 — 확인 후 /start",
                  important=True)
     rt.alert(f"🟢 기동 [{cfg.mode.value}] {cfg.symbol} · 지갑 {wallet} · 규칙 {', '.join(sources)} · "
-             f"킬스위치 {'발동 ' + gate.kill_switch.tripped.reason if gate.kill_switch.tripped else '정상'}")
+             f"킬스위치 {'발동 ' + gate.kill_switch.tripped.reason if gate.kill_switch.tripped else '정상'}"
+             + ("" if dirty is None else "\n📌 dirty_previous_run: 직전 실행이 종료 기록 없이 끝났다(상세 /status)"))
     if loaded.fallback_reason is not None:
         rt.alert(f"⚠️ 런타임 규칙 조회 실패 → 캡처 스냅샷으로 기동 · 신규 진입 금지({RULES_FROM_SNAPSHOT}) · "
                  f"/start로 풀리지 않음(규칙은 기동 때만 읽는다) — 원인 해결 후 재기동\n원인: {loaded.fallback_reason}",
@@ -423,15 +435,6 @@ async def _run_locked(cfg: RunConfig, *, env: Mapping[str, str], owners: frozens
     except Exception as e:  # noqa: BLE001 — 백필 실패는 알리고 계속(실시간 봉은 WS로 쌓인다)
         rt.alert(f"⚠️ REST 백필 실패: {type(e).__name__}: {e}")
 
-    try:
-        dirty = run_events.previous_run_dirty()
-        if dirty is not None:
-            run_events.mark_dirty(dirty)
-            rt.record_ops("DirtyPreviousRun", dirty, now, {"source": "manifest.events"})
-        rt.run_facts = run_events.recent_dirty_facts()
-        run_events.log_start(f"mode={cfg.mode.value} symbol={cfg.symbol} rules={loaded.db_source}")
-    except Exception as e:  # noqa: BLE001 — 대장 조회 실패는 알리고 계속(수집·안전 경로와 무관)
-        rt.alert(f"⚠️ 직전 실행 종료 판정 실패(대장): {type(e).__name__}: {e}", important=True)
     recorder = Recorder(cfg.raw_root, cfg.symbol)
     recorder.start()
     feed = feed_factory(counter, rt, recorder)
