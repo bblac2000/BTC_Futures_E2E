@@ -253,7 +253,10 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | 모듈 | 역할 |
 |---|---|
 | `ops/runtime.py` | `BotRuntime` — 피드·엔진·`SafetyGate`·DB·`CommandBot`의 **단일 소유자**(asyncio 루프 스레드). 진입 게이트 하나(엔진 ∪ 안전 ∪ DB·지갑 재동기화) · 벽시계 1초 `safety_tick`(stale #14 청산(markprice)·텔레그램 inbox 처리·상태 파일) · 봉마다(기록·LIVE 소실/지갑 재동기화·3자 대사·일일 손실 equity·account_snapshots·상태 저장은 바뀔 때만) · `BotController` 구현 |
-| `ops/run_bot.py` | PAPER 전용 기동(LIVE → 종료 코드 4) · 인스턴스 락 · 규칙 = 공개 GET(exchangeInfo·fundingInfo) + 캡처 스냅샷(leverageBracket·commissionRate) → `runtime_rules` 기록 · 지갑·안전 상태 복원 · REST 백필 · shard 기록기 · 텔레그램 스레드 · SIGTERM 정상 종료(clean/dirty) |
+| `ops/run_bot.py` | PAPER 전용 기동(LIVE → 종료 코드 4) · 인스턴스 락 · **규칙 = 런타임 조회**(읽기 전용 키 권한 실측 → 서명 GET 6종, `runtime:signed` · 읽기 외 권한 키는 종료 코드 4) · 실패/키 없음 → 캡처 스냅샷 fallback + 진입 차단 `rules_from_snapshot`(/start로 안 풀림, 사용자 2026-09-16 (ii)) · 지갑·안전 상태 복원 · **포지션 복원**(`ops/restore.py`) · REST 백필 · 기록기 · 텔레그램 · 피드 + 1초 안전 틱 · 종료 순서 |
+| `ops/restore.py` | PAPER 재기동 복원(사용자 2026-09-16 (a)): DB 열린 root 포지션 + 마지막 엔진 스냅샷(`raw_json.position`)이 방향·수량·진입가·레버리지·SL·TP·진입 시각·누적 펀딩까지 일치할 때만 `Engine.restore_position`(→ `PositionRestored`) · 불일치 → flat · `paused:system:restart_position_mismatch` · 알림 · DB 고아 행은 `restart_unrestored` close(손익 없음 · 킬스위치 미계수) · 내려가 있던 동안 지난 펀딩 경계는 첫 틱에 `FundingMissed` + 진입 차단 |
+| `exchange/permissions.py` | 키 권한 실측(`apiRestrictions`) — 러너·캡처 스크립트 공용 |
+| `scripts/dryrun_restart_restore.py` | 드라이런 하네스(PAPER 전용 · 운영 유닛은 부르지 않음): 진입 1건 주입 → SIGKILL → 재기동 → 복원·진입 재허용 확인 · 키는 `--use-binance-key` 명시 때만 |
 | `ops/telegram_link.py` | 폴 스레드(`fetch` → inbox, 백오프 1·2·5·10·30·60초) · 발송 스레드(outbox → API, `message_id`로 배달 집계) — 엔진 상태를 만지지 않는다 |
 | `ops/data_stores.py` | 저장소 표(allowlist): `raw_live` shard만 `drive_verified_prune` · sqlite(봇 DB·manifest)는 `never` · 원격 = `BTCFUT_DRIVE_REMOTE`(E2E 폴더 거부) |
 | `ops/drive_sync.py` | `rclone copy --checksum --min-age 90s` + sqlite 온라인 백업 → `copyto` · 원격 삭제 없음 · 실패 시 마커 미갱신 |
@@ -274,7 +277,8 @@ Codex L8 1차 반영: 운영 이벤트·안전 상태 저장 실패도 보관·�
 운영 경보 값(게이트 아님 · health): 상태 파일 나이 > 120초(레지스트리 #1 grace 재사용) · sync 마커 > 3시간 · prune 마커 > 8일 · 텔레그램 폴 마지막 성공 > 10분 · 디스크 여유 < 5 GB · 반복형 스로틀 3시간(E2E 값).
 
 알려진 한계(보고 · 결정 필요):
-- **페이퍼 포지션은 재기동 때 엔진에 복원되지 않는다** — DB에 열린 포지션이 남으면 기동 알림 경고 + 대사 sticky로 진입 금지.
+- ~~페이퍼 포지션은 재기동 때 엔진에 복원되지 않는다~~ → **2026-09-16 (a) 구현**: 일치할 때만 복원(`ops/restore.py`).
+- 런타임 규칙은 **기동 때만** 읽는다(주기 재조회 없음) — `rules_from_snapshot` 차단은 재기동으로만 풀린다.
 - PAPER 러너는 기동 게이트(`run_startup_gate`)를 부르지 않는다 — 키 없이 계정을 읽을 수 없어서. LIVE 배선 때 필수.
 - LIVE `ExchangeReader`(positionRisk·계좌)는 **프로토콜과 가짜 구현 테스트만** 있다 — 계좌 응답 필드는 v6에 없어(가중치 표만) 공식 문서 렌더링·실캡처 확인이 먼저다.
 - `important_resend` 알림 재전송은 30초 롱폴링 중에는 늦을 수 있다(기본 꺼짐) — 확인 흐름 재전송은 안전 틱(1초)이 돌린다.

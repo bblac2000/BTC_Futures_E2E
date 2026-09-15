@@ -123,6 +123,17 @@ def test_ticks_bars_and_an_entry_flow_into_the_db_with_snapshots_and_alerts(rule
     assert rt.gate.reconcile.blocker is None and rt.last_reconcile_detail is not None
 
 
+def test_rules_from_snapshot_blocks_entries_and_start_does_not_clear_it(rules):
+    rt, counter, clock = build(rules)
+    attach_bot(rt, clock)
+    rt.rules_blocker = "rules_from_snapshot"
+    feed(rt, counter, clock, DAY0, DAY0 + 5000)
+    assert rt.entry_blockers() == ["rules_from_snapshot"]
+    text = rt.resume("telegram:111")
+    assert rt.entry_blockers() == ["rules_from_snapshot"] and "rules_from_snapshot" in text
+    assert "rules_from_snapshot" in rt.status_text()
+
+
 def test_entry_gate_is_the_union_of_engine_safety_and_db_blockers(rules):
     rt, counter, clock = build(rules)
     feed(rt, counter, clock, DAY0, DAY0 + 5000)

@@ -24,8 +24,10 @@ cd ~/BTC_Futures_E2E && curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.lo
 mkdir -p logs var && chmod 700 var
 cp .env.example .env && chmod 600 .env    # 값은 사용자가 채운다(에이전트는 값을 출력하지 않는다)
 ```
-`.env`(페이퍼): `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID` · `TELEGRAM_OWNER_IDS` · `BTCFUT_DRIVE_REMOTE`.
-- 페이퍼 러너는 **바이낸스 키를 쓰지 않는다**(공개 GET + 서명 엔드포인트는 캡처 스냅샷) — VPS `.env`에 키를 넣지 않는다.
+`.env`(페이퍼): `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID` · `TELEGRAM_OWNER_IDS` · `BTCFUT_DRIVE_REMOTE` · `BINANCE_API_KEY`/`BINANCE_API_SECRET`.
+- 바이낸스 키 = **읽기 전용 키**(거래·출금 권한 끔 · VPS IP 화이트리스트, 사용자 2026-09-16 (ii)). 러너가 기동 때 권한을 실측하고
+  읽기 외 권한이 하나라도 켜져 있으면 **기동 거부(종료 코드 4)**. 키가 없거나 조회가 실패하면 캡처 스냅샷으로 기동하되
+  진입 차단 `rules_from_snapshot`(상태 파일 `rules.fallback_reason` · /start로 안 풀림 → 원인 해결 후 `systemctl --user restart btcfut-bot`).
 - 봇 토큰은 이 봇 전용. 다른 프로세스가 같은 토큰으로 `getUpdates`를 하면 409 — 상태 파일 `poll_errors`로 드러난다.
 - rclone: btcfut 사용자 자신의 `~/.config/rclone/rclone.conf`. `BTCFUT_DRIVE_REMOTE=<remote>:BTC_Futures_E2E` — **E2E 폴더를 가리키면 sync·prune이 거부**한다.
 
@@ -34,7 +36,7 @@ cp .env.example .env && chmod 600 .env    # 값은 사용자가 채운다(에이
 .venv/bin/python -m pytest -q
 .venv/bin/python -m ops.stream_tiers --scan
 .venv/bin/python -m ops.run_bot --mode paper --duration-s 240 --var-dir ~/BTC_Futures_E2E/var/dryrun --db ~/BTC_Futures_E2E/var/dryrun/bot.sqlite
-cat var/dryrun/run/status.json          # shutdown=stop · exit_code=0 · delivered=sent · blockers=[] · db_errors=0
+cat var/dryrun/run/status.json          # shutdown=stop · exit_code=0 · delivered=sent · blockers=[] · db_errors=0 · rules.source=runtime:signed
 ```
 
 ## 3. 유닛 설치 (user 유닛)
@@ -80,8 +82,9 @@ free -m ; df -h / ; du -sh ~/BTC_Futures_E2E/var/*
 
 ## 7. 정지·재기동
 - 정지: `systemctl --user stop btcfut-bot` → 러너가 shard 종료 플러시·상태 저장·정지 알림. 알림의 `stop`/`stop_dirty` 확인.
-- 🔴 **페이퍼 포지션은 재기동 때 엔진에 복원되지 않는다** — DB에 열린 포지션이 있으면 기동 알림이 경고하고 대사 불일치로 진입이 막힌다.
-  계획 정지는 flat에서(`/position` 확인 → 필요하면 `/close`).
+- 페이퍼 포지션은 재기동 때 **DB 열린 행과 마지막 엔진 스냅샷이 일치할 때만** 복원된다(알림 `♻️ 재기동: 포지션 복원`).
+  불일치면 flat으로 시작 · `paused:system:restart_position_mismatch` · 알림(양쪽 값) · DB 행은 `restart_unrestored`로 닫힌다 → 확인 후 /start.
+  정지 중 펀딩 경계(00/08/16 UTC)를 지나면 첫 틱에 `FundingMissed` + 엔진 진입 차단(율 불명) → /start.
 - 킬스위치·일시정지·대사 sticky 상태는 `safety_state`에서 복원된다(재기동이 트립을 풀지 않는다).
 
 ## 8. 아직 없는 것 (배포 논의 항목)

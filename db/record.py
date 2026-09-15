@@ -35,8 +35,10 @@ from paper.types import (
     FundingMissed,
     FundingSettled,
     LiquidationThresholdCrossed,
+    PositionAbandoned,
     PositionClosed,
     PositionReduced,
+    PositionRestored,
     PositionSynced,
     PositionVanished,
     WalletResynced,
@@ -47,6 +49,7 @@ MODES = ("paper", "live")
 FEATURE_TABLES = ("features_base", "features_adv")
 ORPHAN_CLOSE = "open 행 없음(기록 전 포지션)"
 ADOPTED_FROM_EXCHANGE = "adopted_from_exchange"
+RESTART_UNRESTORED = "restart_unrestored"         # PAPER 재기동: DB·스냅샷 불일치로 복원하지 않은 포지션을 닫는 행(손익 없음)
 
 
 class TransactionOpen(RuntimeError):
@@ -311,6 +314,13 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
                 _position_synced(con, ev, mode, symbol)
             elif isinstance(ev, PositionVanished):
                 _position_vanished(con, ev, mode, symbol)
+            elif isinstance(ev, PositionAbandoned):
+                pid = open_position_id(con, mode=mode, symbol=symbol, direction=ev.direction)
+                _insert(con, "positions", {
+                    "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "event": "close", "position_id": pid,
+                    "direction": _v(ev.direction), "reason": RESTART_UNRESTORED, "qty": _v(ev.qty),
+                    "entry_price": _v(ev.entry_price),
+                    "detail": ev.detail if pid is not None else f"{ev.detail} · {ORPHAN_CLOSE}"})
             elif isinstance(ev, FundingSettled):
                 _insert(con, "funding_events", {
                     "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "rate": _v(ev.rate), "mark": _v(ev.mark),
@@ -320,7 +330,7 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
                 _insert(con, "funding_events", {
                     "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "signed_qty": _v(ev.signed_qty), "missed": 1,
                     "boundaries_json": json.dumps(list(ev.boundaries_ms))})
-            elif isinstance(ev, EntriesBlocked | ExitFailed | LiquidationThresholdCrossed | WalletResynced):
+            elif isinstance(ev, EntriesBlocked | ExitFailed | LiquidationThresholdCrossed | WalletResynced | PositionRestored):
                 detail = getattr(ev, "detail", None) or str(_v(getattr(ev, "reason", "")))
                 _insert(con, "engine_events", {"mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms,
                                                "kind": type(ev).__name__, "detail": detail,

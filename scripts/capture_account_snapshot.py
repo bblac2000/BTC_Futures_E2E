@@ -38,16 +38,16 @@ from exchange.ccxt_rest import CcxtRestClient  # noqa: E402
 from exchange.client import ReadOnlyClient  # noqa: E402
 from exchange.client_types import RestClient  # noqa: E402
 from exchange.errors import BinanceAPIError, TransportError  # noqa: E402
+from exchange.permissions import (  # noqa: E402,F401 — 공용(러너와 같은 판정)
+    NON_READ_PERMISSIONS,
+    NotReadOnlyKey,
+    check_permissions,
+)
 
 SYMBOL = "BTCUSDT"
 OUT_DIR = ROOT / "tests" / "fixtures" / "snapshots"
 PROV_START = "<!-- account-capture:start -->"
 PROV_END = "<!-- account-capture:end -->"
-
-#  읽기 외 권한 — 하나라도 true면 캡처 거부
-NON_READ_PERMISSIONS = ("enableFutures", "enableSpotAndMarginTrading", "enableMargin", "enableWithdrawals",
-                        "enableInternalTransfer", "permitsUniversalTransfer", "enableVanillaOptions",
-                        "enablePortfolioMarginTrading", "enableFixApiTrade")
 
 CAPTURES: tuple[tuple[str, str, dict | None, bool], ...] = (
     # (파일 이름, 경로, 파라미터, 필수 여부)
@@ -56,10 +56,6 @@ CAPTURES: tuple[tuple[str, str, dict | None, bool], ...] = (
     ("positionRisk_v2", "/fapi/v2/positionRisk", {"symbol": SYMBOL}, True),
     ("positionRisk_v3", "/fapi/v3/positionRisk", {"symbol": SYMBOL}, False),
 )
-
-
-class NotReadOnlyKey(RuntimeError):
-    pass
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -75,19 +71,6 @@ def load_env(path: Path) -> dict[str, str]:
 
 def utc_iso(ms: int) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(ms / 1000)) + f".{ms % 1000:03d}Z"
-
-
-def check_permissions(sapi: RestClient) -> dict[str, bool]:
-    data = sapi.get("/sapi/v1/account/apiRestrictions", signed=True).data
-    if not isinstance(data, dict):
-        raise NotReadOnlyKey(f"apiRestrictions 응답 해석 불가: {type(data).__name__}")
-    flags = {k: v for k, v in data.items() if isinstance(v, bool)}
-    if flags.get("enableReading") is not True:
-        raise NotReadOnlyKey("enableReading이 true가 아니다 — 읽기 권한 키가 아니다")
-    on = [k for k in NON_READ_PERMISSIONS if flags.get(k) is True]
-    if on:
-        raise NotReadOnlyKey(f"읽기 외 권한이 켜져 있다: {on} — 캡처 거부(아무 파일도 쓰지 않음)")
-    return flags
 
 
 def field_presence(rows: Any) -> dict[str, Any]:

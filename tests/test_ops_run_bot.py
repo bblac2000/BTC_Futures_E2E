@@ -17,7 +17,9 @@ import pytest
 from data import manifest
 from data.feed import KlineEvent
 from exchange.client_types import Response
+from exchange.errors import BinanceAPIError
 from exchange.gate import Mode
+from exchange.loader import ENDPOINTS
 from ops import run_bot as RB
 from ops.telegram_link import TelegramLink
 from paper.types import MarkTick
@@ -52,6 +54,35 @@ class FakePublic:
                 t += 60_000
             return Response(200, rows)
         raise AssertionError(path)
+
+    def post(self, *a, **k):
+        raise AssertionError("POST 금지")
+
+
+READ_ONLY = {"ipRestrict": True, "enableReading": True, "enableFutures": False, "enableWithdrawals": False,
+             "enableSpotAndMarginTrading": False, "enableMargin": False, "enableInternalTransfer": False,
+             "permitsUniversalTransfer": False, "enableVanillaOptions": False, "enablePortfolioMarginTrading": False,
+             "enableFixApiTrade": False}
+KEYS = {"BINANCE_API_KEY": "dummy-key-AAAA", "BINANCE_API_SECRET": "dummy-secret-BBBB"}
+BY_PATH = {spec.path: name for name, spec in ENDPOINTS.items()}
+
+
+class FakeSigned:
+    """키가 있는 읽기 전용 클라이언트(가짜) — 권한 조회 + 런타임 규칙 6종. POST가 오면 실패."""
+
+    def __init__(self, perms=None, fail: str | None = None):
+        self.perms, self.fail, self.calls = READ_ONLY if perms is None else perms, fail, []
+
+    def get(self, path, params=None, *, signed=False):
+        self.calls.append((path, signed))
+        if path == "/sapi/v1/account/apiRestrictions":
+            assert signed
+            return Response(200, self.perms)
+        name = BY_PATH[path]
+        assert signed == ENDPOINTS[name].signed
+        if name == self.fail:
+            raise BinanceAPIError(401, -2015, "Invalid API-key, IP, or permissions for action.", path)
+        return Response(200, load_snapshot(name)["response"])
 
     def post(self, *a, **k):
         raise AssertionError("POST 금지")
@@ -125,17 +156,18 @@ def config(tmp_path: Path, **kw) -> RB.RunConfig:
     return dataclasses.replace(base, **kw)
 
 
-def run(cfg, *, clock, tg=None, seconds=125, env=None, public=None):
-    env = {"TELEGRAM_OWNER_IDS": str(OWNER), "TELEGRAM_BOT_TOKEN": "x"} if env is None else env
+def run(cfg, *, clock, tg=None, seconds=125, env=None, public=None, signed=None, feed=None):
+    env = {"TELEGRAM_OWNER_IDS": str(OWNER), "TELEGRAM_BOT_TOKEN": "x"} | KEYS if env is None else env
+    signed = FakeSigned() if signed is None and "BINANCE_API_KEY" in env else signed
 
     def factory(counter, rt, recorder):
-        return ReplayFeed(counter, rt, clock, start=clock.t, seconds=seconds)
+        return (feed or ReplayFeed)(counter, rt, clock, start=clock.t, seconds=seconds)
 
     async def fast_sleep(_s):
         await asyncio.sleep(0)
 
     return asyncio.run(RB.run(cfg, env=env, clock_ms=clock, public_client=public or FakePublic(clock.t),
-                              feed_factory=factory, telegram_api=tg, sleep=fast_sleep))
+                              feed_factory=factory, telegram_api=tg, sleep=fast_sleep, signed_client=signed))
 
 
 @pytest.fixture(autouse=True)
@@ -151,15 +183,17 @@ def test_full_paper_replay_through_the_runner_records_bars_rules_snapshots_and_t
     con = sqlite3.connect(cfg.db_path)
     by_source = dict(con.execute("SELECT source, count(*) FROM bars_1m GROUP BY source").fetchall())
     assert by_source["rest"] == 9 and by_source["ws"] == 2           # 시작이 T0+1s라 첫 완결 분은 T0+60s
-    assert {r[0] for r in con.execute("SELECT endpoint FROM runtime_rules")} == set(RB.REQUIRED)
+    assert {r[0] for r in con.execute("SELECT endpoint FROM runtime_rules")} == set(ENDPOINTS), "런타임 조회 6종(서명 포함)"
+    assert {r[0] for r in con.execute("SELECT source FROM runtime_rules")} == {RB.RULES_SOURCE_RUNTIME}
     assert con.execute("SELECT count(*) FROM account_snapshots WHERE source='engine'").fetchone()[0] >= 3
     assert con.execute("SELECT kind FROM engine_events WHERE kind='Backfill'").fetchall() == [("Backfill",)]
     status = json.loads(cfg.status_path.read_text())
     assert status["shutdown"] == "stop" and status["exit_code"] == 0 and status["counts"]["bars"] == 2
     assert status["delivered"] == status["sent"] == len(tg.texts()) >= 2, "정지 알림 배달까지 센 뒤 상태를 쓴다"
     texts = tg.texts()
-    assert any(t.startswith("🟢 기동 [paper]") and "exchangeInfo=rest" in t and "leverageBracket=snapshot" in t
+    assert any(t.startswith("🟢 기동 [paper]") and "exchangeInfo=rest" in t and "leverageBracket=rest:signed" in t
                for t in texts)
+    assert "rules_from_snapshot" not in status["blockers"] and status["entries_allowed"]
     assert any(t.startswith("⚪ 정지 [paper] stop") for t in texts)
     assert ("set_my_commands", 8) in tg.calls
     assert not cfg.lock_path.exists() or cfg.lock_path.read_text()                  # 락 파일은 남아도 잠금은 풀렸다
@@ -167,7 +201,7 @@ def test_full_paper_replay_through_the_runner_records_bars_rules_snapshots_and_t
     assert ("stop",) in ev
 
 
-def test_restart_restores_the_wallet_and_flags_an_unrestored_open_position(tmp_path):
+def test_restart_with_an_open_row_but_no_position_snapshot_starts_flat_and_pauses(tmp_path):
     clock = Clock(T0 + 10 * 60_000 + 1000)
     cfg = config(tmp_path)
     assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
@@ -183,7 +217,81 @@ def test_restart_restores_the_wallet_and_flags_an_unrestored_open_position(tmp_p
     assert run(cfg, clock=clock, tg=tg, seconds=5) == 0
     texts = tg.texts()
     assert any("지갑 987.65" in t for t in texts)
-    assert any("재기동: DB에 열린 포지션 LONG 0.01" in t for t in texts)
+    assert any("포지션 복원하지 않음" in t and "DB: LONG 0.01" in t for t in texts)
+    status = json.loads(cfg.status_path.read_text())
+    assert "paused:system:restart_position_mismatch" in status["blockers"] and status["position"] is None
+
+
+class EntryFeed(ReplayFeed):
+    """재생 도중 한 번 진입 의도를 낸다(러너가 만든 BotRuntime의 진입 게이트 경로)."""
+
+    done = False
+
+    async def run(self, stop):
+        from tests.test_paper_engine import intent
+        orig = self.rt.on_mark
+
+        def on_mark(t):
+            orig(t)
+            if self.rt.engine.position is None and self.rt.engine.pending is None and not self.rt.entry_blockers() \
+                    and not self.done:
+                self.done = True
+                self.rt.submit_entry(intent(decided_ms=t.ts_ms, mark="60000"))
+        self.rt.on_mark = on_mark
+        await super().run(stop)
+
+
+def test_restart_after_stop_with_an_open_position_restores_it_and_entries_resume(tmp_path):
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=70, feed=EntryFeed) == 0
+    status = json.loads(cfg.status_path.read_text())
+    assert status["position"] is not None, "첫 실행이 포지션을 연 채 끝났다"
+    tg = FakeTelegram()
+    clock.t += 5000
+    assert run(cfg, clock=clock, tg=tg, seconds=70) == 0
+    status = json.loads(cfg.status_path.read_text())
+    assert status["position"] is not None and status["blockers"] == [] and status["entries_allowed"]
+    assert any(t.startswith("♻️ 재기동: 포지션 복원 LONG") for t in tg.texts())
+    con = sqlite3.connect(cfg.db_path)
+    assert con.execute("SELECT count(*) FROM positions WHERE event='open'").fetchone()[0] == 1, "root open 행은 하나"
+    assert con.execute("SELECT kind FROM engine_events WHERE kind IN ('PositionRestored','RestartRestore') ORDER BY id")\
+        .fetchall() == [("PositionRestored",), ("RestartRestore",)]
+
+
+# ── 런타임 규칙 출처(사용자 결정 2026-09-16 (ii)) ─────────────────────────────────
+def test_missing_key_falls_back_to_the_snapshot_and_blocks_entries_with_rules_from_snapshot(tmp_path):
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    tg = FakeTelegram()
+    assert run(cfg, clock=clock, tg=tg, seconds=70, env={"TELEGRAM_OWNER_IDS": str(OWNER), "TELEGRAM_BOT_TOKEN": "x"}) == 0
+    status = json.loads(cfg.status_path.read_text())
+    assert "rules_from_snapshot" in status["blockers"] and not status["entries_allowed"]
+    assert any("rules_from_snapshot" in t and "BINANCE_API_KEY" in t for t in tg.texts())
+    con = sqlite3.connect(cfg.db_path)
+    assert {r[0] for r in con.execute("SELECT source FROM runtime_rules")} == {RB.RULES_SOURCE_FALLBACK}
+
+
+def test_signed_lookup_failure_falls_back_and_blocks_entries(tmp_path):
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    tg = FakeTelegram()
+    assert run(cfg, clock=clock, tg=tg, seconds=70, signed=FakeSigned(fail="leverageBracket")) == 0
+    status = json.loads(cfg.status_path.read_text())
+    assert "rules_from_snapshot" in status["blockers"]
+    assert any("rules_from_snapshot" in t and "-2015" in t for t in tg.texts())
+
+
+def test_a_key_with_any_non_read_permission_is_refused_and_never_printed(tmp_path, capsys):
+    clock = Clock(T0 + 10 * 60_000 + 1000)
+    cfg = config(tmp_path)
+    tg = FakeTelegram()
+    perms = READ_ONLY | {"enableFutures": True}
+    assert run(cfg, clock=clock, tg=tg, seconds=5, signed=FakeSigned(perms=perms)) == RB.EXIT_CONFIG
+    out = capsys.readouterr()
+    assert "enableFutures" in out.err
+    for v in KEYS.values():
+        assert v not in out.out + out.err + " ".join(tg.texts())
 
 
 def test_live_mode_and_missing_owner_ids_are_refused_before_anything_starts(tmp_path, capsys):

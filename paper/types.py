@@ -128,6 +128,29 @@ class PositionVanished:
 
 
 @dataclass(frozen=True)
+class PositionRestored:
+    """PAPER 재기동 — DB 열린 root 포지션과 마지막 엔진 스냅샷이 일치해 엔진에 복원했다(사용자 2026-09-16 (a)).
+    DB: `engine_events`(root open 행은 그대로 — 뒤따르는 close가 같은 root에 붙는다)."""
+    ts_ms: int
+    direction: Direction
+    qty: Decimal
+    entry_price: Decimal
+    detail: str
+    state: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PositionAbandoned:
+    """PAPER 재기동 — DB에 열린 포지션이 있으나 스냅샷과 **일치하지 않아** 복원하지 않았다. 엔진은 flat으로 시작한다.
+    DB: 그 root에 close 행(reason `restart_unrestored`, 손익 없음 — 추정하지 않는다). 거래 결과가 아니므로 킬스위치는 세지 않는다."""
+    ts_ms: int
+    direction: Direction
+    qty: Decimal
+    entry_price: Decimal
+    detail: str
+
+
+@dataclass(frozen=True)
 class EntrySkipped:
     ts_ms: int
     decision: SizingDecision | None

@@ -21,11 +21,14 @@
 - 진입 차단 사유는 **목록**(`entries_blocked`) — 사유를 덮어쓰지 않는다 · 해제는 사람의 /start(`clear_blocks`)만(layer 8).
 - 부분 청산 → `PositionReduced`(체결·손익·잔량) · LIVE 봉 대사에서 거래소 flat → `vanish`(주문 없이 내부 close + `PositionVanished`)
   · LIVE 소실 손익은 추정하지 않고 거래소 지갑 재동기화(`sync_wallet` → `WalletResynced`)로 들어온다(사용자 2026-09-16).
+- PAPER 재기동 복원: `position_state()`(엔진 스냅샷에 들어감) ↔ `restore_position()`(→ `PositionRestored`) — 대조·판단은
+  `ops.restore`. 복원 뒤 첫 틱이 내려가 있던 동안의 펀딩 경계를 넘었으면 `FundingMissed` + 진입 차단(율 추정 없음).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from decimal import Decimal
+from typing import Any
 
 from exchange.errors import BinanceAPIError, LeverageNotConfirmed, OrderParamError, RulesError, TransportError
 from exchange.gate import Mode
@@ -47,6 +50,7 @@ from paper.types import (
     MarkTick,
     PositionClosed,
     PositionReduced,
+    PositionRestored,
     PositionRisk,
     PositionSynced,
     PositionVanished,
@@ -97,7 +101,7 @@ class OpenPosition:
     liq_price_est: Decimal
     entry_commission: Decimal
     opened_ms: int
-    decision: SizingDecision
+    decision: SizingDecision | None                 # 재기동 복원 포지션은 None(진입 뒤에는 읽지 않는다)
     funding_paid: Decimal
     liq_alerted: bool = False
 
@@ -123,6 +127,7 @@ class Engine:
         self.pending: EntryIntent | None = None
         self.entries_blocked: list[str] = []
         self._last_tick: MarkTick | None = None
+        self._restored_next_funding_ms: int | None = None     # 복원 뒤 첫 틱에서 내려가 있던 동안의 펀딩 경계를 본다
 
     # ── 입력 ────────────────────────────────────────────────────────────────
     def request_entry(self, intent: EntryIntent) -> None:
@@ -142,6 +147,12 @@ class Engine:
         self._check_funding_grid(t)
         ev: list[object] = []
         prev = self._last_tick
+        nf, self._restored_next_funding_ms = self._restored_next_funding_ms, None
+        if nf is not None and prev is None and self.position is not None and t.ts_ms >= nf:
+            #  재기동 복원: 내려가 있던 동안 지난 경계의 율은 모른다 — 피드 공백과 같은 규칙(추정 없이 알리고 진입 차단)
+            missed = (nf, *self._missed_boundaries(nf, t.ts_ms))
+            ev.append(FundingMissed(t.ts_ms, missed, self.position.signed_qty))
+            ev.append(self._block(t.ts_ms, f"재기동 중 펀딩 경계 {len(missed)}개 정산 불가(율 불명)"))
         if prev is not None and self.position is not None and prev.ts_ms < prev.next_funding_ms <= t.ts_ms:
             ev.append(self._settle_funding(prev.next_funding_ms, prev.funding_rate, prev.mark))
             missed = self._missed_boundaries(prev.next_funding_ms, t.ts_ms)
@@ -188,6 +199,34 @@ class Engine:
         self.position = None
         return [PositionVanished(ts_ms, pos.direction, pos.qty, pos.entry_price, detail),
                 self._block(ts_ms, f"거래소 포지션 소실 — 내부 강제 close: {detail}")]
+
+    def position_state(self) -> dict[str, Any] | None:
+        """엔진 스냅샷(`account_snapshots.raw_json`)에 넣는 포지션 상태 — 재기동 복원의 대조 원천(문자열·정수만)."""
+        pos = self.position
+        if pos is None:
+            return None
+        return {"direction": pos.direction.value, "qty": str(pos.qty), "entry_price": str(pos.entry_price),
+                "leverage": pos.leverage, "sl": str(pos.sl), "tp": None if pos.tp is None else str(pos.tp),
+                "liq_price_est": str(pos.liq_price_est), "entry_commission": str(pos.entry_commission),
+                "funding_paid": str(pos.funding_paid), "opened_ms": pos.opened_ms, "liq_alerted": pos.liq_alerted,
+                "next_funding_ms": self._restored_next_funding_ms if self._last_tick is None else self._last_tick.next_funding_ms}
+
+    def restore_position(self, state: dict[str, Any], *, ts_ms: int, detail: str) -> list[object]:
+        """PAPER 재기동 복원 — 호출자(`ops.restore`)가 DB와 스냅샷이 일치함을 확인한 뒤에만 부른다."""
+        if self.position is not None or self.pending is not None:
+            raise EntryRefused("복원 거부: 엔진에 이미 포지션 또는 대기 진입이 있다")
+        nf = state["next_funding_ms"]
+        if not isinstance(nf, int):
+            raise ValueError("복원 거부: next_funding_ms 없음(펀딩 경계를 판정할 수 없다)")
+        pos = OpenPosition(Direction(state["direction"]), Decimal(state["qty"]), Decimal(state["entry_price"]),
+                           int(state["leverage"]), Decimal(state["sl"]),
+                           None if state["tp"] is None else Decimal(state["tp"]), Decimal(state["liq_price_est"]),
+                           Decimal(state["entry_commission"]), int(state["opened_ms"]), None,
+                           Decimal(state["funding_paid"]), bool(state["liq_alerted"]))
+        self.position = pos
+        self._last_tick = None
+        self._restored_next_funding_ms = nf
+        return [PositionRestored(ts_ms, pos.direction, pos.qty, pos.entry_price, detail, dict(state))]
 
     def sync_wallet(self, ts_ms: int, wallet: Decimal, *, source: str, detail: str) -> WalletResynced:
         if not isinstance(wallet, Decimal):

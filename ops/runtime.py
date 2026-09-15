@@ -11,7 +11,8 @@
 - 그래서 `/close`의 청산은 틱 처리 중간에 끼어들 수 없다(같은 스레드에서 차례로 돈다).
 
 ## 안전 경로
-- **진입 게이트는 하나**: `entry_blockers()` = 엔진 차단 사유(`engine:`) ∪ `SafetyGate.entry_blockers()` ∪ 런타임 사유(`db:`).
+- **진입 게이트는 하나**: `entry_blockers()` = 엔진 차단 사유(`engine:`) ∪ `SafetyGate.entry_blockers()` ∪ 런타임 사유(`db:` ·
+  `exchange:` · 규칙 fallback `rules_from_snapshot`).
   `submit_entry`만 `Engine.request_entry`를 부른다 · 결정 뒤 체결 전에 게이트가 닫히면 대기 진입을 버리고 기록한다.
 - **stale은 벽시계로 판정한다**(데이터가 안 오면 봉 콜백도 안 온다): `safety_tick` → `StaleDataGuard.update` →
   레지스트리 #14(markprice grace 초과) `close`면 마지막 mark로 `close_now(STALE_DATA)` · 정지가 계속되는 동안 틱마다 재시도 · 청산마다 알림.
@@ -132,6 +133,8 @@ class BotRuntime:
         self.db_errors = 0
         self.bar_conflicts = 0
         self.wallet_resync_due = False
+        self.rules_blocker: str | None = None                     # 러너: 런타임 규칙 조회 실패 → "rules_from_snapshot"(/start로 안 풀림)
+        self.rules_source: dict[str, Any] | None = None
         self.last_reconcile_detail: str | None = None
         self._intent_tp: Decimal | None = None
         self._saved_state: str | None = None
@@ -161,6 +164,8 @@ class BotRuntime:
             out.append("db:read_failed")
         if self.wallet_resync_due:
             out.append("exchange:wallet_resync_due")
+        if self.rules_blocker is not None:
+            out.append(self.rules_blocker)
         return out
 
     def submit_entry(self, intent: EntryIntent) -> None:
@@ -293,7 +298,10 @@ class BotRuntime:
         pos = self.engine.position
         assert pos is not None
         if self.last_mark is None:
-            self.alert("🔴 stale 청산 필요하나 받은 mark가 없다 — 사람 확인", important=True)
+            failure = "받은 mark가 없다"
+            if failure != self._last_exit_failure:          # 재기동 복원 뒤 mark가 늦으면 매초 반복된다 — 한 번만
+                self._last_exit_failure = failure
+                self.alert("🔴 stale 청산 필요하나 받은 mark가 없다 — 사람 확인", important=True)
             return
         age = (now_ms - (self.last_mark_ms or now_ms)) / 1000
         ev = self.engine.close_now(ref_mark=self.last_mark, ts_ms=now_ms, reason=ExitReason.STALE_DATA)
@@ -441,7 +449,8 @@ class BotRuntime:
                                       wallet_balance=e.wallet,
                                       margin_balance=None if upnl is None else e.wallet + upnl,
                                       available_balance=e.wallet - iso, isolated_margin=iso, unrealized_pnl=upnl,
-                                      raw={"reason": reason, "mark": None if self.last_mark is None else str(self.last_mark)})
+                                      raw={"reason": reason, "mark": None if self.last_mark is None else str(self.last_mark),
+                                           "position": e.position_state()})       # 재기동 복원의 대조 원천(ops.restore)
         except (sqlite3.Error, R.TransactionOpen) as ex:
             self.db_errors += 1
             logger.error("스냅샷 기록 실패: %s", ex)
@@ -518,7 +527,7 @@ class BotRuntime:
             "delivery": self.gate.stale.counter.snapshot(now_ms),
             "kill_switch": self.gate.kill_switch.to_state(),
             "db_errors": self.db_errors, "unrecorded": len(self.unrecorded) + len(self.unrecorded_ops),
-            "state_save_failed": self.state_save_failed, "bar_conflicts": self.bar_conflicts,
+            "state_save_failed": self.state_save_failed, "bar_conflicts": self.bar_conflicts, "rules": self.rules_source,
             "counts": dict(self.counts),
         }
 

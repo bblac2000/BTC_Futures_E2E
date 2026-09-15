@@ -39,7 +39,9 @@
 5c. [x] `_exit` 동기화 기록(`PositionSynced` → root open 수정 행) · LIVE 거래소 수량 소실(`PositionVanished` → 킬스위치) · 채택 추정 수수료 — Codex L6·7 #2~#4
 5b. [x] layer 8 기동 배선(`ops/runtime.py`·`ops/run_bot.py`) — 설계서 §17
 5e. [ ] 페이퍼 14일차 재평가 새 행: #5 · #7 · #9 · **#11**
-5f. [ ] 결정 필요: 페이퍼 포지션 재기동 복원 여부(현재 복원 안 함 → 대사 sticky) · LIVE `ExchangeReader` 계좌 필드 공식 문서 확인 · LIVE 거래소 읽기 비동기화(Codex L8 #3)
+5f. [x] 페이퍼 재기동 복원 (a) · 런타임 규칙 (ii) · 레지스트리 #14 (2026-09-16 구현) · [ ] LIVE `ExchangeReader` 계좌 필드 공식 문서 확인 · LIVE 거래소 읽기 비동기화(Codex L8 #3) · 런타임 규칙 주기 재조회
+5i. [ ] 사용자: 읽기 전용 키 발급·`.env` 반영 → 재기동 복원 드라이런(`scripts/dryrun_restart_restore.py --use-binance-key`) · rclone remote · `TELEGRAM_OWNER_IDS` · 캡처 스크립트
+5j. [ ] VPS 배포 시점: E2E Restart B(2026-09-17 00:12 UTC) 24h 게이트 종료 뒤(earliest 09-18) · 라이브 호스트 변경 하루 1건
 5h. [ ] 보류: `engine_events` op_id 조회 인덱스(스키마 v3) · shard `roll_failed` health 경보
 5g. [ ] VPS 배포(런북 `docs/runbook_vps.md`) — 사용자 논의 후 · 외부 heartbeat · Drive 사본 재검증 도구 · 대장 reconcile 도구
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [x] layer 8: health 스로틀 구조 · `data_stores` allowlist(설계 #131) · [ ] shard `roll_failed` 대장 이벤트를 health가 읽는 경보(상태 파일에 없음)

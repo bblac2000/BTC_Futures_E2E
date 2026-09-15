@@ -1,12 +1,20 @@
 """봇 기동 — `python -m ops.run_bot --mode paper ...` (systemd `btcfut-bot.service`가 부른다).
 
 순서: 인스턴스 락 → DB 마이그레이션 → 런타임 규칙(+ `runtime_rules` 기록) → 지갑 복원(마지막 엔진 스냅샷) →
-안전 상태 복원(`safety_state`) → REST 백필(마감 봉 · 공개 GET) → shard 기록기 → 텔레그램(명령·알림) → 피드 + 1초 안전 틱.
+안전 상태 복원(`safety_state`) → **포지션 복원(DB 열린 행 + 마지막 엔진 스냅샷이 일치할 때만, `ops.restore`)** →
+REST 백필(마감 봉 · 공개 GET) → shard 기록기 → 텔레그램(명령·알림) → 피드 + 1초 안전 틱.
 종료(SIGTERM/SIGINT/`--duration-s`): 피드 정지 → 기록기 종료 기록(clean/dirty) → 스냅샷·상태 저장 → 텔레그램 정지 알림.
 
 🔒 **LIVE는 이 러너로 기동하지 않는다** — 라이브 체크리스트(설계서 §10)·사용자 승인 전에는 `LiveSender`를 만드는 경로 자체가
-여기 없다(`--mode live` → 종료 코드 4). PAPER 규칙 조회는 서명 없는 공개 GET만 쓴다: 서명 엔드포인트(leverageBracket·
-commissionRate)는 **캡처 스냅샷**에서 읽는다(`--rules public+snapshot`) — 키를 쓰지 않는다.
+여기 없다(`--mode live` → 종료 코드 4).
+
+런타임 규칙(사용자 결정 2026-09-16 (ii) — PAPER·LIVE 같은 조회 경로):
+- `.env`의 `BINANCE_API_KEY`/`BINANCE_API_SECRET`(**읽기 전용 키**) → `ReadOnlyClient(CcxtRestClient)` · 먼저 키 권한을 실측
+  (`exchange.permissions.check_permissions`) — 읽기 외 권한이 하나라도 켜져 있으면 **기동 거부(종료 코드 4)**.
+- 통과하면 `load_runtime_rules`(서명 GET 포함 6종) → `runtime_rules`(source `runtime:signed`).
+- 키 없음·권한 조회 실패·서명 조회 실패 → **캡처 스냅샷 fallback**(서명 엔드포인트만 스냅샷, 나머지 공개 GET · 공개도 실패하면 전부
+  스냅샷) + 진입 차단 사유 `rules_from_snapshot`. 규칙은 기동 때만 읽으므로 이 차단은 **/start로 풀리지 않는다** — 원인 해결 후 재기동.
+- 키·시크릿 값은 출력하지 않는다(오류 문구에서도 가린다).
 
 종료 코드: 0 clean · 1 기록기 dirty · 2 피드 실패 · 3 다른 인스턴스 실행 중 · 4 설정 오류.
 """
@@ -38,14 +46,23 @@ from db import record as R
 from exchange import store
 from exchange.client import ReadOnlyClient
 from exchange.gate import Mode
-from exchange.loader import ENDPOINTS, REQUIRED, build_rules, utc_iso
+from exchange.loader import (
+    ENDPOINTS,
+    REQUIRED,
+    build_rules,
+    load_runtime_rules,
+    rules_from_snapshots,
+    utc_iso,
+)
 from exchange.loader_types import RawFetch
+from exchange.permissions import NotReadOnlyKey, check_permissions
 from exchange.rules import RuntimeRules
 from notify import config as NK
 from notify.bot import CommandBot
 from notify.poller import TelegramPoller
 from notify.telegram_api import TelegramApi
 from ops.delivery_counter import DeliveryCounter
+from ops.restore import apply_restore, decide_paper_restore
 from ops.runtime import BotRuntime
 from ops.telegram_link import TelegramLink
 from paper.engine import Engine
@@ -61,6 +78,11 @@ logger = logging.getLogger("btcfut")
 SYMBOL = "BTCUSDT"
 SAFETY_TICK_S = 1.0
 EXIT_CLEAN, EXIT_DIRTY, EXIT_FEED, EXIT_LOCKED, EXIT_CONFIG = 0, 1, 2, 3, 4
+KEY_ENV, SECRET_ENV = "BINANCE_API_KEY", "BINANCE_API_SECRET"
+RULES_SOURCE_RUNTIME = "runtime:signed"
+RULES_SOURCE_FALLBACK = "fallback:public+snapshot"
+RULES_SOURCE_SNAPSHOT_ONLY = "fallback:snapshot"
+RULES_FROM_SNAPSHOT = "rules_from_snapshot"          # 사용자 결정 2026-09-16 (ii) — 진입 차단 사유 문자열 그대로
 
 
 @dataclass(frozen=True)
@@ -149,6 +171,69 @@ def load_rules_public_plus_snapshot(public: Any, snapshot_dir: Path, symbol: str
     return rules, fetches, sources
 
 
+@dataclass(frozen=True)
+class RulesLoad:
+    rules: RuntimeRules
+    fetches: list[RawFetch]
+    sources: list[str]
+    db_source: str
+    fallback_reason: str | None                    # None = 런타임 조회 성공
+
+
+def _redact(text: str, secrets_: list[str]) -> str:
+    for s in secrets_:
+        if s:
+            text = text.replace(s, "<redacted>")
+    return text
+
+
+def _snapshot_fetches(snapshot_dir: Path, symbol: str) -> list[RawFetch]:
+    out = []
+    for name in REQUIRED:
+        doc = json.loads((snapshot_dir / f"{name}.json").read_text(encoding="utf-8"))
+        meta = doc.get("_meta", {})
+        out.append(RawFetch(name, ENDPOINTS[name].path, symbol, str(meta.get("captured_at_utc") or "unknown"), doc["response"]))
+    return out
+
+
+def load_rules(cfg: RunConfig, *, env: Mapping[str, str], public_client: Any, signed_client: Any) -> RulesLoad:
+    """런타임 조회(읽기 전용 키) → 실패하면 스냅샷 fallback. `NotReadOnlyKey`는 삼키지 않는다(호출자가 기동 거부)."""
+    key, secret = env.get(KEY_ENV, ""), env.get(SECRET_ENV, "")
+    reason: str | None = None
+    if signed_client is None:
+        if key and secret:
+            try:
+                from exchange.ccxt_rest import CcxtRestClient
+                inner = CcxtRestClient(api_key=key, secret=secret)
+                inner.sync_time()
+                signed_client = ReadOnlyClient(inner)                    # 키가 있어도 POST 구조적 불가
+            except Exception as e:  # noqa: BLE001 — 준비 실패는 fallback 사유
+                reason = f"키 클라이언트 준비 실패 {type(e).__name__}: {e}"
+        else:
+            reason = f"{KEY_ENV}/{SECRET_ENV} 없음"
+    if signed_client is not None:
+        try:
+            check_permissions(signed_client)
+            rules, fetches = load_runtime_rules(signed_client, cfg.symbol)
+            sources = [f"{f.endpoint}=rest:signed" if ENDPOINTS[f.endpoint].signed else f"{f.endpoint}=rest" for f in fetches]
+            return RulesLoad(rules, fetches, sources, RULES_SOURCE_RUNTIME, None)
+        except NotReadOnlyKey:
+            raise
+        except Exception as e:  # noqa: BLE001 — 조회 실패는 fallback + 진입 차단
+            reason = f"런타임 조회 실패 {type(e).__name__}: {e}"
+    assert reason is not None
+    reason = _redact(reason, [key, secret])
+    try:
+        rules, fetches, sources = load_rules_public_plus_snapshot(public_client, cfg.snapshot_dir, cfg.symbol)
+        return RulesLoad(rules, fetches, sources, RULES_SOURCE_FALLBACK, reason)
+    except Exception as e:  # noqa: BLE001 — 공개 GET도 실패하면 전부 스냅샷(진입은 어차피 막힌다 · 청산 규칙은 필요)
+        fetches = _snapshot_fetches(cfg.snapshot_dir, cfg.symbol)
+        rules = rules_from_snapshots({f.endpoint: {"_meta": {"captured_at_utc": f.fetched_at_utc}, "response": f.payload}
+                                      for f in fetches}, cfg.symbol)
+        return RulesLoad(rules, fetches, [f"{f.endpoint}=snapshot" for f in fetches], RULES_SOURCE_SNAPSHOT_ONLY,
+                         f"{reason} · 공개 GET도 실패 {type(e).__name__}: {e}")
+
+
 def last_engine_wallet(con: sqlite3.Connection, mode: Mode) -> Decimal | None:
     row = con.execute("SELECT wallet_balance FROM account_snapshots WHERE mode=? AND source='engine' "
                       "AND wallet_balance IS NOT NULL ORDER BY id DESC LIMIT 1", (mode.value,)).fetchone()
@@ -180,7 +265,7 @@ def _default_feed(counter: DeliveryCounter, rt: BotRuntime, recorder: Recorder) 
 
 async def run(cfg: RunConfig, *, env: Mapping[str, str], clock_ms: Callable[[], int] = wall_ms,
               public_client: Any = None, feed_factory: FeedFactory = _default_feed,
-              telegram_api: Any = None, sleep: Callable[[float], Any] = asyncio.sleep) -> int:
+              telegram_api: Any = None, sleep: Callable[[float], Any] = asyncio.sleep, signed_client: Any = None) -> int:
     if cfg.mode is not Mode.PAPER:
         print("🔒 LIVE 기동은 이 러너에 없다 — 라이브 체크리스트(설계서 §10)·사용자 승인 후 별도 배선", file=sys.stderr)
         return EXIT_CONFIG
@@ -199,13 +284,14 @@ async def run(cfg: RunConfig, *, env: Mapping[str, str], clock_ms: Callable[[], 
         if not locked:
             print(f"다른 인스턴스가 실행 중(락 {cfg.lock_path})", file=sys.stderr)
             return EXIT_LOCKED
-        return await _run_locked(cfg, owners=owners, token=token, clock_ms=clock_ms, public_client=public_client,
-                                 feed_factory=feed_factory, telegram_api=telegram_api, sleep=sleep)
+        return await _run_locked(cfg, env=env, owners=owners, token=token, clock_ms=clock_ms, public_client=public_client,
+                                 feed_factory=feed_factory, telegram_api=telegram_api, sleep=sleep,
+                                 signed_client=signed_client)
 
 
-async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: str, clock_ms: Callable[[], int],
-                      public_client: Any, feed_factory: FeedFactory, telegram_api: Any,
-                      sleep: Callable[[float], Any]) -> int:
+async def _run_locked(cfg: RunConfig, *, env: Mapping[str, str], owners: frozenset[int] | None, token: str,
+                      clock_ms: Callable[[], int], public_client: Any, feed_factory: FeedFactory, telegram_api: Any,
+                      sleep: Callable[[float], Any], signed_client: Any) -> int:
     manifest.MANIFEST_DB = cfg.var_dir / "manifest.sqlite"
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(cfg.db_path)
@@ -215,12 +301,18 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
         from exchange.ccxt_rest import CcxtRestClient
         public_client = ReadOnlyClient(CcxtRestClient())                 # 키 없음 · POST 구조적 불가
     try:
-        rules, fetches, sources = load_rules_public_plus_snapshot(public_client, cfg.snapshot_dir, cfg.symbol)
-    except Exception as e:  # noqa: BLE001 — 규칙 없이는 기동하지 않는다
-        print(f"런타임 규칙 로드 실패: {type(e).__name__}: {e}", file=sys.stderr)
+        loaded = load_rules(cfg, env=env, public_client=public_client, signed_client=signed_client)
+    except NotReadOnlyKey as e:
+        print(f"🚫 설정 오류: {KEY_ENV}가 읽기 전용 키가 아니다 — 기동 거부: {e}", file=sys.stderr)
         con.close()
         return EXIT_CONFIG
-    store.persist_fetches(con, fetches, mode=cfg.mode.value, source=f"public+snapshot:{cfg.snapshot_dir}")
+    except Exception as e:  # noqa: BLE001 — 규칙 없이는 기동하지 않는다
+        msg = _redact(f"{type(e).__name__}: {e}", [env.get(KEY_ENV, ""), env.get(SECRET_ENV, "")])
+        print(f"런타임 규칙 로드 실패: {msg}", file=sys.stderr)
+        con.close()
+        return EXIT_CONFIG
+    rules, sources = loaded.rules, loaded.sources
+    store.persist_fetches(con, loaded.fetches, mode=cfg.mode.value, source=loaded.db_source)
 
     now = clock_ms()
     wallet = last_engine_wallet(con, cfg.mode) or cfg.capital
@@ -257,6 +349,9 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
     engine = Engine(rules, PaperSender(rules), mode=cfg.mode, wallet=wallet, limits=SizingLimits())
     rt = BotRuntime(engine=engine, gate=gate, con=con, symbol=cfg.symbol, clock_ms=clock_ms, status_path=cfg.status_path)
     rt.saved_state_id = R.latest_safety_state_id(con, SAFETY_GATE_STATE, mode=cfg.mode.value)
+    if loaded.fallback_reason is not None:
+        rt.rules_blocker = RULES_FROM_SNAPSHOT
+    rt.rules_source = {"source": loaded.db_source, "fallback_reason": loaded.fallback_reason}
     if not keep_crumb:
         rt.breadcrumb_path = cfg.breadcrumb_path                         # 해석 못 한 breadcrumb는 경로를 주지 않아 지우지 않는다
     if crumb_note is not None:
@@ -264,6 +359,7 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
         rt.save_state(now)
         rt._retry_unrecorded(now)
         rt.record_ops("RestartWithUnsavedSafetyState", crumb_note, now)
+    restore_msgs = apply_restore(rt, decide_paper_restore(con, mode=cfg.mode.value, symbol=cfg.symbol), now)
 
     link: TelegramLink | None = None
     if cfg.telegram:
@@ -282,12 +378,14 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
     if crumb_note is not None:
         rt.alert(f"🛑 재기동: 지난 실행의 저장되지 않은 안전 상태 breadcrumb {crumb_note} · 신규 진입 일시정지 — 확인 후 /start",
                  important=True)
-    db_open = R.open_position_state(con, mode=cfg.mode.value, symbol=cfg.symbol)
     rt.alert(f"🟢 기동 [{cfg.mode.value}] {cfg.symbol} · 지갑 {wallet} · 규칙 {', '.join(sources)} · "
              f"킬스위치 {'발동 ' + gate.kill_switch.tripped.reason if gate.kill_switch.tripped else '정상'}")
-    if db_open is not None:
-        rt.alert(f"⚠️ 재기동: DB에 열린 포지션 {db_open.direction} {db_open.remaining_qty} — 엔진은 복원하지 않는다 · "
-                 "대사 불일치로 진입 금지 · 사람 확인 필요", important=True)
+    if loaded.fallback_reason is not None:
+        rt.alert(f"⚠️ 런타임 규칙 조회 실패 → 캡처 스냅샷으로 기동 · 신규 진입 금지({RULES_FROM_SNAPSHOT}) · "
+                 f"/start로 풀리지 않음(규칙은 기동 때만 읽는다) — 원인 해결 후 재기동\n원인: {loaded.fallback_reason}",
+                 important=True)
+    for m in restore_msgs:
+        rt.alert(m, important=True)
     try:
         bf = backfill(rt, public_client, now_ms=now, minutes=cfg.backfill_minutes)
         rt.record_ops("Backfill", json.dumps(bf), now, bf)
@@ -344,7 +442,7 @@ def parse_args(argv: list[str] | None = None) -> RunConfig:
     ap.add_argument("--mode", default="paper", choices=[m.value for m in Mode])
     ap.add_argument("--db", default=str(ROOT / "var" / "bot.sqlite"))
     ap.add_argument("--snapshot-dir", default=str(ROOT / "tests" / "fixtures" / "snapshots"),
-                    help="서명 엔드포인트(leverageBracket·commissionRate) 캡처 스냅샷 디렉터리")
+                    help="런타임 조회 실패 시 fallback 캡처 스냅샷 디렉터리(진입 차단 rules_from_snapshot)")
     ap.add_argument("--capital", default="1000")
     ap.add_argument("--var-dir", default=str(ROOT / "var"))
     ap.add_argument("--duration-s", type=float, default=None, help="정해진 시간 뒤 정상 종료(드라이런)")
