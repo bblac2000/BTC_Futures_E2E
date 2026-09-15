@@ -531,3 +531,17 @@ def test_dryrun_harness_strips_binance_keys_from_child_environments_unless_asked
     base = {"PATH": "/bin", **KEYS, "TELEGRAM_BOT_TOKEN": "t"}
     assert set(H.child_env(base, use_key=False)) == {"PATH", "TELEGRAM_BOT_TOKEN"}
     assert H.child_env(base, use_key=True) == base
+
+
+@pytest.mark.parametrize("message", [
+    '{"signature":"deadbeef","timestamp":1789,"recvWindow":5000}',
+    "{'signature': 'deadbeef', 'timestamp': 1789, 'recvWindow': 5000}",
+    "signature: deadbeef timestamp: 1789 recvwindow: 5000",
+    "GET /fapi/v1/leverageBracket?timestamp=1789&recvWindow=5000&signature=deadbeef",
+    "x-mbx-apikey: dummy-key-AAAA signature=deadbeef",
+])
+def test_safe_error_also_strips_json_colon_and_schemeless_signed_fields(message):
+    """Codex L8b 재검토 #3 PARTIAL: JSON·콜론 형식 · 스킴 없는 경로의 쿼리."""
+    text = RB.safe_error(RuntimeError(message), secrets=list(KEYS.values()))
+    for bad in ("deadbeef", "1789", "5000", "dummy-key-AAAA"):
+        assert bad not in text, (message, text)

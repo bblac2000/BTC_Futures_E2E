@@ -1469,3 +1469,49 @@ Resume in Codex: codex resume 01a0a6b1-1364-7c32-aaac-21e78d60ae19
 ```
 </details>
 
+### Codex 재검토 #1: L8b 수정분 (`1608073..2171383`, read-only · `task-mu34apl6-1xs6sb`)
+판정: 1 HIGH·2 HIGH·4 MEDIUM·5 LOW **CLOSED** · 3 MEDIUM **PARTIAL** — 영역 A·B·D MERGE, C FIX FIRST.
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 새 MEDIUM | `safe_error`가 JSON·콜론 형식(`"signature":"…"`)과 스킴 없는 경로 쿼리를 못 지운다 | ✅ | 쿼리 제거를 스킴 없는 경로까지 · 서명 필드를 `=`·`:`·따옴표 형식 모두 `<signed>`로 · 파라미터화 테스트 5형식 |
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+[MEDIUM] `safe_error` still misses JSON/body-style signed fields.  
+Evidence: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:184) strips `https://...?...`, `X-MBX-APIKEY`, and `signature|timestamp|recvwindow=` forms, but not colon/JSON forms such as `{"signature":"deadbeef","timestamp":1789,"recvWindow":5000}`.  
+Scenario: a ccxt/transport exception includes serialized request kwargs or a JSON body rather than a URL query. The API key header may be removed, but the signed request material remains in `fallback_reason`, alert/status text, or stderr.  
+Fix: add a case-insensitive JSON/header/body redactor for `signature`, `timestamp`, and `recvWindow` with `:` separators, and preferably strip query strings for scheme-less paths too, e.g. `/fapi/v1/x?...`.
+
+**Prior Findings**
+1. HIGH FundingMissed engine block lost after second restart: **CLOSED**.  
+Evidence: `engine_blocks` is persisted in [safety/gate.py](/home/cms/project/BTC_Futures_E2E/safety/gate.py:85), restored into `engine.entries_blocked` in [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:116), saved on `EntriesBlocked` in [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:358), and cleared through `/start` plus `save_state` in [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:607).
+
+2. HIGH restore agreement misses `entry_commission` / `liq_price_est`: **CLOSED**.  
+Evidence: DB-side `entry_commission` is computed and compared in [ops/restore.py](/home/cms/project/BTC_Futures_E2E/ops/restore.py:66) and [ops/restore.py](/home/cms/project/BTC_Futures_E2E/ops/restore.py:108). Snapshot `liq_price_est` must parse, but is not trusted; restore recomputes it in [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:228).
+
+3. MEDIUM fallback reason can leak signed request material: **PARTIAL**.  
+Evidence: common URL query/header forms are scrubbed in [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:189), but the JSON/body gap above remains.
+
+4. MEDIUM `sync_time` before permission check on keyed client: **CLOSED**.  
+Evidence: [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:202) syncs time with an unkeyed client, then copies `timeDifference` before constructing the keyed read-only client.
+
+5. LOW harness child env keeps keys: **CLOSED**.  
+Evidence: [scripts/dryrun_restart_restore.py](/home/cms/project/BTC_Futures_E2E/scripts/dryrun_restart_restore.py:70) strips Binance key env vars unless `--use-binance-key`, and both child `Popen` calls pass the stripped env.
+
+**Area Verdicts**
+A. Persisting engine blocks: **MERGE**. I do not see a stale-block reimpose or dropped-block path in normal DB/breadcrumb flows.
+
+B. Restore agreement and liquidation recompute: **MERGE**. `restore_position` and `_refresh_liquidation` use the same formula.
+
+C. Error sanitization: **FIX FIRST**. The remaining JSON/body signed-field gap is small but real.
+
+D. Keyed-client ordering and dry-run env: **MERGE**.
+
+I did not run tests because this was a read-only review and pytest would create temp artifacts/caches.
+
+Codex session ID: 01a0a6bb-7167-70b1-b4da-da15aeec3184
+Resume in Codex: codex resume 01a0a6bb-7167-70b1-b4da-da15aeec3184
+```
+</details>

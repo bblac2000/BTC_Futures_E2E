@@ -181,9 +181,11 @@ class RulesLoad:
     fallback_reason: str | None                    # None = 런타임 조회 성공
 
 
-_URL_QUERY = re.compile(r"(https?://[^\s?'\"]+)\?[^\s'\"]*")
+#  스킴이 있든 없든 경로 뒤 쿼리 전체(`https://h/p?…` · `/fapi/v1/p?…`)
+_URL_QUERY = re.compile(r"((?:https?://[^\s?'\"]+)|(?:/[A-Za-z0-9_./-]+))\?[^\s'\"]*")
 _APIKEY_HEADER = re.compile(r"(?i)['\"]?x-mbx-apikey['\"]?\s*[:=]\s*['\"]?[^'\"\s,}]*['\"]?")
-_SIGNED_PARAM = re.compile(r"(?i)\b(signature|timestamp|recvwindow)=[^&\s'\"]*&?")
+#  서명 재료: `k=v`(쿼리) · `"k":v` / `'k': 'v'` / `k: v`(JSON·dict·헤더식) — 대소문자 무시
+_SIGNED_PARAM = re.compile(r"(?i)['\"]?\b(signature|timestamp|recvwindow)\b['\"]?\s*[:=]\s*['\"]?[^&\s'\",}]*['\"]?&?")
 
 
 def safe_error(e: BaseException, *, secrets: list[str]) -> str:
@@ -192,7 +194,7 @@ def safe_error(e: BaseException, *, secrets: list[str]) -> str:
     text = f"{type(e).__name__}: {e}"
     text = _URL_QUERY.sub(r"\1", text)
     text = _APIKEY_HEADER.sub("<apikey-header>", text)
-    text = _SIGNED_PARAM.sub("", text)
+    text = _SIGNED_PARAM.sub("<signed>", text)
     for s in secrets:
         if s:
             text = text.replace(s, "<redacted>")
