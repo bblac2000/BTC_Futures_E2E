@@ -37,7 +37,10 @@ def test_guarded_packages_have_no_exchange_value_literals():
     allowed = {("exchange/client.py", "float 리터럴 10.0"),
                ("sizing/config.py", "Decimal 리터럴 '0.40'"),
                ("sizing/config.py", "Decimal 리터럴 '0.10'"),
-               ("sizing/config.py", "Decimal 리터럴 '0'")}
+               ("sizing/config.py", "Decimal 리터럴 '0'"),
+               #  - SL·청산 게이트 — 사용자 사전확약 레지스트리 #5(b_rel 1.5 · 절대 간격 10bp)
+               ("sizing/config.py", "Decimal 리터럴 '1.5'"),
+               ("sizing/config.py", "Decimal 리터럴 '0.0010'")}
     v = [x for x in v if not any(x.startswith(f + ":") and x.endswith(val) for f, val in allowed)]
     assert v == [], "\n".join(v)
 

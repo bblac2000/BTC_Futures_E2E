@@ -15,10 +15,13 @@
 2. [ ] **사용자 실행 대기** — `uv run python scripts/capture_account_snapshot.py`(read-only 키) → 합성 fixture 교체 + positionRisk `isolated` 필드 판정(1c 해결). 결과 보고 후 `gate._is_isolated` 확정
 3. [x] layer 2 `sizing/` 구현·테스트(`d1ed96d`)
 3a. [x] 사용자 결정 B1·B2 → 레지스트리 #2 · layer 2 재작업 완료
-3d. [ ] **레지스트리 #3 buffer 값 사전등록**(사용자) — 값 없으면 layer 3 페이퍼 기동 불가
+3d. [x] 레지스트리 #5 buffer 확정(1.5·10bp·mark)
 3e. [x] Codex 재검토 — layer 2 이전 수정분 + B1·B2 + algo 사전검사(`task-mu27w8m4-oicyfq`) → Q4 수정
-3f. [ ] **사용자 결정 B5** — 청산 거리 식: 행 #2 근사(SHORT 반보수) vs 바이낸스 정확식(방향별) — **layer 3 착수 전 필수**
-3g. [ ] **사용자 결정 B6** — COIN-M(dapi) 사전검사 추가 vs 전용 계정 불변식을 라이브 체크리스트에
+3f. [x] B5 → 레지스트리 #4 정확식 구현
+3g. [x] B6 → 라이브 체크리스트(설계서 §10)
+3i. [ ] 백로그: COIN-M(dapi) 포지션·미체결·algo 읽기 사전검사 — **엔드포인트 공식 문서 원문 확인 먼저**
+3j. [ ] 페이퍼 14일차: 레지스트리 #5 재평가 새 행(체결 슬리피지 p99 · 모니터 주기 mark 이동 p99)
+3k. [ ] 첫 페이퍼 주: 진입 후 검사 로그로 #4 수수료 가정 판정
 3h. [ ] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
 3c. [ ] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
