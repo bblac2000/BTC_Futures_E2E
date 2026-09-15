@@ -42,6 +42,10 @@ FEATURE_TABLES = ("features_base", "features_adv")
 ORPHAN_CLOSE = "open 행 없음(채택·기록 전 포지션)"
 
 
+class TransactionOpen(RuntimeError):
+    """호출자의 트랜잭션이 열려 있다 — 대신 커밋·롤백하지 않는다(Codex 재검토 db #3)."""
+
+
 class FeatureDefinitionConflict(ValueError):
     """같은 (name, params_version)에 다른 정의 · 등록 안 된 피처 · 다른 테이블 — 덮어쓰지 않는다."""
 
@@ -90,19 +94,36 @@ def _v(x: Any) -> Any:
     return x
 
 
+def _no_floats(x: Any, path: str = "$") -> None:
+    """`json.dumps(default=)`는 float에 불리지 않는다(Codex 재검토 db #1) — 중첩까지 직접 찾는다."""
+    if isinstance(x, float):
+        raise TypeError(f"float 값 {x!r} at {path} — Decimal/문자열만 기록한다")
+    if isinstance(x, Mapping):
+        for k, v in x.items():
+            _no_floats(v, f"{path}.{k}")
+    elif isinstance(x, list | tuple):
+        for i, v in enumerate(x):
+            _no_floats(v, f"{path}[{i}]")
+
+
 def _json(x: Any) -> str | None:
     if x is None:
         return None
+    _no_floats(x)
 
     def default(o: Any) -> Any:
         if isinstance(o, Decimal):
             return str(o)
         if isinstance(o, Enum):
             return o.value
-        if isinstance(o, float):
-            raise TypeError(f"float 값 {o!r} — Decimal만 기록한다")
         return str(o)
     return json.dumps(x, ensure_ascii=False, sort_keys=True, default=default)
+
+
+def _tx(con: sqlite3.Connection) -> sqlite3.Connection:
+    if con.in_transaction:
+        raise TransactionOpen("열린 트랜잭션이 있다 — 기록 함수는 자기 트랜잭션만 커밋한다")
+    return con
 
 
 def _insert(con: sqlite3.Connection, table: str, row: Mapping[str, Any]) -> int:
@@ -143,10 +164,15 @@ def _order(con: sqlite3.Connection, f: Fill, *, mode: str, symbol: str, position
     })
 
 
-def open_position_id(con: sqlite3.Connection, *, mode: str, symbol: str) -> int | None:
-    """아직 다 닫히지 않은 가장 최근 open 행(부분 청산은 close 수량 합 < open 수량)."""
-    for pid, qty in con.execute("SELECT id, qty FROM positions WHERE mode=? AND symbol=? AND event='open' "
-                                "ORDER BY id DESC", (mode, symbol)):
+def open_position_id(con: sqlite3.Connection, *, mode: str, symbol: str, direction: Any = None) -> int | None:
+    """아직 다 닫히지 않은 가장 최근 open 행(부분 청산은 close 수량 합 < open 수량). `direction`이 있으면 같은 방향만
+    (Codex 재검토 db #4 — 반대 방향 close를 붙이지 않는다)."""
+    sql = "SELECT id, qty FROM positions WHERE mode=? AND symbol=? AND event='open'"
+    args: list[Any] = [mode, symbol]
+    if direction is not None:
+        sql += " AND direction=?"
+        args.append(_v(direction))
+    for pid, qty in con.execute(sql + " ORDER BY id DESC", args):
         closed = sum((Decimal(q) for (q,) in con.execute(
             "SELECT qty FROM positions WHERE event='close' AND position_id=?", (pid,))), Decimal())
         if closed < Decimal(qty):
@@ -181,7 +207,7 @@ def _entry_skipped(con: sqlite3.Connection, ev: EntrySkipped, mode: str, symbol:
 
 
 def _position_closed(con: sqlite3.Connection, ev: PositionClosed, mode: str, symbol: str) -> None:
-    pid = open_position_id(con, mode=mode, symbol=symbol)
+    pid = open_position_id(con, mode=mode, symbol=symbol, direction=ev.direction)
     for f in ev.fills:
         _order(con, f, mode=mode, symbol=symbol, position_id=pid, intent="exit", exit_reason=ev.reason)
     _insert(con, "positions", {
@@ -196,7 +222,7 @@ def _position_closed(con: sqlite3.Connection, ev: PositionClosed, mode: str, sym
 def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: str, symbol: str,
                   tp: Decimal | None = None) -> None:
     mode = _mode(mode)
-    with con:
+    with _tx(con):
         for ev in events:
             if isinstance(ev, EntryFilled):
                 _entry_filled(con, ev, mode, symbol, tp)
@@ -223,22 +249,38 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
 
 
 def record_bar(con: sqlite3.Connection, bar: BarRow, *, mode: str, symbol: str, source: str) -> str:
-    """'inserted' · 'duplicate'(같은 값) · 'conflict'(같은 봉에 다른 값 — 덮어쓰지 않는다, 호출자가 알린다)."""
+    """'inserted' · 'duplicate'(모든 값 같음) · 'enriched'(비어 있던 mark/index/funding만 채움) ·
+    'conflict'(값이 있는 필드가 다름 — 덮어쓰지 않는다, 호출자가 알린다)."""
     mode = _mode(mode)
-    vals = {"open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close, "volume": bar.volume,
-            "quote_volume": bar.quote_volume, "trades": bar.trades, "taker_buy_base": bar.taker_buy_base,
-            "taker_buy_quote": bar.taker_buy_quote, "close_time_ms": bar.close_ms}
-    with con:
-        existing = con.execute(f"SELECT {','.join(vals)} FROM bars_1m WHERE mode=? AND symbol=? AND open_time_ms=?",
+    core = {"close_time_ms": bar.close_ms, "open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close,
+            "volume": bar.volume, "quote_volume": bar.quote_volume, "trades": bar.trades,
+            "taker_buy_base": bar.taker_buy_base, "taker_buy_quote": bar.taker_buy_quote, "is_closed": bar.is_closed}
+    extra = {"mark_close": bar.mark_close, "index_close": bar.index_close, "funding_rate": bar.funding_rate}
+    with _tx(con):
+        cols = [*core, *extra]
+        existing = con.execute(f"SELECT {','.join(cols)} FROM bars_1m WHERE mode=? AND symbol=? AND open_time_ms=?",
                                (mode, symbol, bar.open_ms)).fetchone()
-        if existing is not None:
-            return "duplicate" if tuple(existing) == tuple(_v(v) for v in vals.values()) else "conflict"
-        _insert(con, "bars_1m", {"mode": mode, "symbol": symbol, "open_time_ms": bar.open_ms}
-                | {k: _v(v) for k, v in vals.items()}
-                | {"mark_close": _v(bar.mark_close), "index_close": _v(bar.index_close),
-                   "funding_rate": _v(bar.funding_rate), "is_closed": _v(bar.is_closed), "source": source,
-                   "recorded_at_utc": _utcnow()})
-    return "inserted"
+        if existing is None:
+            _insert(con, "bars_1m", {"mode": mode, "symbol": symbol, "open_time_ms": bar.open_ms}
+                    | {k: _v(v) for k, v in (core | extra).items()}
+                    | {"source": source, "recorded_at_utc": _utcnow()})
+            return "inserted"
+        have = dict(zip(cols, existing, strict=True))
+        if any(have[k] != _v(v) for k, v in core.items()):
+            return "conflict"
+        fill = {}
+        for k, v in extra.items():
+            new = _v(v)
+            if new is None or have[k] == new:
+                continue
+            if have[k] is not None:
+                return "conflict"
+            fill[k] = new
+        if not fill:
+            return "duplicate"
+        con.execute(f"UPDATE bars_1m SET {','.join(f'{k}=?' for k in fill)} WHERE mode=? AND symbol=? AND open_time_ms=?",
+                    [*fill.values(), mode, symbol, bar.open_ms])
+        return "enriched"
 
 
 def register_feature(con: sqlite3.Connection, name: str, params_version: int, table: str,
@@ -246,7 +288,7 @@ def register_feature(con: sqlite3.Connection, name: str, params_version: int, ta
     if table not in FEATURE_TABLES:
         raise ValueError(f"피처 테이블 {table!r} — {FEATURE_TABLES}")
     params_json = _json(dict(params))
-    with con:
+    with _tx(con):
         row = con.execute("SELECT table_name, params_json FROM feature_definitions WHERE name=? AND params_version=?",
                           (name, params_version)).fetchone()
         if row is None:
@@ -259,7 +301,7 @@ def register_feature(con: sqlite3.Connection, name: str, params_version: int, ta
 def record_features(con: sqlite3.Connection, table: str, bar_open_ms: int, values: Mapping[tuple[str, int], Decimal | None],
                     *, mode: str, symbol: str) -> None:
     mode = _mode(mode)
-    with con:
+    with _tx(con):
         for (name, ver), value in values.items():
             row = con.execute("SELECT table_name FROM feature_definitions WHERE name=? AND params_version=?",
                               (name, ver)).fetchone()
@@ -272,6 +314,7 @@ def record_features(con: sqlite3.Connection, table: str, bar_open_ms: int, value
 def record_custom_features(con: sqlite3.Connection, bar_open_ms: int, payload: Mapping[str, Any], *, schema_version: int,
                            mode: str, symbol: str) -> None:
     mode = _mode(mode)
-    with con:
+    payload_json = _json(dict(payload))
+    with _tx(con):
         _insert(con, "features_custom", {"mode": mode, "symbol": symbol, "bar_open_ms": bar_open_ms,
-                                         "schema_version": schema_version, "payload_json": _json(dict(payload))})
+                                         "schema_version": schema_version, "payload_json": payload_json})

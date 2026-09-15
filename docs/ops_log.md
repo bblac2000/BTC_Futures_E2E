@@ -894,3 +894,49 @@ B: **FIX FIRST** due to the receive-loop exception escape in `MarketFeed.sink()`
 Codex session ID: 01a0a4c5-e0db-7a63-8f90-a7839becb261
 Resume in Codex: codex resume 01a0a4c5-e0db-7a63-8f90-a7839becb261
 ```
+
+## 2026-09-15 — Codex 재검토: layer 5 수정분 + layer 4 메모 (`c906a3d`, read-only · `task-mu2l1ukd-e0sy2c`)
+판정: **#1 CLOSED · B(layer 5) MERGE**. → **LIVE 추정 #9 MERGE · layer 5 MERGE.** db/는 검토 범위 밖 메모 4건 → 전부 동의·수정.
+
+### 항목별 동의 여부와 조치 (실패 테스트 4개 → 수정 → 506 green)
+| Codex | 동의 | 조치 |
+|---|---|---|
+| 메모: 콜백 실패가 `_failure = e`로 앞선 sink 실패를 덮을 수 있음(비차단) | ✅ | 콜백도 `self._failure or e`(첫 실패 보존) |
+| db #1 `_json`이 중첩 float를 거부하지 못함(`default=`는 float에 안 불림) | ✅ | `_no_floats`가 중첩까지 검사 → `TypeError` |
+| db #2 `record_bar` 비교가 mark/index/funding/is_closed를 빼먹어 보강 데이터가 duplicate로 버려짐 | ✅ | 전 필드 비교 · 비어 있던 mark/index/funding만 채우면 `enriched` · 값 있는 필드가 다르면 `conflict`(덮어쓰기 없음) |
+| db #3 `with con:`가 호출자의 열린 트랜잭션을 커밋/롤백 | ✅ | 모든 기록 함수가 열린 트랜잭션이면 `TransactionOpen`(migrate와 같은 규칙) |
+| db #4 close를 방향 무관하게 최근 open에 연결 | ✅ | 같은 방향 open만 연결 · 없으면 고아(NULL + 사유) |
+
+### Codex 재검토 원문 (verbatim)
+```
+**Findings**
+
+No feed findings. I traced the ccxt callback paths in [data/feed.py](/home/cms/project/BTC_Futures_E2E/data/feed.py:153): `_socket()` is guarded, `sink()` now catches parser/counter/row-builder/recorder-adjacent unexpected exceptions, callbacks are converted to `_failure`, and `run()` checks `_failure` both while running and after `stop` is set at [data/feed.py](/home/cms/project/BTC_Futures_E2E/data/feed.py:320) and [data/feed.py](/home/cms/project/BTC_Futures_E2E/data/feed.py:332). I do not see the old `DeliveryCounter` `KeyError` escape path anymore.
+
+One small diagnostic caveat: callback failures assign `_failure = e` at [data/feed.py](/home/cms/project/BTC_Futures_E2E/data/feed.py:267), while non-callback unexpected sink failures preserve the first failure with `self._failure or e` at [data/feed.py](/home/cms/project/BTC_Futures_E2E/data/feed.py:260). A later callback exception can mask an earlier stored sink failure before `run()` polls, but it still fails loud as `FeedFailure`; I would not block on this.
+
+**#1 Status**
+
+CLOSED.
+
+**B Verdict**
+
+MERGE.
+
+**db/ Note**
+
+I’d flag these separately from B:
+
+1. [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:93): `_json()` does not actually reject nested floats because `json.dumps(default=...)` is not called for native `float`. Scenario: `Fill.raw`, `decision_json`, custom features, or engine payloads containing `60000.1` as a float are silently persisted with binary-float precision instead of being refused.
+
+2. [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:228): `record_bar()` duplicate/conflict comparison ignores `mark_close`, `index_close`, `funding_rate`, and `is_closed`. Scenario: a WS bar is inserted with those nullable fields missing, then a REST/enriched bar for the same OHLCV arrives with funding/mark data; it returns `"duplicate"` and silently drops the enrichment.
+
+3. [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:199): `record_events()` uses `with con:` without guarding `con.in_transaction`. If a caller already has an open transaction, this function can commit or roll back the caller’s broader transaction boundary. `migrate()` correctly guards this at [db/migrate.py](/home/cms/project/BTC_Futures_E2E/db/migrate.py:106); `record_events()` does not.
+
+4. [db/record.py](/home/cms/project/BTC_Futures_E2E/db/record.py:146): `open_position_id()` links a close to the latest open position by mode/symbol/remaining quantity only, not direction. Scenario: an orphan/adopted `SHORT` close arrives while an unmatched `LONG` open row exists; `_position_closed()` will link it to the long position instead of recording an orphan.
+
+I did not run tests, per the read-only/no-modification constraint.
+
+Codex session ID: 01a0a4ce-2f74-7ac1-81fe-f2384dc1fb3b
+Resume in Codex: codex resume 01a0a4ce-2f74-7ac1-81fe-f2384dc1fb3b
+```

@@ -313,3 +313,54 @@ def test_side_values_are_constrained(con):
         con.execute("INSERT INTO orders(mode, symbol, ts_ms, intent, order_id, side, qty, price, commission, reduce_only)"
                     " VALUES ('paper','BTCUSDT',1,'entry','x','LONG','1','1','0',0)")
     assert f.side.value in ("BUY", "SELL")
+
+
+# ── Codex 재검토(task-mu2l1ukd-e0sy2c) db/ 메모 ────────────────────────────────
+def test_nested_floats_in_json_payloads_are_refused(con):
+    """#1: `json.dumps(default=)`는 float에 불리지 않는다 — 원시 응답·페이로드 안의 float도 조용히 저장하지 않는다."""
+    f = Fill("x", Side.BUY, D("0.01"), D("60000"), D("0.3"), False, DAY0, D("60000"), raw={"response": {"avgPrice": 60000.1}})
+    ev = PositionClosed(DAY0, Direction.LONG, ExitReason.MANUAL, D("0.01"), D("60000"), D("60000"), (f,), D("0"), D("0.3"),
+                        D("0"), D("999.7"))
+    with pytest.raises(TypeError):
+        R.record_events(con, [ev], mode="paper", symbol="BTCUSDT")
+    with pytest.raises(TypeError):
+        R.record_custom_features(con, DAY0, {"x": [1.5]}, schema_version=1, mode="paper", symbol="BTCUSDT")
+    assert con.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+
+
+def test_bar_enrichment_fills_nulls_and_differences_in_any_field_are_conflicts(con):
+    """#2: 비교가 mark/index/funding/is_closed를 빼먹으면 보강 데이터가 'duplicate'로 조용히 버려진다."""
+    assert R.record_bar(con, bar(), mode="paper", symbol="BTCUSDT", source="ws") == "inserted"
+    assert R.record_bar(con, bar(mark_close=D("60001.0"), funding_rate=D("0.0001")), mode="paper", symbol="BTCUSDT",
+                        source="rest") == "enriched"
+    assert con.execute("SELECT mark_close, funding_rate, index_close FROM bars_1m").fetchall() == [("60001.0", "0.0001", None)]
+    assert R.record_bar(con, bar(mark_close=D("60001.0")), mode="paper", symbol="BTCUSDT", source="rest") == "duplicate"
+    assert R.record_bar(con, bar(mark_close=D("59999.9")), mode="paper", symbol="BTCUSDT", source="rest") == "conflict"
+    assert R.record_bar(con, bar(is_closed=False), mode="paper", symbol="BTCUSDT", source="ws") == "conflict"
+    assert con.execute("SELECT mark_close, is_closed FROM bars_1m").fetchall() == [("60001.0", 1)]
+
+
+def test_recorders_never_commit_or_roll_back_a_callers_open_transaction(con):
+    """#3: `with con:`는 호출자의 열린 트랜잭션을 커밋/롤백한다 — migrate와 같이 거부한다."""
+    con.execute("INSERT INTO engine_events(mode, symbol, ts_ms, kind) VALUES ('paper','BTCUSDT',1,'caller')")
+    assert con.in_transaction
+    with pytest.raises(R.TransactionOpen):
+        R.record_events(con, [EntriesBlocked(DAY0, "x")], mode="paper", symbol="BTCUSDT")
+    with pytest.raises(R.TransactionOpen):
+        R.record_bar(con, bar(), mode="paper", symbol="BTCUSDT", source="ws")
+    with pytest.raises(R.TransactionOpen):
+        R.register_feature(con, "atr_1m", 1, "features_base", {"period": 14})
+    assert con.in_transaction
+    con.rollback()
+    assert con.execute("SELECT COUNT(*) FROM engine_events").fetchone()[0] == 0
+
+
+def test_a_close_never_links_to_an_open_position_of_the_other_direction(con, rules):
+    """#4: 채택된 SHORT의 close가 닫히지 않은 LONG open 행에 붙으면 두 포지션 기록이 모두 틀린다."""
+    _, ev = run_engine(rules)                                          # LONG open
+    R.record_events(con, ev, mode="paper", symbol="BTCUSDT")
+    short_close = PositionClosed(DAY0 + 9000, Direction.SHORT, ExitReason.SL, D("0.010"), D("60000"), None, (), D("-1"),
+                                 D("0"), D("0"), D("999"))
+    R.record_events(con, [short_close], mode="paper", symbol="BTCUSDT")
+    assert con.execute("SELECT position_id, detail FROM positions WHERE event='close'").fetchall() == [(None, R.ORPHAN_CLOSE)]
+    assert R.open_position_id(con, mode="paper", symbol="BTCUSDT", direction=Direction.LONG) is not None

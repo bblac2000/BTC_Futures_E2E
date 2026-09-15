@@ -265,7 +265,7 @@ class MarketFeed:
             try:
                 callback(event)
             except Exception as e:  # noqa: BLE001 — 수신 루프 밖으로 새면 ccxt 수신 루프가 조용히 멈춘다
-                self._failure = e
+                self._failure = self._failure or e                # 첫 실패를 보존(Codex 재검토 메모)
 
     async def _loop(self, name: str, watch: Callable[[], Awaitable[Any]], stop: asyncio.Event) -> None:
         attempt = 0

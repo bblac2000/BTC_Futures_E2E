@@ -29,7 +29,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 | 2 | `sizing/` 위험 예산 → 목표 명목 → 최고 정수 L(브라켓·거래소 공식 청산 거리) → pos_pct 캡 → 수량 → 최종 재검증·손실 예산 (레지스트리 #2) | ✅ B1·B2로 재작업·테스트 — Codex 재검토 §7 · buffer 값 대기(#3) |
 | 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ✅ 구현·테스트(351) · Codex LiveSender MERGE · 엔진 MERGE(검토 4회) — **사용자 확인 대기**(§12) |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ✅ 구현·테스트(§14) · `runtime_rules` DDL을 v1로 흡수 — Codex 검토 대상 아님(자금·삭제·라이브 무관) · 기록 배선은 layer 8 |
-| 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex 검토 중(`task-mu2kq6ib-uro1pe`) |
+| 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s · 스트림별 전달 감시 · manifest | ✅ ccxt.pro 피드·REST 백필·전달 감시 · shard 기록(E2E #138 이식)·소켓별 이벤트·소켓별 23h 재연결(§13) — Codex MERGE(검토 2회 · `task-mu2kq6ib-uro1pe`·`task-mu2l1ukd-e0sy2c`) |
 | 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ⏸ (`notify/sender.py` 복사 완료) |
 | 7 | `safety/` 킬스위치·stale-data kill·봉마다 대사·rate-limit 80% 가드 | ⏸ |
 | 8 | `ops/` VPS systemd 템플릿·health/alert 타이머·Drive 검증 prune·런북 | ⏸ |
@@ -206,7 +206,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 |---|---|
 | `db/schema.py` | 단계 목록(append-only). v1 = §5 테이블 + `engine_events`·`feature_definitions` + `runtime_rules`(layer 1 DDL 글자 그대로) |
 | `db/migrate.py` | 유일한 스키마 경로 · `python -m db.migrate <db> [--status] [--target N]` · 체크섬 불일치·DB가 더 새 버전·다운그레이드·열린 트랜잭션 → `SchemaError` · 단계 = 한 트랜잭션 · schema_version 없이 있던 테이블은 열 모양이 같을 때만 흡수 |
-| `db/record.py` | layer 3 이벤트 → 행(한 호출 = 한 트랜잭션) · `record_bar`(inserted/duplicate/conflict — 덮어쓰지 않음) · 피처 등록·기록 |
+| `db/record.py` | layer 3 이벤트 → 행(한 호출 = 한 트랜잭션 · 호출자 트랜잭션이 열려 있으면 `TransactionOpen`) · `record_bar`(inserted/duplicate/enriched/conflict — 값 있는 필드는 덮어쓰지 않음) · close는 같은 방향 open에만 연결 · 중첩 float 거부 · 피처 등록·기록 |
 
 - 모든 데이터 테이블 `mode` CHECK(paper|live) · 가격·수량·비율 TEXT(Decimal 원문, float → `TypeError`) · bool 0/1 CHECK.
 - 테스트가 **이벤트 필드 ⊆ 열**을 잠근다(`SizingDecision`→decisions · `PostFillCheck`→`positions.pf_*` · `LiquidationCheck`→`positions.lc_*` · `Fill`→orders · `PositionClosed`→positions · `FundingSettled`→funding_events). 필드를 추가하면 새 마이그레이션 단계가 필요하다.

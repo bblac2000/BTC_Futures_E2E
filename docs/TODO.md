@@ -3,7 +3,7 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1·2 수용 · ✅ layer 3 · ✅ ccxt 전환 수락(사용자 2026-09-15) · ✅ layer 5 마무리(shard·#138·소켓별 이벤트·23h 소켓별 재연결) — Codex 검토 중 · ✅ layer 4 `db/` — **layer 6 착수 전 보고·확인 대기**
+- ✅ layer 1·2 수용 · ✅ layer 3 · ✅ ccxt 전환 수락(사용자 2026-09-15) · ✅ layer 5 마무리(shard·#138·소켓별 이벤트·23h 소켓별 재연결) — Codex MERGE · ✅ layer 4 `db/` — **layer 6 착수 전 보고·확인 대기**
 - 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브 **폐기**(파일만 미사용 보존)
 
 ## 다음
