@@ -812,3 +812,33 @@ Final verdict: **MERGE**.
 Codex session ID: 01a0a4ab-8632-7b13-896a-a279415a704e
 Resume in Codex: codex resume 01a0a4ab-8632-7b13-896a-a279415a704e
 ```
+
+## 2026-09-15 — 사용자 결정: 마이그레이션 수락 · LIVE 예상 체결가 #7 · 소켓당 1스트림 · layer 5 마무리 → layer 4
+
+### 보고 원문 재게시(사용자 요청 — 붙여 넣은 보고가 줄 중간에서 잘려 도착)
+사용자가 인용한 보고 "What ccxt actually does"의 항목 1과 5를 **전문 그대로** 다시 적는다(내용은 위 "구현 중 확인한 사실" 1·5·6과 같고, Codex 수정 뒤의 최종 상태를 반영).
+
+**Item 1 — `create_order` silently truncates the quantity.**
+ccxt 4.5.78 `binance.create_order` passes the amount through `amount_to_precision(symbol, amount)` before building the request, so a quantity of `0.0339` goes on the wire as `quantity=0.033` with no error and no warning. Our sizing already floors to stepSize, so in normal operation the two agree; but if they ever disagree (a stale market cache in ccxt, a precision change on the exchange, a bug on our side), ccxt would silently send a different quantity from the one sizing approved. The adapter (`exchange/ccxt_rest.py::_market_order`) still sends through `create_order`, but first computes `Decimal(ex.amount_to_precision(symbol, qty))` and compares it **by value** with `Decimal(qty)`; if they differ it raises `OrderParamError` and nothing is sent. The comparison is by value, not by string: format-only differences such as `"0.010"` vs ccxt's `"0.01"` are the same quantity and are allowed (the first implementation compared strings and refused a valid order; the test caught it). `amount_to_precision` is used only as this guard — never as our normalization or final check (registry #8); normalization stays `floor → MIN_NOTIONAL recheck → tick` in our code. Related: ccxt also injects its own broker `newClientOrderId` (`x-cvBPrNm9…`) when none is given, so the adapter always supplies ours (`bfe2e-` + 24 hex), pins `newOrderRespType=RESULT` and sends `reduceOnly=True` for exits.
+
+**Item 5 — error mapping.**
+ccxt raises typed exceptions but does not carry the HTTP status on them, so the adapter wraps `on_rest_response` to capture the status and headers of every response (including ccxt's hidden calls such as `load_markets` and the time sync). Mapping in `CcxtRestClient._call`:
+- HTTP 5xx (including 503 "Unknown error"), timeouts and connection failures (`ccxt.NetworkError` family with no Binance body: `RequestTimeout`, `ExchangeNotAvailable`, `DDoSProtection` without a body) → `TransportError` — the request's outcome is unknown.
+- Binance codes **-1006 and -1007** ("unexpected response / timeout waiting for backend — execution status unknown") → `TransportError` **regardless of HTTP status** (Codex review fix: they had been classified as a normal API error). For an order this becomes `OrderOutcomeUnknown` in `LiveSender`, which blocks entries until positionRisk is re-read.
+- Any other Binance `{code, msg}` body → `BinanceAPIError(status, code)` with the exchange code preserved, so callers that branch on codes keep working (the startup gate still treats **-4046** "no need to change margin type" as success).
+- **-1021** (timestamp outside recvWindow) → one `load_time_difference()` resync, then `BinanceAPIError` is raised (no automatic re-send of the original request). The resync response headers are fed to our rate-limit counter in a `finally`, so they are counted whether the resync succeeds or fails (Codex re-reviews #1–#2).
+- An order ccxt refuses before any HTTP request (e.g. `InvalidOrder` from its own checks) → `BinanceAPIError` with `code=None`; zero requests are sent, so it is a definite not-executed.
+- `returnResponseHeaders` must be False (it mutates the raw payload); a supplied exchange with it enabled is refused at construction.
+
+### 결정 1 — LIVE 예상 체결가 = #7 (레지스트리 #9)
+`paper.sender.adverse_fill_estimate(side, mark, tick, rate=0.0002)` 하나를 PAPER·LIVE가 같이 부른다. `LiveSender.quote_fill_price`가 mark 대신 이 값을 돌려준다. 테스트: 실제 `LiveSender`로 체결가가 추정과 **정확히 같을 때**(LONG·SHORT) 체결 후 #5 `gate_ok` · 청산 없음 · 진입 차단 없음. LIVE 흉내 송신기(`SpySender`)의 "LIVE 추정 = mark" 가정을 걷어내고 기본 슬리피지로 돌렸다(`ZERO_SLIP` 제거 · 사전 사이징 probe도 추정가로) — 기존 LIVE 테스트 전부 통과.
+
+### 결정 2 — `/market` 소켓은 스트림마다 1개(수락)
+ccxt.pro가 구독마다 소켓을 연다: kline_1m · markPrice@1s(· forceOrder 구독 시 셋째). 매니페스트 `events`에 **소켓별** connect / disconnect / reconnect(URL·스트림 포함)를 남기고 DeliveryCounter는 스트림별 그대로.
+📌 **23 h 선제 재연결 비용은 이제 소켓마다 든다**: 스트림 N개면 23 h마다 재연결 N번(현재 2 · forceOrder 소비 시 3). 각 재연결은 그 스트림에만 짧은 공백을 만들고, 봉 공백은 REST 백필이 메운다(layer 5). 스트림들이 같은 시각에 끊기지 않게 소켓별 연결 시각 기준으로 따로 잰다.
+
+### 결정 3 — klines 페이지 크기 (공식 문서 **렌더링** 확인, WebFetch 요약 아님)
+2026-09-15 playwright로 공식 레퍼런스 페이지를 렌더링해 읽었다: `https://developers.binance.com/en/docs/catalog/core-trading-derivatives-trading-usd-s-m-futures/api/rest-api/market-data#kline-candlestick-data`(구 경로 `/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data`는 404).
+- `GET /fapi/v1/klines` · `GET /fapi/v1/markPriceKlines`: `limit` — **integer · int64 · max: 1500 · Default: 500**
+- IP weight(LIMIT 기준): [1,100) → **1** · [100,500) → **2** · [500,1000] → **5** · >1000 → **10**
+- 설정: `data/config.py` `KLINES_PAGE_LIMIT = 1000` — 가중치 5인 최대 크기(1500은 가중치 10으로 봉당 비용이 1.33배). 30일 1m 백필 = 43,200봉 = 44페이지 × 5 = 220 weight(분당 한도 대비 작다 · 한도 값은 런타임 헤더 카운터가 본다). 문서상 최대 1500 초과 요청은 `data.backfill`이 거부한다.

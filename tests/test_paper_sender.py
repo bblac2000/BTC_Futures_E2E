@@ -23,6 +23,7 @@ from paper.sender import (
     LiveSender,
     OrderOutcomeUnknown,
     PaperSender,
+    adverse_fill_estimate,
     make_sender,
 )
 
@@ -222,9 +223,16 @@ def test_paper_quote_equals_the_fill_price(rules):
         assert s.quote_fill_price(side, D("60000.03")) == f.price
 
 
-def test_live_quote_is_the_mark_because_live_slippage_is_unknown(rules):
+@pytest.mark.parametrize("mark", [D("60000"), D("60000.03"), D("61234.56")])
+def test_live_quote_uses_the_registry_7_adverse_model_same_as_paper(rules, mark):
+    """사용자 결정(2026-09-15): LIVE 예상 체결가도 #7(편도 2 bps 불리 + 불리 tick) — mark로 추정하면 모든 진입이 #5 경계에
+    붙고 실제 슬리피지가 곧 체결 후 청산이 된다. 같은 코드 경로, 실제 체결만 다르다."""
     s, _ = live(rules)
-    assert s.quote_fill_price(Side.BUY, D("60000")) == D("60000")
+    paper = PaperSender(rules)
+    for side in (Side.BUY, Side.SELL):
+        assert s.quote_fill_price(side, mark) == paper.quote_fill_price(side, mark) == adverse_fill_estimate(
+            side, mark, rules.symbol_rules.tick_size)
+    assert s.quote_fill_price(Side.BUY, mark) > mark > s.quote_fill_price(Side.SELL, mark)
 
 
 @pytest.mark.parametrize("bad", [

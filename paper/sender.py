@@ -4,7 +4,8 @@
 |---|---|---|
 | 생성 | 언제나 | `Mode.LIVE` + `LiveChecklist` 전 항목 True + 쓰기 가능 클라이언트 — 아니면 `LiveNotAuthorized` |
 | 레버리지 | 기록·그대로 반환 | `POST /fapi/v1/leverage` → 응답 == 요청 확인(`set_leverage_confirmed`) |
-| MARKET | mark ± 슬리피지(불리 방향·불리 tick) · 수수료 = 런타임 taker | `POST /fapi/v1/order`(RESULT) → avgPrice·executedQty · 수수료 = userTrades 합 |
+| 예상 체결가 | `adverse_fill_estimate`(#7: 편도 2 bps 불리 + 불리 tick) | **같은 함수**(사용자 2026-09-15) — 사이징은 불리한 체결을 가정 |
+| MARKET | 예상 체결가 그대로 · 수수료 = 런타임 taker | `POST /fapi/v1/order`(RESULT) → avgPrice·executedQty · 수수료 = userTrades 합 |
 | positionRisk | 항상 None(레지스트리 #6) | `GET /fapi/v2/positionRisk` BOTH 행 |
 
 🔴 LiveSender는 **이 저장소의 첫 실주문 경로**다 — 병합 전 Codex 검토(CLAUDE.md). 라이브 전환 배선(config·기동)은 아직 없다.
@@ -66,6 +67,16 @@ class LiveChecklist:
         return [f.name for f in fields(self) if getattr(self, f.name) is not True]
 
 
+def adverse_fill_estimate(side: Side, ref_mark: Decimal, tick: Decimal, rate: Decimal = PAPER_SLIPPAGE_RATE) -> Decimal:
+    """레지스트리 #7 예상 체결가 — mark × (1 ± rate)를 **불리한 tick**으로(BUY 올림 · SELL 내림).
+    PAPER 체결가이자 PAPER·LIVE 공통 사이징 가격이다. LIVE에서 달라지는 건 실제 체결뿐(체결 후 #5 재검증이 잡는다)."""
+    if not isinstance(rate, Decimal) or rate < 0:
+        raise ValueError(f"slippage rate {rate!r}")
+    if side is Side.BUY:
+        return (ref_mark * (1 + rate) / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+    return (ref_mark * (1 - rate) / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+
+
 def _side(params: dict[str, str]) -> Side:
     return Side(params["side"])
 
@@ -86,10 +97,7 @@ class PaperSender:
 
     def quote_fill_price(self, side: Side, ref_mark: Decimal) -> Decimal:
         """PAPER 체결가는 결정적이다 — 엔진이 이 가격으로 사이징하면 체결 후 #5 게이트가 슬리피지로 깨지지 않는다."""
-        tick = self.rules.symbol_rules.tick_size
-        if side is Side.BUY:
-            return (ref_mark * (1 + self.slippage_rate) / tick).to_integral_value(rounding=ROUND_CEILING) * tick
-        return (ref_mark * (1 - self.slippage_rate) / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+        return adverse_fill_estimate(side, ref_mark, self.rules.symbol_rules.tick_size, self.slippage_rate)
 
     def send_market(self, params: dict[str, str], *, ref_mark: Decimal, ts_ms: int) -> Fill:
         validate_order_params(params)
@@ -126,8 +134,9 @@ class LiveSender:
         return set_leverage_confirmed(self.client, self.rules.symbol, leverage)
 
     def quote_fill_price(self, side: Side, ref_mark: Decimal) -> Decimal:
-        """라이브 슬리피지는 미리 모른다 → mark. 체결 후 게이트가 깨지면 엔진이 즉시 청산한다."""
-        return ref_mark
+        """사용자 결정(2026-09-15): #7 모델 그대로 — mark로 추정하면 모든 진입이 #5 경계에 붙어 실제 슬리피지가 곧
+        체결 후 청산이 된다. 실제 체결이 추정보다 나쁘면 체결 후 #5 재검증이 즉시 청산한다(엔진)."""
+        return adverse_fill_estimate(side, ref_mark, self.rules.symbol_rules.tick_size)
 
     def send_market(self, params: dict[str, str], *, ref_mark: Decimal, ts_ms: int) -> Fill:
         p = dict(params) | {"newOrderRespType": "RESULT"}
