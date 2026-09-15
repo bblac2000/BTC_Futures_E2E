@@ -9,7 +9,7 @@
 - 진입 전 레버리지 설정 응답 == decision.leverage 여야 주문한다.
 - 한 틱/봉 안 우선순위 **청산 > SL > TP**. 봉 SL 체결 기준 = SL과 시가 중 불리한 쪽, 봉 TP = TP(갭 이득 없음).
 - SL·TP·청산 판정 가격 = mark(#5 SL_TRIGGER_BASIS).
-- 사이징 가격 = 송신기의 예상 체결가(`quote_fill_price`: PAPER는 mark ± 슬리피지 불리 tick로 결정적, LIVE는 mark).
+- 사이징 가격 = 송신기의 예상 체결가(`quote_fill_price`: PAPER·LIVE 모두 레지스트리 #7 mark ± 2 bps 불리 tick — #9). LIVE는 실제 체결만 다르다.
 - 체결 후 실제 체결가·수량으로 #5 게이트·SL 손실 재계산 → #5가 깨지면 **즉시 청산**(사전확약 게이트 · Codex L3 검토 4).
   PAPER는 체결가로 사이징하므로 깨지지 않고, LIVE는 실제 슬리피지만큼 깨질 수 있다.
 - PAPER 청산 손실 = 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩, #4) + N × liquidationFee(#2) → 진입부터 총손실 N/L + N×fee.
