@@ -852,3 +852,45 @@ ccxt.pro가 구독마다 소켓을 연다: kline_1m · markPrice@1s(· forceOrde
 | `Collector` 큐·`_put`·run 종료부 | `data.shards.Recorder` | 소켓 코드 없음(ccxt.pro가 소유) · `put`/`event`는 put_nowait(블록·예외 없음) · `stop()` = stop 표지 → join(30s) → 종료 기록을 대장에 |
 | `consume` 23h 선제 재연결(:505) | `data.feed.MarketFeed._refresh_loop` | 소켓마다 `client.connectionEstablished` 기준 · 넘은 소켓만 `client.on_error(ProactiveRefresh)` → 그 watch만 끝나고 백오프 없이 재watch(ccxt가 같은 URL로 새 소켓·SUBSCRIBE — 가짜 소켓 실험·테스트로 확인) |
 테스트 복원(`tests/test_data_shards.py` 17건): E2E #138 네 건(첫 writer 플러시 실패·dispatch 예외 후 계속·처리기 로그 실패·종료 기록 조건)을 이 구조로 옮기고, 대장 쓰기 금지·roll 실패 격리·재생 스캔 호환(`scan_window`가 writer 파일을 그대로 셈)·드롭 → dirty 추가. 피드(`tests/test_data_feed.py` +5): 소켓별 connect 이벤트 · 23h 초과 소켓만 재연결·전달 재개 · 기록 행 · 훅 실패 무전파 · 취소로 끝난 watch 루프 → `FeedFailure`(구현 중 발견: 예전 `run()`은 취소된 태스크를 건너뛰어 스트림 하나가 조용히 죽을 수 있었다).
+
+## 2026-09-15 — Codex 검토: LIVE 예상 체결가 #9 + layer 5 마무리 (`65ce4b6..c9c38fa`, read-only · `task-mu2kq6ib-uro1pe`)
+판정: **A(LIVE 추정 #9) MERGE · B(layer 5) FIX FIRST** — A1·A2·A3·B1·B3·B4·B5 OK, B6 OK(단서 = #1).
+
+### 항목별 동의 여부와 조치 (실패 테스트 2개 → 수정 → green)
+| Codex | 동의 | 조치 |
+|---|---|---|
+| 1 High `MarketFeed.sink()`가 `FeedMessageError`만 잡는다 — 카운터 설정 오류(`kline1m_close` 없음 → `KeyError`)가 ccxt 수신 루프로 새 소켓이 `FeedFailure` 없이 멈춘다(Codex 재현) | ✅ | ① sink의 비메시지 예외는 전부 `_failure`로 저장 → `run()`이 `FeedFailure` ② `run()`이 소켓을 열기 전에 카운터가 `FED_STREAMS`(kline1m_update·kline1m_close·markprice)를 모두 세는지 확인 → 아니면 `ValueError` ③ `TeeBinanceUsdm._socket`도 예외 차단. 기록(`recorder.put`) 실패는 원래대로 `errors`에 남기고 피드는 계속 |
+
+### Codex 검토 원문 (verbatim)
+```
+1. **High** — [data/feed.py](/home/cms/project/BTC_Futures_E2E/data/feed.py:230): `MarketFeed.sink()` only catches `FeedMessageError`, but it calls `DeliveryCounter.observe()` inside that same ccxt receive-loop callback. If the counter is misconfigured, e.g. missing `kline1m_close`, a closed kline raises `KeyError` from [ops/delivery_counter.py](/home/cms/project/BTC_Futures_E2E/ops/delivery_counter.py:182). That exception escapes through `TeeBinanceUsdm.handle_ohlcv()` before ccxt schedules the next receive, so the socket receive loop can stop without `FeedFailure`. I reproduced this directly with a counter containing only `("kline1m_update", "markprice")`.
+
+**Per Question**
+A1. **OK** — Entry sizing uses `sender.quote_fill_price()` before `size_entry()` in [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:228). SL-crossed skip still uses mark at line 226. BUY quotes higher, SELL quotes lower in [paper/sender.py](/home/cms/project/BTC_Futures_E2E/paper/sender.py:70), so SHORT entries are adverse, not favorable. Reduce-only exits are not sized from the quote in LIVE; PAPER exit fills remain adverse by side.
+
+A2. **OK** — post-fill #5 uses actual fill VWAP from `fills` only: [paper/engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:254), then `_post_fill(d, entry, qty)` at line 274. If `gate_ok` is false, it immediately exits at lines 282-284.
+
+A3. **OK** — I did not find a LIVE test weakened by removing `ZERO_SLIP`. The probes that depend on expected qty were updated to use the quoted adverse price, and the new real `LiveSender` test covers LONG/SHORT exact-quote fills.
+
+B1. **OK** — #138 behavior is preserved: roll isolation, dispatch error recording, final flush per writer, no manifest writes during final flush, and dirty shutdown for alive/dispatch/final-flush/drop conditions. Local `_n` suffix is an intentional extension.
+
+B2. **ISSUE** — finding #1.
+
+B3. **OK** — For ccxt 4.5.78, `client.on_error()` rejects outstanding futures, calls exchange `on_error`, and removes the errored client from `ex.clients`; the next watch creates a fresh client. I did not find unresolved futures, double-reconnect of the other stream, or inherited old `connectionEstablished`.
+
+B4. **OK** — shard path/name uses first `event_time`; `TS_COLUMN` agrees. `_n` suffix files parse as unknown start and are included, then filtered by the parquet `event_time`, so they are not skipped.
+
+B5. **OK** — sqlite writes are on the writer thread via `Recorder`; feed-loop calls are queue puts/events, not direct sqlite.
+
+B6. **OK with caveat** — queue-full row drops are counted; roll failures are logged as `roll_failed`; unreadable replay files are counted. The caveat is finding #1: a receive-loop escape can stop future delivery rather than count a row drop.
+
+Tests: attempted the requested pytest command with `PYTHONDONTWRITEBYTECODE=1`, but pytest could not start because the sandbox has no writable temp directory (`/tmp`, `/var/tmp`, `/usr/tmp`, and repo cwd all unavailable).
+
+**Verdict**
+A: **MERGE**
+
+B: **FIX FIRST** due to the receive-loop exception escape in `MarketFeed.sink()`.
+
+Codex session ID: 01a0a4c5-e0db-7a63-8f90-a7839becb261
+Resume in Codex: codex resume 01a0a4c5-e0db-7a63-8f90-a7839becb261
+```

@@ -41,6 +41,7 @@ from paper.types import MarkTick
 
 UNIFIED_SYMBOL = {"BTCUSDT": "BTC/USDT:USDT"}
 INTERVAL = "1m"
+FED_STREAMS = ("kline1m_update", "kline1m_close", "markprice")    # sink가 observe하는 kind 전부
 RECONNECT_PROACTIVE_SEC = 23 * 3600      # Binance 24h 연결 상한 선제 대응(E2E l2_collector 동일 값)
 REFRESH_CHECK_SEC = 30.0
 
@@ -152,8 +153,11 @@ class TeeBinanceUsdm(ccxtpro.binanceusdm):
     def _socket(self, kind: str, client: Any, why: str) -> None:
         if self.socket_hook is None:
             return
-        subs = sorted(str(k) for k in (getattr(client, "subscriptions", None) or {}))
-        self.socket_hook(kind, f"{getattr(client, 'url', '?')} subs={subs}" + (f" {why}" if why else ""))
+        try:                                  # ccxt 콜백 안 — 어떤 예외도 밖으로 내보내지 않는다
+            subs = sorted(str(k) for k in (getattr(client, "subscriptions", None) or {}))
+            self.socket_hook(kind, f"{getattr(client, 'url', '?')} subs={subs}" + (f" {why}" if why else ""))
+        except Exception:  # noqa: BLE001
+            pass
 
     def on_connected(self, client, message=None):
         self._socket("connect", client, "")
@@ -253,6 +257,9 @@ class MarketFeed:
             except FeedMessageError as e:
                 self.errors.append(e)
                 continue
+            except Exception as e:  # noqa: BLE001 — Codex L5 #1: 카운터 설정 오류 등이 ccxt 수신 루프로 새면 소켓이 조용히 멈춘다
+                self._failure = self._failure or e
+                continue
             if callback is None:
                 continue
             try:
@@ -293,6 +300,9 @@ class MarketFeed:
             await asyncio.sleep(self.refresh_check_s)
 
     async def run(self, stop: asyncio.Event, *, config: Any = None) -> None:
+        missing = [k for k in FED_STREAMS if k not in self.counter.streams]
+        if missing:
+            raise ValueError(f"DeliveryCounter가 피드 스트림 {missing}을 세지 않는다 — 소켓을 열지 않는다")
         symbol = UNIFIED_SYMBOL[self.symbol_id]
         ex = self.exchange = self.exchange_factory(config or {}, self.sink)
         if hasattr(ex, "socket_hook"):

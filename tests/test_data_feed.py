@@ -385,3 +385,31 @@ def test_a_watch_loop_that_ends_by_cancellation_fails_the_feed_loudly():
         with pytest.raises(FeedFailure):
             await asyncio.wait_for(feed.run(asyncio.Event()), 5)
     asyncio.run(run())
+
+
+def test_any_exception_inside_sink_is_stored_as_a_failure_never_raised_into_ccxt():
+    """Codex L5 검토 #1: 카운터 설정 오류(`KeyError`) 같은 비메시지 예외가 ccxt 수신 루프로 새면 그 소켓이 조용히 멈춘다."""
+    counter = DeliveryCounter(("kline1m_update", "markprice"), start_ms=E0)     # kline1m_close 빠짐
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter, on_kline=lambda k: None, on_mark=lambda t: None)
+    feed.sink("kline", kline_msg(E0, closed=True))                              # 🚫 던지지 않는다
+    assert isinstance(feed._failure, KeyError)
+
+    class BrokenRecorder(FakeRecorder):
+        def put(self, kind, row):
+            raise MemoryError("x")
+    feed2 = MarketFeed(symbol_id="BTCUSDT", counter=counter3(E0), on_kline=lambda k: None, on_mark=lambda t: None,
+                       recorder=BrokenRecorder())
+    feed2.sink("markPrice", mark_msg(E0))
+    assert feed2._failure is None and feed2.errors, "기록 실패는 피드를 멈추지 않고 드러난다"
+
+
+def test_run_refuses_a_counter_that_does_not_watch_every_stream_it_feeds(sockets):
+    counter = DeliveryCounter(("kline1m_update", "markprice"), start_ms=E0)
+    feed = MarketFeed(symbol_id="BTCUSDT", counter=counter, on_kline=lambda k: None, on_mark=lambda t: None,
+                      exchange_factory=tee_factory)
+
+    async def run():
+        with pytest.raises(ValueError, match="kline1m_close"):
+            await asyncio.wait_for(feed.run(asyncio.Event()), 5)
+    asyncio.run(run())
+    assert sockets == [], "소켓을 열기 전에 거부"
