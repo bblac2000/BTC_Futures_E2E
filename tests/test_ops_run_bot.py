@@ -600,3 +600,18 @@ def test_a_previous_stop_dirty_is_not_double_counted(tmp_path):
     manifest.log_event("feed", "stop_dirty", "writer 제한 시간 내 미완료")
     assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
     assert "dirty_previous_run" not in [k for _s, k in _dirty_events(cfg.var_dir)], "stop_dirty는 이미 기록된 dirty다"
+
+
+def test_ops_events_in_a_superseded_breadcrumb_are_still_replayed(tmp_path):
+    """Codex 배포 전 재검토 #1: 게이트 상태가 오래돼 격리하는 breadcrumb라도 그 안의 **운영 이벤트**(예: NoticeAcknowledged)는
+    op_id 멱등으로 재생한다 — 상태만 오래됐지 이벤트는 사실이다."""
+    cfg, clock, con, last_id, last_ts = _db_with_state_rows(tmp_path)
+    crumb = cfg.var_dir / "run" / "safety_unsaved.json"
+    op = {"kind": "NoticeAcknowledged", "detail": "restart_unrestored 7 (telegram:111)", "ts_ms": last_ts,
+          "payload": {"kind": "restart_unrestored", "id": "7", "actor": "telegram:111"}, "op_id": "ack-7"}
+    crumb.write_text(json.dumps({"ts_ms": last_ts, "base_state_id": last_id - 1, "safety_gate": _gate_state(), "ops": [op]}))
+    clock.t += 60_000
+    assert run(cfg, clock=clock, tg=FakeTelegram(), seconds=5) == 0
+    assert list((cfg.var_dir / "run").glob("safety_unsaved.stale-*.json")), "상태는 여전히 격리"
+    rows = con.execute("SELECT payload_json FROM engine_events WHERE kind='NoticeAcknowledged'").fetchall()
+    assert len(rows) == 1 and json.loads(rows[0][0])["id"] == "7"

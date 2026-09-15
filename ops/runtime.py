@@ -489,6 +489,8 @@ class BotRuntime:
             self.saved_state_id = self.gate.save(self.con, ts_ms=ts_ms, mode=self.mode.value)
             self._saved_state = state
             self.state_save_failed = False
+            if self.unrecorded_ops:
+                self._write_breadcrumb(ts_ms)                      # 남은 이벤트의 breadcrumb 기준 id를 방금 저장한 행으로(Codex 배포 전 재검토 #1)
             self._clear_breadcrumb_if_durable()
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1

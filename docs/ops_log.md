@@ -1673,3 +1673,50 @@ Codex session ID: 01a0a70c-6ed0-71e3-b825-527c979b66cc
 Resume in Codex: codex resume 01a0a70c-6ed0-71e3-b825-527c979b66cc
 ```
 </details>
+
+### Codex 배포 전 재검토 #1 (`29e52f2..` 수정분, read-only · `task-mu37o96e-si3pev`)
+판정: 이전 1·2 **CLOSED** · 새 발견 2 · A·C·D MERGE · B·E FIX FIRST.
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 새 1 MEDIUM | ack 기록 실패 → breadcrumb(옛 base id) → 상태 저장 성공 → 재기동이 breadcrumb를 "오래됨"으로 격리하며 **대기 중 ack 이벤트도 버린다** | ✅(범위 넓음: 격리 breadcrumb의 운영 이벤트 전부가 재생되지 않았다 — layer 8부터) | 격리하든 복원하든 breadcrumb의 운영 이벤트는 op_id 멱등으로 재생 · 상태 저장 성공 때 남은 이벤트가 있으면 breadcrumb를 새 base id로 다시 쓴다 |
+| 새 2 MEDIUM | D2 커밋 확인이 운영자 셸의 `~`를 쓴다 | ✅ | `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E rev-parse HEAD` · §2는 btcfut 셸임을 명시 · §6 prune dry-run 절대경로 |
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+
+1. **MEDIUM, B notices/restore: queued ack can be dropped after a later durable safety-state save.**  
+   In [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:621), `/start` copies notices, clears them via `gate.resume()`, records `NoticeAcknowledged`, then saves state. If `record_ops()` fails, it queues the ack and writes a breadcrumb using the old `saved_state_id` ([ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:433), [ops/runtime.py](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:506)). If the following `save_state()` succeeds, the notice-cleared state is durable, but the breadcrumb still has the old `base_state_id`; on restart, [ops/run_bot.py](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:366) quarantines it as superseded when there is no missing trip. Result: the notice is suppressed, but the `NoticeAcknowledged` row may never be replayed. This violates the new DB-ack source of truth.
+
+2. **MEDIUM, E runbook §9: D2 commit check still depends on the wrong `~`.**  
+   The new `bsc`/`bjc` guidance says bot user-unit commands run from an operator shell ([docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:12)), but D2 checks `git -C ~/BTC_Futures_E2E rev-parse HEAD` ([docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:157)). In that shell, `~` is the operator home, not `/home/btcfut`; this can fail or validate the wrong checkout. Use an absolute `/home/btcfut/...` path, ideally under `sudo -u btcfut`.
+
+**Prior Issues**
+
+1. `restart_unrestored` lost between orphan close and notice persistence: **CLOSED for the original crash window.**  
+   Evidence: `sync_unrestored_notices()` rebuilds notices from `positions` close rows lacking `NoticeAcknowledged` ([ops/restore.py](/home/cms/project/BTC_Futures_E2E/ops/restore.py:131)), and `apply_restore()` calls it before restore action handling ([ops/restore.py](/home/cms/project/BTC_Futures_E2E/ops/restore.py:155)). New ack-replay issue above remains.
+
+2. Runbook ambient `systemctl --user` session: **CLOSED for systemctl/journalctl usage.**  
+   Evidence: `bsc`/`bjc` are defined with explicit `sudo -u btcfut XDG_RUNTIME_DIR=/run/user/...` ([docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:15)), and bot unit commands now use them. New wrong-`~` issue above remains.
+
+**New-issue Checks**
+
+Payload shape is OK: `record_ops_event()` merges `op_id` into `payload_json`, preserving `kind` and `id`, so `sync_unrestored_notices()` can still read them. Mode filtering is present; symbol filtering is applied on close-row rebuild, and position ids are table-global, so I do not see a symbol-collision issue.
+
+Runbook E2E steps remain read-only: E2E commands list/show units, timers, baseline state, and shard timestamps; I did not find an E2E write step.
+
+`git diff --check` fails only on trailing whitespace in the added `docs/ops_log.md` transcript. Focused verification passed: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_ops_restore.py` → 22 passed. No files modified; no network, `.env`, SSH, or secrets touched.
+
+**Batch Verdicts**
+
+A run_events: **MERGE**  
+B notices/restore: **FIX FIRST**  
+C health: **MERGE**  
+D LiveChecklist: **MERGE**  
+E runbook §9: **FIX FIRST**
+
+Codex session ID: 01a0a711-f8d6-7e22-9f94-55977e5bec1f
+Resume in Codex: codex resume 01a0a711-f8d6-7e22-9f94-55977e5bec1f
+```
+</details>

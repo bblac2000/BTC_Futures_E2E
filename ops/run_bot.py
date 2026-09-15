@@ -363,15 +363,17 @@ async def _run_locked(cfg: RunConfig, *, env: Mapping[str, str], owners: frozens
             latest_id = R.latest_safety_state_id(con, SAFETY_GATE_STATE, mode=cfg.mode.value)
             crumb_trip = (crumb["safety_gate"].get("kill_switch") or {}).get("tripped")
             trip_only_in_crumb = crumb_trip is not None and gate.kill_switch.tripped is None
+            #  운영 이벤트는 상태가 아니라 사실이다 — 격리하든 복원하든 op_id 멱등으로 재생한다(Codex 배포 전 재검토 #1)
+            crumb_ops = [(str(o["kind"]), str(o["detail"]), int(o["ts_ms"]), o.get("payload"),
+                          str(o.get("op_id") or f"crumb:{crumb_ts}:{i}")) for i, o in enumerate(crumb.get("ops") or [])]
             if isinstance(base_id, int) and latest_id is not None and latest_id > base_id and not trip_only_in_crumb:
                 stale = cfg.breadcrumb_path.with_name(f"safety_unsaved.stale-{crumb_ts}.json")
                 cfg.breadcrumb_path.replace(stale)
-                crumb_note = f"오래된 breadcrumb(기준 행 {base_id} < DB 최신 {latest_id}) — 복원 안 함 · {stale.name}로 격리"
+                crumb_note = (f"오래된 breadcrumb(기준 행 {base_id} < DB 최신 {latest_id}) — 게이트 상태 복원 안 함 · {stale.name}로 격리"
+                              f" · 운영 이벤트 {len(crumb_ops)}건은 재생")
             else:
                 gate = SafetyGate.from_state(crumb["safety_gate"], REGISTERED_KILL_SWITCH, StaleDataGuard(counter),
                                              wallet=wallet)
-                crumb_ops = [(str(o["kind"]), str(o["detail"]), int(o["ts_ms"]), o.get("payload"),
-                              str(o.get("op_id") or f"crumb:{crumb_ts}:{i}")) for i, o in enumerate(crumb.get("ops") or [])]
                 crumb_note = f"복원(ops {len(crumb_ops)}건)"
         except (OSError, ValueError, KeyError, TypeError) as e:
             keep_crumb = True

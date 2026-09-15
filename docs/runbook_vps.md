@@ -25,6 +25,7 @@ sudo -iu btcfut
 - 확인: `ls -ld ~<수집기 사용자>` 가 btcfut에게 읽기 불가여야 한다(`700`/`750` + 그룹 불일치).
 
 ## 2. 코드·환경
+> 이 절의 `~`는 **btcfut 홈** — 명령은 `sudo -iu btcfut` 셸에서(systemd 명령은 §1의 `bsc`/`bjc`로 운영자 셸에서).
 ```bash
 git clone https://github.com/bblac2000/BTC_Futures_E2E.git ~/BTC_Futures_E2E
 cd ~/BTC_Futures_E2E && curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv sync
@@ -85,7 +86,7 @@ free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 
 ## 6. prune 켜기 (사람 확인 후)
 1. 최소 1주기 무삭제 관측: sync 성공 마커가 계속 갱신되고 원격에 shard가 쌓인다.
-2. dry-run: `.venv/bin/python -m ops.prune --var-dir ~/BTC_Futures_E2E/var` → 날짜별 삭제 예정 수·보류 사유를 사용자에게 보인다.
+2. dry-run(btcfut 셸): `cd /home/btcfut/BTC_Futures_E2E && .venv/bin/python -m ops.prune --var-dir /home/btcfut/BTC_Futures_E2E/var` → 날짜별 삭제 예정 수·보류 사유를 사용자에게 보인다.
 3. 사용자 확인 후에만: `sudo -u btcfut cp $B/ops/systemd/btcfut-prune.{service,timer} /home/btcfut/.config/systemd/user/ && bsc daemon-reload && bsc enable --now btcfut-prune.timer`.
 4. 첫 `--apply` 뒤: 저널의 `deleted` == `manifest_marked`, `LAST_PRUNE.txt` 갱신, sqlite 파일 그대로.
 
@@ -154,7 +155,7 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 
 ### 9.4 창 D2 (2026-09-19) — 유닛 설치·기동 (두 번째 변경)
 시각: 9.3과 같은 규칙.
-1. §0 호스트 확인 · E2E 기준선 재기록 · `git -C ~/BTC_Futures_E2E rev-parse HEAD` == `D`.
+1. §0 호스트 확인 · E2E 기준선 재기록 · `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E rev-parse HEAD` == `D`.
 2. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
 3. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
 4. `bsc enable --now …`(§3 명령 그대로) → `bsc is-active btcfut-bot` · §5 기동 후 대조표 전체.

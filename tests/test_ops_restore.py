@@ -304,3 +304,26 @@ def test_daily_loss_refused_start_does_not_acknowledge_the_notice(rules, tmp_pat
     rt.resume("telegram:111")
     assert [f["kind"] for f in rt.confirmed_facts()] == ["restart_unrestored"]
     assert rt.con.execute("SELECT count(*) FROM engine_events WHERE kind='NoticeAcknowledged'").fetchone()[0] == 0
+
+
+def test_a_failed_ack_write_followed_by_a_durable_save_keeps_the_breadcrumb_base_id_current(rules, tmp_path, monkeypatch):
+    """Codex 배포 전 재검토 #1: ack 기록 실패 → breadcrumb(옛 base id) → 상태 저장 성공 → breadcrumb가 새 base id를 가져야 한다."""
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    _tamper_snapshot(db, qty="0.001")
+    rt, _c, _k, _d, _m = restart(rules, db, t0=t + 5000)
+    crumb_path = tmp_path / "run" / "safety_unsaved.json"
+    rt.breadcrumb_path = crumb_path
+    from db import record as R
+    real = R.record_ops_event
+
+    def flaky(con, kind, *a, **k):
+        if kind == "NoticeAcknowledged":
+            raise sqlite3.OperationalError("database is locked")
+        return real(con, kind, *a, **k)
+    monkeypatch.setattr(R, "record_ops_event", flaky)
+    rt.resume("telegram:111")
+    assert rt.unrecorded_ops and crumb_path.exists()
+    crumb = json.loads(crumb_path.read_text())
+    assert crumb["base_state_id"] == rt.saved_state_id, "뒤따른 저장이 성공했으면 breadcrumb 기준 id도 갱신"
+    assert [o["kind"] for o in crumb["ops"]] == ["NoticeAcknowledged", "Resumed"], "순서 보존 — 앞선 실패 뒤에 붙는다"
