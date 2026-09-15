@@ -106,6 +106,7 @@ class BotRuntime:
         self.clock_ms, self.exchange, self.rate_guard, self.status_path = clock_ms, exchange, rate_guard, status_path
         self.bot: CommandBot | None = None
         self.poller: Any = None                                   # TelegramPoller(handle만 쓴다)
+        self.status_extra: Callable[[], dict[str, Any]] | None = None   # 텔레그램 링크 통계 등(상태 파일)
         self.inbox: queue.SimpleQueue[dict[str, Any]] = queue.SimpleQueue()
         self.outbox: queue.SimpleQueue[Send | Answer] = queue.SimpleQueue()
         self.last_mark: Decimal | None = None
@@ -434,7 +435,7 @@ class BotRuntime:
     def write_status(self, now_ms: int, extra: dict[str, Any] | None = None) -> None:
         if self.status_path is None:
             return
-        body = self.status(now_ms) | (extra or {})
+        body = self.status(now_ms) | (self.status_extra() if self.status_extra is not None else {}) | (extra or {})
         tmp = self.status_path.with_suffix(".tmp")
         try:
             self.status_path.parent.mkdir(parents=True, exist_ok=True)
