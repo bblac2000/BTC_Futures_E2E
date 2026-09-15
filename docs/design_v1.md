@@ -161,3 +161,4 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 **전체 판정**: 두 다리 모두 FEE → **CONFIRMED_FEE**(#4 가정이 메커니즘상 맞다) · 두 다리 모두 NO_FEE → **CONFIRMED_NO_FEE**(#4는 보수적이나 사실과 다르다 — 게이트를 바꾸려면 **새 행**, 자동 완화 없음) · 그 밖 → **INCONCLUSIVE** → 실계정 프로브 경로(Codex + 사용자 승인).
 부가 기록(판정에 쓰지 않음): `isolatedMargin − isolatedWallet`와 `unRealizedProfit`의 차 · v2/v3 `isolated` 필드 존재(테스트넷 모양일 뿐 — 메인넷 `_is_isolated`는 메인넷 캡처로 확정).
 **재실행 규칙**: 운영 실패(주문 거부·청산 실패·전송 오류)로 판정까지 못 간 실행은 시도로만 기록하고 재실행 가능. **판정까지 간 첫 실행의 결과가 확정** — 결과를 보고 재실행해 다른 판정을 고르지 않는다.
+- 보충(2026-09-15 · 스크립트 작성 전 · 실행 전): B를 계산할 수 없으면(`liquidationPrice ≤ 0`·해석 불가·청산식 `RulesError`) "B≠…" 조건을 **충족하지 않은 것으로** 본다 → 그 다리는 INCONCLUSIVE. `userTrades`가 체결 직후 비어 있으면 최대 5회 1초 간격 재조회, 그래도 없으면 INCONCLUSIVE.
