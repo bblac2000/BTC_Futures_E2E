@@ -44,6 +44,8 @@ class OrderSender(Protocol):
 
     def set_leverage(self, leverage: int) -> int: ...
 
+    def quote_fill_price(self, side: Side, ref_mark: Decimal) -> Decimal: ...
+
     def send_market(self, params: dict[str, str], *, ref_mark: Decimal, ts_ms: int) -> Fill: ...
 
     def position_risk(self) -> PositionRisk | None: ...
@@ -82,16 +84,19 @@ class PaperSender:
         self.leverage = leverage
         return leverage
 
+    def quote_fill_price(self, side: Side, ref_mark: Decimal) -> Decimal:
+        """PAPER 체결가는 결정적이다 — 엔진이 이 가격으로 사이징하면 체결 후 #5 게이트가 슬리피지로 깨지지 않는다."""
+        tick = self.rules.symbol_rules.tick_size
+        if side is Side.BUY:
+            return (ref_mark * (1 + self.slippage_rate) / tick).to_integral_value(rounding=ROUND_CEILING) * tick
+        return (ref_mark * (1 - self.slippage_rate) / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+
     def send_market(self, params: dict[str, str], *, ref_mark: Decimal, ts_ms: int) -> Fill:
         validate_order_params(params)
         if params["symbol"] != self.rules.symbol:
             raise ValueError(f"심볼 {params['symbol']} ≠ {self.rules.symbol}")
-        tick = self.rules.symbol_rules.tick_size
         side = _side(params)
-        if side is Side.BUY:
-            price = (ref_mark * (1 + self.slippage_rate) / tick).to_integral_value(rounding=ROUND_CEILING) * tick
-        else:
-            price = (ref_mark * (1 - self.slippage_rate) / tick).to_integral_value(rounding=ROUND_FLOOR) * tick
+        price = self.quote_fill_price(side, ref_mark)
         qty = Decimal(params["quantity"])
         return Fill(order_id=f"paper-{next(self._ids)}", side=side, qty=qty, price=price,
                     commission=qty * price * self.rules.commission.taker,
@@ -120,6 +125,10 @@ class LiveSender:
     def set_leverage(self, leverage: int) -> int:
         return set_leverage_confirmed(self.client, self.rules.symbol, leverage)
 
+    def quote_fill_price(self, side: Side, ref_mark: Decimal) -> Decimal:
+        """라이브 슬리피지는 미리 모른다 → mark. 체결 후 게이트가 깨지면 엔진이 즉시 청산한다."""
+        return ref_mark
+
     def send_market(self, params: dict[str, str], *, ref_mark: Decimal, ts_ms: int) -> Fill:
         p = dict(params) | {"newOrderRespType": "RESULT"}
         validate_order_params(p)
@@ -138,20 +147,33 @@ class LiveSender:
             raise OrderOutcomeUnknown(f"체결 응답 해석 불가: {resp!r}") from e
         if qty <= 0 or price <= 0:
             raise OrderOutcomeUnknown(f"체결 수량·가격이 0: {resp!r}")
+        #  🔴 Codex L3 검토 2: 여기부터는 **이미 체결된 주문**이다 — 어떤 조회·해석 실패도 예외로 새면 안 된다
         commission, estimated = self._commission(oid, qty, price)
+        try:
+            ts = int(str(resp.get("updateTime", ts_ms)))
+        except ValueError:
+            ts = ts_ms
         return Fill(order_id=oid, side=_side(p), qty=qty, price=price, commission=commission,
-                    reduce_only=p.get("reduceOnly") == "true", ts_ms=int(resp.get("updateTime", ts_ms)),
+                    reduce_only=p.get("reduceOnly") == "true", ts_ms=ts,
                     ref_mark=ref_mark, commission_estimated=estimated, raw={"params": p, "response": resp})
 
     def _commission(self, order_id: str, qty: Decimal, price: Decimal) -> tuple[Decimal, bool]:
-        """userTrades 합(USDT). 못 읽거나 비었거나 USDT가 아니면 런타임 taker로 추정하고 표시한다(체결 자체는 유효)."""
+        """userTrades(이 주문·이 심볼 행만) 수수료 합. 조회 실패·빈 응답·해석 불가·USDT 아님·수량 합 불일치 →
+        런타임 taker로 추정하고 `commission_estimated=True`(체결 자체는 유효)."""
+        estimate = (qty * price * self.rules.commission.taker, True)
         try:
-            trades = self.client.get(USER_TRADES, {"symbol": self.rules.symbol, "orderId": order_id}, signed=True).data
-        except (BinanceAPIError, TransportError):
-            trades = None
-        if trades and all(str(t.get("commissionAsset")) == "USDT" for t in trades):
-            return sum((Decimal(str(t["commission"])) for t in trades), qty - qty), False
-        return qty * price * self.rules.commission.taker, True
+            data = self.client.get(USER_TRADES, {"symbol": self.rules.symbol, "orderId": order_id}, signed=True).data
+            if not isinstance(data, list):
+                return estimate
+            rows = [t for t in data if isinstance(t, dict) and str(t.get("orderId")) == order_id
+                    and t.get("symbol", self.rules.symbol) == self.rules.symbol]
+            if not rows or any(str(t.get("commissionAsset")) != "USDT" for t in rows):
+                return estimate
+            if sum((Decimal(str(t["qty"])) for t in rows), Decimal()) != qty:
+                return estimate
+            return sum((Decimal(str(t["commission"])) for t in rows), Decimal()), False
+        except (BinanceAPIError, TransportError, KeyError, TypeError, ArithmeticError):
+            return estimate
 
     def position_risk(self) -> PositionRisk:
         rows = [r for r in self.client.get(POSITION_RISK, {"symbol": self.rules.symbol}, signed=True).data

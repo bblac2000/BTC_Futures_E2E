@@ -593,3 +593,23 @@ def test_append_registry_refuses_a_result_without_a_reached_verdict(fake_factory
     P.append_registry(reg, r)
     lines = reg.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "| 1 | x |" and lines[1].startswith("| 2 |")
+
+
+class _Rows:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def get(self, path, params=None, *, signed=False):
+        if path == "/fapi/v2/positionRisk":
+            return Response(200, self.rows, {})
+        return Response(200, [], {})
+
+
+def test_pre_flat_accepts_a_flat_hedge_mode_account_and_refuses_any_open_leg():
+    """Codex L3 검토 Q7: 헤지 모드는 LONG·SHORT 두 행 — flat이면 통과해야 기동 게이트가 원웨이로 바꿀 수 있다."""
+    base = {"symbol": "BTCUSDT", "positionAmt": "0"}
+    P.require_flat(_Rows([base | {"positionSide": "LONG"}, base | {"positionSide": "SHORT"}]))
+    with pytest.raises(P.ProbeAbort):
+        P.require_flat(_Rows([base | {"positionSide": "LONG", "positionAmt": "0.001"}, base | {"positionSide": "SHORT"}]))
+    with pytest.raises(P.ProbeAbort):
+        P.require_flat(_Rows([]))

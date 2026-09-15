@@ -30,6 +30,7 @@ from paper.types import (
     EntrySkipped,
     ExitReason,
     Fill,
+    FundingMissed,
     FundingSettled,
     LiquidationThresholdCrossed,
     MarkBar,
@@ -81,8 +82,9 @@ def test_entry_is_sized_and_filled_on_the_first_tick_after_the_decision(rules):
     (fill,) = of(ev, EntryFilled)
     d = fill.decision
     #  사이징은 체결 틱의 mark·그때의 지갑으로 다시 한다
-    expect = size_entry(D("60010"), intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
-    assert d == expect and d.entry == D("60010")
+    q = PaperSender(rules).quote_fill_price(Side.BUY, D("60010"))
+    expect = size_entry(q, intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
+    assert d == expect and d.entry == q == fill.fills[0].price
     assert fill.fills[0].ref_mark == D("60010") and fill.fills[0].price > D("60010")
     assert fill.leverage == d.leverage and e.position is not None and e.position.qty == d.qty
     assert e.wallet == W0 - sum(f.commission for f in fill.fills)
@@ -163,12 +165,18 @@ class SpySender:
             raise LeverageNotConfirmed("echo mismatch")
         return self.echo if self.echo is not None else self.inner.set_leverage(leverage)
 
+    def quote_fill_price(self, side, ref_mark):
+        return ref_mark if self.mode is Mode.LIVE else self.inner.quote_fill_price(side, ref_mark)
+
     def send_market(self, params, *, ref_mark, ts_ms) -> Fill:
         self.calls.append(("send", dict(params)))
         n = sum(1 for c in self.calls if c[0] == "send")
         if self.unknown_on_send == n:
             raise OrderOutcomeUnknown("timeout")
-        return self.inner.send_market(params, ref_mark=ref_mark, ts_ms=ts_ms)
+        f = self.inner.send_market(params, ref_mark=ref_mark, ts_ms=ts_ms)
+        if self.mode is Mode.LIVE and f.reduce_only and self.exchange_amt is not None:
+            self.exchange_amt += f.qty if f.side is Side.BUY else -f.qty      # 거래소 청산 반영
+        return f
 
     def position_risk(self) -> PositionRisk | None:
         self.calls.append(("position_risk",))
@@ -221,25 +229,39 @@ def test_post_fill_recomputes_from_actual_fill_and_paper_has_no_exchange_check(r
     assert e.position is not None and e.position.liq_price_est == pf.liq_price_est
 
 
-def test_buffer_violation_from_slippage_is_flagged_not_closed(rules):
-    """#5 버퍼(×1.5·10bp)만 깨졌고 SL은 여전히 청산가 앞 → 기록만(청산 주문으로 수수료를 더 쓰지 않는다)."""
-    e = engine(rules, PaperSender(rules, slippage_rate=D("0.001")))
+class NoQuoteSender(PaperSender):
+    """체결가를 미리 알려주지 않는 송신기(라이브처럼) — 사이징은 mark로, 체결은 슬리피지만큼 불리하게."""
+    def quote_fill_price(self, side, ref_mark):
+        return ref_mark
+
+    def send_market(self, params, *, ref_mark, ts_ms):
+        f = PaperSender.send_market(self, params, ref_mark=ref_mark, ts_ms=ts_ms)
+        px = PaperSender.quote_fill_price(self, f.side, ref_mark)
+        return replace(f, price=px, commission=f.qty * px * self.rules.commission.taker)
+
+
+@pytest.mark.parametrize("slip, sl_first", [("0.001", True), ("0.004", False)])
+def test_post_fill_gate_breach_closes_immediately(rules, slip, sl_first):
+    """Codex L3 검토 4: #5는 사전확약 게이트 — 실제 체결 기준으로 깨지면 **즉시 청산**(기록만 하는 완화 없음).
+    0.001: 버퍼만 깨짐(SL은 청산가 앞) · 0.004: SL이 추정 청산가 뒤."""
+    e = engine(rules, NoQuoteSender(rules, slippage_rate=D(slip)))
     e.request_entry(intent())
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
     (fill,) = of(ev, EntryFilled)
-    assert fill.post_fill.gate_ok is False and fill.post_fill.sl_before_liquidation is True
-    assert fill.post_fill.loss_over_budget is True
-    assert of(ev, PositionClosed) == [] and e.position is not None
-
-
-def test_sl_not_before_liquidation_after_fill_closes_immediately(rules):
-    e = engine(rules, PaperSender(rules, slippage_rate=D("0.004")))
-    e.request_entry(intent())
-    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
-    (fill,) = of(ev, EntryFilled)
-    assert fill.post_fill.sl_before_liquidation is False
+    assert fill.post_fill.gate_ok is False and fill.post_fill.sl_before_liquidation is sl_first
     (closed,) = of(ev, PositionClosed)
     assert closed.reason is ExitReason.POST_FILL_GATE and e.position is None
+
+
+def test_paper_sizes_at_the_quoted_adverse_fill_so_the_gate_holds_after_fill(rules):
+    """PAPER 체결가는 결정적(mark ± 슬리피지, 불리 tick) → 그 가격으로 사이징하면 체결 후 게이트가 깨지지 않는다."""
+    s = PaperSender(rules, slippage_rate=D("0.001"))
+    e = engine(rules, s)
+    e.request_entry(intent())
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    (fill,) = of(ev, EntryFilled)
+    assert fill.decision.entry == s.quote_fill_price(Side.BUY, D("60000")) == fill.fills[0].price
+    assert fill.post_fill.gate_ok and of(ev, PositionClosed) == []
 
 
 def test_live_mode_runs_post_entry_liquidation_check(rules):
@@ -259,6 +281,54 @@ def test_live_position_amount_mismatch_blocks_entries(rules):
     e.request_entry(intent())
     ev = e.on_tick(tick(DAY0 + 1000, "60000"))
     assert of(ev, EntriesBlocked) and e.entries_blocked
+
+
+@dataclass
+class FlakyLive(SpySender):
+    """LIVE 흉내 — positionRisk 실패 주입, 거래소 보유 수량을 직접 지정."""
+    fail_position_risk: bool = False
+
+    def position_risk(self) -> PositionRisk | None:
+        self.calls.append(("position_risk",))
+        if self.fail_position_risk:
+            raise OrderOutcomeUnknown("positionRisk timeout")
+        return PositionRisk(self.exchange_amt or D("0"), D("60000.5"), self.exchange_liq or D("0"))
+
+
+def test_live_post_fill_position_risk_failure_keeps_the_position_and_blocks(rules):
+    """Codex L3 검토 1: 체결 후 positionRisk 조회가 실패해도 내부 포지션은 남고(청산 감시 계속) 진입은 막힌다."""
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE, fail_position_risk=True)
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    (fill,) = of(ev, EntryFilled)
+    assert e.position is not None and e.entries_blocked and of(ev, EntriesBlocked)
+    assert fill.post_fill.liquidation_check is None
+
+
+def test_live_entry_outcome_unknown_adopts_the_exchange_position(rules):
+    """응답을 못 받았지만 실제로는 체결됐다 → 거래소 수량을 포지션으로 채택해 SL 감시를 한다(방치 금지)."""
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE, unknown_on_send=1, exchange_amt=D("0.033"))
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    assert e.entries_blocked and of(ev, EntriesBlocked)
+    assert e.position is not None and e.position.qty == D("0.033") and e.position.entry_price == D("60000.5")
+    (c,) = of(e.on_tick(tick(DAY0 + 2000, e.position.sl - 1)), PositionClosed)
+    assert c.reason is ExitReason.SL
+
+
+def test_live_exit_closes_what_the_exchange_holds(rules):
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
+    probe = size_entry(D("60000"), intent().sl, LONG, W0, intent().regime, rules, SizingLimits())
+    s.exchange_amt = probe.qty
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    e.on_tick(tick(DAY0 + 1000, "60000"))
+    s.exchange_amt = probe.qty + D("0.004")                    # 거래소가 더 들고 있다(부분 불명 조각 등)
+    e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 2000)
+    exits = [c[1] for c in s.calls if c[0] == "send" and c[1].get("reduceOnly") == "true"]
+    assert sum(D(x["quantity"]) for x in exits) == probe.qty + D("0.004")
 
 
 # ── 청산 우선순위 ─────────────────────────────────────────────────────────────
@@ -339,7 +409,6 @@ def test_live_does_not_simulate_liquidation_it_alerts_and_exits_by_sl(rules):
     e.on_tick(tick(DAY0 + 1000, "60000"))
     pos = e.position
     assert pos is not None and not e.entries_blocked
-    s.exchange_amt = D("0")
     ev = e.on_tick(tick(DAY0 + 2000, pos.liq_price_est - 10))
     assert of(ev, LiquidationThresholdCrossed)
     (c,) = of(ev, PositionClosed)
@@ -361,6 +430,36 @@ def test_funding_settles_at_00_08_16_utc_with_the_rate_seen_before_the_boundary(
         assert f.rate == RATE * (hour - 1), "경계 직전 틱의 펀딩율"
         assert f.paid_usdt == pos.qty * D("60000") * f.rate > 0, "LONG · 양수 펀딩 → 지불"
     assert e.wallet == W0 - pos.entry_commission - sum(f.paid_usdt for f in fs)
+
+
+def test_funding_gap_over_several_boundaries_settles_the_known_one_and_flags_the_rest(rules):
+    """Codex L3 검토 3: 피드 공백이 경계 여러 개를 건너뛰면 율을 모르는 경계는 추정하지 않고 알린 뒤 진입을 막는다."""
+    e, _ = opened(rules, LONG)
+    b1 = next_funding(DAY0)                                   # 08:00
+    ev = e.on_tick(tick(b1 + 16 * H + 5000, "60000"))         # 다음날 00:00:05 — 08·16·00 세 경계를 건넘
+    (fs,) = of(ev, FundingSettled)
+    (fm,) = of(ev, FundingMissed)
+    assert fs.ts_ms == b1 and fm.boundaries_ms == (b1 + 8 * H, b1 + 16 * H)
+    assert e.entries_blocked
+
+
+def test_funding_shrinks_isolated_margin_moves_liquidation_and_is_inside_the_liquidation_loss(rules):
+    """Codex L3 검토 Q3: 격리 포지션의 펀딩은 격리 지갑에서 나간다 → 청산가가 가까워지고 청산 손실에 포함된다."""
+    e, _ = opened(rules, LONG)
+    pos = e.position
+    assert pos is not None
+    liq0 = pos.liq_price_est
+    e.on_tick(tick(DAY0 + 2 * H, "60000", rate=D("0.002")))
+    (f,) = of(e.on_tick(tick(next_funding(DAY0) + 1000, "60000", rate=D("0.002"))), FundingSettled)
+    assert f.paid_usdt > 0 and pos.liq_price_est > liq0, "LONG이 펀딩을 내면 청산가가 올라온다"
+    wallet_before = e.wallet
+    (c,) = of(e.on_tick(tick(next_funding(DAY0) + 2000, pos.liq_price_est - 1)), PositionClosed)
+    n = pos.qty * pos.entry_price
+    fee = rules.symbol_rules.liquidation_fee
+    assert c.reason is ExitReason.LIQUIDATION
+    assert c.realized_pnl_usdt == -(n / pos.leverage - pos.entry_commission - f.paid_usdt + n * fee)
+    assert e.wallet == wallet_before + c.realized_pnl_usdt
+    assert abs((W0 - e.wallet) - (n / pos.leverage + n * fee)) < D("1e-20"), "펀딩은 격리 마진 안 — 총손실 불변"
 
 
 def test_short_receives_positive_funding(rules):
@@ -433,6 +532,7 @@ def test_property_wallet_conservation_and_sl_never_better(rules, direction, step
             assert c.exit_price is not None
             pnl = (c.exit_price - c.entry_price) * c.qty
             assert c.realized_pnl_usdt == (pnl if direction is LONG else -pnl), "실현손익은 체결가 기준"
+        assert c.reason is not ExitReason.POST_FILL_GATE, "PAPER 기본 슬리피지에서는 체결가로 사이징하므로 게이트가 깨지지 않는다"
         if c.reason is ExitReason.SL:
             assert c.exit_price is not None
             assert (c.exit_price <= i.sl) if direction is LONG else (c.exit_price >= i.sl)

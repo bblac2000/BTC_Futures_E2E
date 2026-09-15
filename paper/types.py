@@ -57,7 +57,7 @@ class ExitReason(StrEnum):
     SL = "sl"
     TP = "tp"
     LIQUIDATION = "liquidation"
-    POST_FILL_GATE = "post_fill_gate"      # 실제 체결 기준 #5 게이트 실패 → 즉시 청산
+    POST_FILL_GATE = "post_fill_gate"      # 실제 체결 기준 #5 게이트 실패(또는 SL이 청산가 뒤) → 즉시 청산
     MANUAL = "manual"                      # 텔레그램 /close 등
 
 
@@ -78,8 +78,8 @@ class PostFillCheck:
     liq_price_est: Decimal                 # #4 모델(수수료 차감) — PAPER 청산 시뮬레이션 기준
     liq_dist_pct: Decimal
     bracket: int
-    gate_ok: bool                          # #5 게이트 + 브라켓 레버리지 상한 — 기록(슬리피지로 경계를 약간 넘을 수 있다)
-    sl_before_liquidation: bool            # 물리적 불변식: SL 거리 < 추정 청산 거리 — 아니면 즉시 청산
+    gate_ok: bool                          # #5 게이트 + 브라켓 레버리지 상한 — 실패 시 즉시 청산(사전확약 게이트)
+    sl_before_liquidation: bool            # 물리적 불변식: SL 거리 < 추정 청산 거리(gate_ok면 항상 참 · 진단용)
     loss_at_sl_usdt: Decimal
     loss_over_budget: bool                 # 기록만(슬리피지로 예산을 약간 넘을 수 있다) — 청산 사유 아님
     liquidation_check: LiquidationCheck | None   # LIVE만(positionRisk.liquidationPrice) · PAPER None
@@ -125,6 +125,14 @@ class FundingSettled:
     signed_qty: Decimal
     paid_usdt: Decimal                     # + = 지불(LONG·양수 펀딩)
     wallet_after: Decimal
+
+
+@dataclass(frozen=True)
+class FundingMissed:
+    """피드 공백으로 건너뛴 정산 경계 — 그 경계의 펀딩율을 모르므로 **추정하지 않고** 알린다(엔진은 진입 차단)."""
+    ts_ms: int
+    boundaries_ms: tuple[int, ...]
+    signed_qty: Decimal
 
 
 @dataclass(frozen=True)

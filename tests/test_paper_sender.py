@@ -15,7 +15,7 @@ from hypothesis import strategies as st
 from exchange.client import ReadOnlyClient, Response
 from exchange.errors import LeverageNotConfirmed, OrderParamError, TransportError
 from exchange.gate import Mode
-from exchange.orders import Direction, Intent, market_order_params
+from exchange.orders import Direction, Intent, Side, market_order_params
 from paper.config import PAPER_SLIPPAGE_RATE, PAPER_SLIPPAGE_TAG
 from paper.sender import (
     LiveChecklist,
@@ -213,3 +213,49 @@ def test_live_sender_posts_only_order_and_leverage(rules):
     s.send_market(params(rules), ref_mark=D("60000"), ts_ms=5)
     s.position_risk()
     assert {x[1] for x in c.calls if x[0] == "POST"} == {"/fapi/v1/leverage", "/fapi/v1/order"}
+
+
+def test_paper_quote_equals_the_fill_price(rules):
+    s = PaperSender(rules)
+    for side, intent in ((Side.BUY, Intent.ENTRY), (Side.SELL, Intent.EXIT)):
+        f = s.send_market(params(rules, Direction.LONG, intent), ref_mark=D("60000.03"), ts_ms=0)
+        assert s.quote_fill_price(side, D("60000.03")) == f.price
+
+
+def test_live_quote_is_the_mark_because_live_slippage_is_unknown(rules):
+    s, _ = live(rules)
+    assert s.quote_fill_price(Side.BUY, D("60000")) == D("60000")
+
+
+@pytest.mark.parametrize("bad", [
+    [{"orderId": 7, "qty": "0.010", "commissionAsset": "USDT"}],                                   # commission 없음
+    [{"orderId": 7, "qty": "0.010", "commission": "abc", "commissionAsset": "USDT"}],              # 숫자 아님
+    [{"orderId": 8, "qty": "0.010", "commission": "0.3", "commissionAsset": "USDT"}],              # 다른 주문
+    [{"orderId": 7, "qty": "0.004", "commission": "0.3", "commissionAsset": "USDT"}],              # 수량 합 불일치
+    [{"orderId": 7, "qty": "0.010", "commission": "0.3", "commissionAsset": "BNB"}],               # USDT 아님
+    [{"orderId": 7, "symbol": "ETHUSDT", "qty": "0.010", "commission": "0.3", "commissionAsset": "USDT"}],
+    {"not": "a list"},
+])
+def test_live_malformed_or_mismatched_trades_never_raise_after_a_fill(rules, bad):
+    """Codex L3 검토 2: 체결된 뒤 수수료 조회가 이상해도 예외로 새지 않는다 — 런타임 taker 추정 + 표시."""
+    s, c = live(rules)
+    real_get = c.get
+
+    def get(path, params=None, *, signed=False):
+        if path == "/fapi/v1/userTrades":
+            return Response(200, bad, {})
+        return real_get(path, params, signed=signed)
+    c.get = get  # type: ignore[method-assign]
+    f = s.send_market(params(rules), ref_mark=D("60000"), ts_ms=5)
+    assert f.commission_estimated and f.commission == f.qty * f.price * rules.commission.taker
+
+
+def test_live_unparseable_update_time_falls_back_to_local_ts(rules):
+    s, c = live(rules)
+    real_post = c.post
+
+    def post(path, params=None, *, signed=True):
+        r = real_post(path, params, signed=signed)
+        return Response(200, r.data | {"updateTime": "soon"}, {}) if path == "/fapi/v1/order" else r
+    c.post = post  # type: ignore[method-assign]
+    assert s.send_market(params(rules), ref_mark=D("60000"), ts_ms=5).ts_ms == 5

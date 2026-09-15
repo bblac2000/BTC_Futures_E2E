@@ -9,22 +9,25 @@
 - 진입 전 레버리지 설정 응답 == decision.leverage 여야 주문한다.
 - 한 틱/봉 안 우선순위 **청산 > SL > TP**. 봉 SL 체결 기준 = SL과 시가 중 불리한 쪽, 봉 TP = TP(갭 이득 없음).
 - SL·TP·청산 판정 가격 = mark(#5 SL_TRIGGER_BASIS).
-- 체결 후 실제 체결가·수량으로 #5 게이트·SL 손실 재계산 → **기록**(슬리피지·tick만큼 경계를 넘을 수 있다).
-  SL 거리가 추정 청산 거리 이상(SL 전에 청산)이면 물리적 불변식 위반 → **즉시 청산**.
-- PAPER 청산 손실 = 남은 격리 지갑(N/L − 진입 수수료, #4) + N × liquidationFee(#2) → 진입부터 총손실 N/L + N×fee.
-- 펀딩: 직전 틱의 nextFundingTime 경계를 지나면 **직전 틱의** 펀딩율·mark로 정산. 간격이 런타임에 알려져 있으면
-  경계가 그 간격의 배수(8h → 00/08/16 UTC)인지 확인, 아니면 `FeedError`.
+- 사이징 가격 = 송신기의 예상 체결가(`quote_fill_price`: PAPER는 mark ± 슬리피지 불리 tick로 결정적, LIVE는 mark).
+- 체결 후 실제 체결가·수량으로 #5 게이트·SL 손실 재계산 → #5가 깨지면 **즉시 청산**(사전확약 게이트 · Codex L3 검토 4).
+  PAPER는 체결가로 사이징하므로 깨지지 않고, LIVE는 실제 슬리피지만큼 깨질 수 있다.
+- PAPER 청산 손실 = 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩, #4) + N × liquidationFee(#2) → 진입부터 총손실 N/L + N×fee.
+- 펀딩: 직전 틱의 nextFundingTime 경계를 지나면 **직전 틱의** 펀딩율·mark로 정산하고 추정 청산가를 갱신(격리 지갑 감소).
+  간격이 런타임에 알려져 있으면 경계가 격자(8h → 00/08/16 UTC) 위인지 확인(`FeedError`), 공백으로 건너뛴 경계는
+  율을 모르므로 `FundingMissed` + 진입 차단.
+- LIVE 청산은 거래소가 들고 있는 수량을 닫는다. 진입 응답 불명이면 거래소 수량을 포지션으로 채택한다.
 - 주문 결과 불명(`OrderOutcomeUnknown`) → 진입 차단(대사 전까지). 청산 실패는 포지션을 유지하고 다음 트리거에서 재시도.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from exchange.errors import BinanceAPIError, LeverageNotConfirmed, OrderParamError, RulesError, TransportError
 from exchange.gate import Mode
 from exchange.normalize import RejectReason
-from exchange.orders import Direction, Intent, close_position_orders, market_order_params
+from exchange.orders import Direction, Intent, close_position_orders, market_order_params, side_for
 from exchange.rules import RuntimeRules
 from paper.sender import OrderOutcomeUnknown, OrderSender
 from paper.types import (
@@ -34,11 +37,13 @@ from paper.types import (
     ExitFailed,
     ExitReason,
     Fill,
+    FundingMissed,
     FundingSettled,
     LiquidationThresholdCrossed,
     MarkBar,
     MarkTick,
     PositionClosed,
+    PositionRisk,
     PostFillCheck,
     SkipReason,
 )
@@ -127,11 +132,16 @@ class Engine:
         self.pending = intent
 
     def on_tick(self, t: MarkTick) -> list[object]:
+        self._check_funding_grid(t)
         ev: list[object] = []
         prev = self._last_tick
         if prev is not None and self.position is not None and prev.ts_ms < prev.next_funding_ms <= t.ts_ms:
             ev.append(self._settle_funding(prev.next_funding_ms, prev.funding_rate, prev.mark))
-        self._check_funding_grid(t)
+            missed = self._missed_boundaries(prev.next_funding_ms, t.ts_ms)
+            if missed:
+                #  🔴 Codex L3 검토 3: 공백 동안의 경계는 율을 모른다 — 추정하지 않고 알리고 진입을 막는다
+                ev.append(FundingMissed(t.ts_ms, missed, self.position.signed_qty))
+                ev.append(self._block(t.ts_ms, f"피드 공백으로 펀딩 경계 {len(missed)}개 정산 불가(율 불명)"))
         self._last_tick = t
         if self.pending is not None and t.ts_ms > self.pending.decided_ms:
             ev += self._execute_entry(t.mark, t.ts_ms)
@@ -168,26 +178,52 @@ class Engine:
         if interval and t.next_funding_ms % (interval * HOUR_MS) != 0:
             raise FeedError(f"nextFundingTime {t.next_funding_ms}이 {interval}h 격자 밖 — 런타임 fundingInfo와 모순")
 
+    def _missed_boundaries(self, settled_ms: int, now_ms: int) -> tuple[int, ...]:
+        """정산한 경계 뒤 `now_ms`까지 건너뛴 경계. 간격을 모르면(fundingInfo에 심볼 없음) 셀 수 없어 빈 튜플."""
+        interval = self.rules.funding.interval_hours
+        if not interval:
+            return ()
+        step = interval * HOUR_MS
+        return tuple(range(settled_ms + step, now_ms + 1, step))
+
     def _settle_funding(self, ts_ms: int, rate: Decimal, mark: Decimal) -> FundingSettled:
         pos = self.position
         assert pos is not None
         paid = pos.signed_qty * mark * rate
         self.wallet -= paid
         pos.funding_paid += paid
+        self._refresh_liquidation(pos)
         return FundingSettled(ts_ms, rate, mark, pos.signed_qty, paid, self.wallet)
+
+    def _refresh_liquidation(self, pos: OpenPosition) -> None:
+        """격리 포지션의 펀딩은 격리 지갑에서 나간다(Codex L3 검토 Q3) → WB = N/L − N×taker − 누적 펀딩.
+        #4 닫힌꼴에서 WB의 −N×taker 항과 같은 자리이므로 `taker + 펀딩/N`을 넘기면 정확히 같은 식이다."""
+        n = pos.qty * pos.entry_price
+        try:
+            pos.liq_price_est = liquidation_estimate(pos.direction, pos.entry_price, n, pos.leverage, self.rules,
+                                                     taker=self.rules.commission.taker + pos.funding_paid / n).price
+        except RulesError:
+            pass
 
     def _block(self, ts_ms: int, reason: str) -> EntriesBlocked:
         self.entries_blocked = reason
         return EntriesBlocked(ts_ms, reason)
 
+    def _read_position(self, ts_ms: int) -> tuple[PositionRisk | None, list[object]]:
+        try:
+            return self.sender.position_risk(), []
+        except (OrderOutcomeUnknown, BinanceAPIError, TransportError) as e:
+            return None, [self._block(ts_ms, f"positionRisk 조회 실패 {type(e).__name__}: {e} — 대사 필요")]
+
     def _execute_entry(self, ref_mark: Decimal, ts_ms: int) -> list[object]:
         pe = self.pending
         assert pe is not None
         self.pending = None
-        d = size_entry(ref_mark, pe.sl, pe.direction, self.wallet, pe.regime, self.rules, self.limits)
+        quote = self.sender.quote_fill_price(side_for(pe.direction, Intent.ENTRY), ref_mark)
+        d = size_entry(quote, pe.sl, pe.direction, self.wallet, pe.regime, self.rules, self.limits)
         if not d.ok or d.leverage is None:
             why = SkipReason.SL_CROSSED_BEFORE_FILL if d.reason is RejectReason.SL_WRONG_SIDE else SkipReason.SIZING_REJECTED
-            return [EntrySkipped(ts_ms, d, why, f"실행 mark {ref_mark} · {d.reason} · {d.detail}")]
+            return [EntrySkipped(ts_ms, d, why, f"실행 mark {ref_mark} · 예상 체결가 {quote} · {d.reason} · {d.detail}")]
         try:
             echo = self.sender.set_leverage(d.leverage)
         except (LeverageNotConfirmed, BinanceAPIError, TransportError) as e:
@@ -198,32 +234,43 @@ class Engine:
         sr = self.rules.symbol_rules
         fills: list[Fill] = []
         ev: list[object] = []
+        failure: Exception | None = None
         try:
             for q in d.chunks:
                 p = market_order_params(sr.symbol, d.direction, Intent.ENTRY, q, sr)
                 fills.append(self.sender.send_market(p, ref_mark=ref_mark, ts_ms=ts_ms))
         except SEND_ERRORS as e:
-            if not fills or isinstance(e, OrderOutcomeUnknown):
-                ev.append(self._block(ts_ms, f"진입 주문 실패/불명 {type(e).__name__}: {e} · 체결 {len(fills)}조각"))
-            if not fills:
-                if not isinstance(e, OrderOutcomeUnknown):
-                    ev.append(EntrySkipped(ts_ms, d, SkipReason.SEND_FAILED, f"{type(e).__name__}: {e}"))
-                return ev
-            if not self.entries_blocked:
-                ev.append(self._block(ts_ms, f"진입 일부 조각만 체결 {len(fills)}/{len(d.chunks)}"))
+            failure = e
+            ev.append(self._block(ts_ms, f"진입 주문 실패/불명 {type(e).__name__}: {e} · 체결 확인 {len(fills)}/{len(d.chunks)}조각"))
 
         qty = sum((f.qty for f in fills), Decimal())
-        entry = _vwap(fills)
         commission = sum((f.commission for f in fills), Decimal())
+        entry = _vwap(fills) if fills else ref_mark
+        if failure is not None and self.mode is Mode.LIVE:
+            #  응답을 못 받은 조각이 실제로는 체결됐을 수 있다 → 거래소 수량을 채택해 SL 감시를 한다(방치 금지)
+            pr, blocked = self._read_position(ts_ms)
+            ev += blocked
+            sign = 1 if d.direction is Direction.LONG else -1
+            if pr is not None and pr.amt * sign > 0 and abs(pr.amt) != qty:
+                extra = abs(pr.amt) - qty
+                commission += max(extra, Decimal()) * pr.entry_price * self.rules.commission.taker
+                qty, entry = abs(pr.amt), pr.entry_price
+        if qty == 0:
+            if failure is not None and not isinstance(failure, OrderOutcomeUnknown):
+                ev.append(EntrySkipped(ts_ms, d, SkipReason.SEND_FAILED, f"{type(failure).__name__}: {failure}"))
+            return ev
+
         self.wallet -= commission
         post = self._post_fill(d, entry, qty)
         self.position = OpenPosition(d.direction, qty, entry, d.leverage, d.sl, pe.tp, post.liq_price_est, commission,
                                      ts_ms, d, Decimal())
-        ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post))
-
+        live_ev: list[object] = []
         if self.mode is Mode.LIVE:
-            ev += self._live_reconcile(ts_ms, expected=self.position.signed_qty)
-        if not post.sl_before_liquidation:
+            post, live_ev = self._live_after_entry(ts_ms, d, post)
+        ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post))
+        ev += live_ev
+        if not post.gate_ok:
+            #  #5는 사전확약 게이트 — 실제 체결 기준으로 깨지면 즉시 청산(Codex L3 검토 4 · 기록만 하는 완화 없음)
             ev += self._exit(ExitReason.POST_FILL_GATE, ref_mark, ts_ms)
         return ev
 
@@ -242,25 +289,28 @@ class Engine:
         except RulesError:
             assert d.liq_price_est is not None and d.liq_dist_pct is not None and d.bracket is not None
             liq_price, liq_dist, bracket, gate_ok, sl_first = d.liq_price_est, d.liq_dist_pct, d.bracket, False, False
-        lc = None
-        if self.mode is Mode.LIVE:
-            pr = self.sender.position_risk()
-            if pr is not None:
-                lc = post_entry_liquidation_check(d, self.rules, entry_price=entry, qty=qty,
-                                                  exchange_liq_price=pr.liquidation_price)
         return PostFillCheck(entry_price=entry, qty=qty, notional=notional, sl_dist_pct=sl_dist, liq_price_est=liq_price,
                              liq_dist_pct=liq_dist, bracket=bracket, gate_ok=gate_ok, loss_at_sl_usdt=loss,
                              loss_over_budget=loss > d.risk_budget_usdt * (1 + self.limits.loss_tolerance),
-                             sl_before_liquidation=sl_first, liquidation_check=lc)
+                             sl_before_liquidation=sl_first, liquidation_check=None)
 
-    def _live_reconcile(self, ts_ms: int, *, expected: Decimal) -> list[object]:
+    def _live_after_entry(self, ts_ms: int, d: SizingDecision, post: PostFillCheck) -> tuple[PostFillCheck, list[object]]:
+        """LIVE 전용 — positionRisk 1회: 청산가 검사(#4 판정 로그) + 수량 대사. 🔴 Codex L3 검토 1: 조회 실패는 예외가
+        아니라 진입 차단(포지션은 이미 내부에 기록돼 청산 감시가 계속된다)."""
+        pos = self.position
+        assert pos is not None
+        pr, ev = self._read_position(ts_ms)
+        if pr is None:
+            return post, ev
         try:
-            pr = self.sender.position_risk()
-        except (OrderOutcomeUnknown, BinanceAPIError, TransportError) as e:
-            return [self._block(ts_ms, f"positionRisk 재조회 실패 {type(e).__name__}: {e}")]
-        if pr is None or pr.amt != expected:
-            return [self._block(ts_ms, f"대사 불일치: 내부 {expected} · 거래소 {None if pr is None else pr.amt}")]
-        return []
+            lc = post_entry_liquidation_check(d, self.rules, entry_price=post.entry_price, qty=post.qty,
+                                              exchange_liq_price=pr.liquidation_price)
+            post = replace(post, liquidation_check=lc)
+        except (RulesError, ValueError, ArithmeticError) as e:
+            ev.append(self._block(ts_ms, f"진입 후 청산가 검사 실패 {type(e).__name__}: {e}"))
+        if pr.amt != pos.signed_qty:
+            ev.append(self._block(ts_ms, f"대사 불일치: 내부 {pos.signed_qty} · 거래소 {pr.amt}"))
+        return post, ev
 
     def _evaluate(self, ts_ms: int, *, low: Decimal, high: Decimal, sl_ref: Decimal, tp_ref: Decimal | None,
                   mark: Decimal) -> list[object]:
@@ -284,10 +334,12 @@ class Engine:
         return ev
 
     def _liquidate(self, ts_ms: int) -> list[object]:
+        """PAPER — 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩) 전부 + N × liquidationFee."""
         pos = self.position
         assert pos is not None
         n = pos.qty * pos.entry_price
-        loss = n / Decimal(pos.leverage) - pos.entry_commission + n * self.rules.symbol_rules.liquidation_fee
+        loss = (n / Decimal(pos.leverage) - pos.entry_commission - pos.funding_paid
+                + n * self.rules.symbol_rules.liquidation_fee)
         self.wallet -= loss
         self.position = None
         return [PositionClosed(ts_ms, pos.direction, ExitReason.LIQUIDATION, pos.qty, pos.entry_price, None, (), -loss,
@@ -297,21 +349,37 @@ class Engine:
         pos = self.position
         assert pos is not None
         sr = self.rules.symbol_rules
+        ev: list[object] = []
+        signed = pos.signed_qty
+        if self.mode is Mode.LIVE:
+            #  거래소가 실제로 들고 있는 수량을 닫는다(부분 불명 조각 포함) — 반대 부호면 닫지 않고 멈춘다
+            pr, blocked = self._read_position(ts_ms)
+            ev += blocked
+            if pr is not None:
+                if pr.amt == 0:
+                    self.position = None
+                    ev.append(ExitFailed(ts_ms, reason, "거래소 포지션 0 — 거래소 청산·수동 청산 추정 · 대사 필요"))
+                    ev.append(self._block(ts_ms, "청산하려 했으나 거래소 포지션이 이미 0"))
+                    return ev
+                if pr.amt * signed < 0:
+                    ev.append(ExitFailed(ts_ms, reason, f"거래소 수량 {pr.amt}이 내부 방향 {pos.direction}과 반대 — 청산 보류"))
+                    ev.append(self._block(ts_ms, "대사 불일치(반대 부호)"))
+                    return ev
+                signed = pr.amt
         fills: list[Fill] = []
         failure: Exception | None = None
         try:
-            for p in close_position_orders(pos.signed_qty, sr):
+            for p in close_position_orders(signed, sr):
                 fills.append(self.sender.send_market(p, ref_mark=ref_mark, ts_ms=ts_ms))
         except SEND_ERRORS as e:
             failure = e
-        ev: list[object] = []
         if fills:
             q = sum((f.qty for f in fills), Decimal())
             px = _vwap(fills)
             pnl = (px - pos.entry_price) * q if pos.direction is Direction.LONG else (pos.entry_price - px) * q
             comm = sum((f.commission for f in fills), Decimal())
             self.wallet += pnl - comm
-            if q == pos.qty:
+            if q >= pos.qty:
                 self.position = None
                 ev.append(PositionClosed(ts_ms, pos.direction, reason, q, pos.entry_price, px, tuple(fills), pnl, comm,
                                          pos.funding_paid, self.wallet))
@@ -322,6 +390,8 @@ class Engine:
             ev.append(ExitFailed(ts_ms, reason, f"{type(failure).__name__}: {failure}"))
             ev.append(self._block(ts_ms, f"청산 주문 실패/불명 — 대사 필요: {failure}"))
         if self.mode is Mode.LIVE and self.position is None:
-            ev += self._live_reconcile(ts_ms, expected=Decimal())
+            pr, blocked = self._read_position(ts_ms)
+            ev += blocked
+            if pr is not None and pr.amt != 0:
+                ev.append(self._block(ts_ms, f"청산 후 거래소 잔량 {pr.amt} — 대사 필요"))
         return ev
-

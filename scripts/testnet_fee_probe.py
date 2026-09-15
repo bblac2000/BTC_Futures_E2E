@@ -251,9 +251,14 @@ def close_all(client: RestClient, rules: RuntimeRules, *, sleep: Callable[[float
 
 def require_flat(client: RestClient) -> None:
     """🔴 Codex 검토 Q3 추가 결함: 이미 ISOLATED면 기동 게이트가 flat을 보지 않는다 → 첫 주문 **전** 무조건 확인."""
-    row = _both_row(client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data)
-    if Decimal(str(row["positionAmt"])) != 0:
-        raise ProbeAbort(f"{SYMBOL} 포지션 보유 중 positionAmt={row['positionAmt']} — 프로브는 flat 계정에서만")
+    #  헤지 모드는 LONG·SHORT 두 행(BOTH 없음) — 심볼의 **모든 행**이 0이어야 flat(Codex L3 검토 Q7)
+    rows = [r for r in (client.get(POSITION_V2, {"symbol": SYMBOL}, signed=True).data or [])
+            if isinstance(r, dict) and r.get("symbol") == SYMBOL]
+    if not rows:
+        raise ProbeAbort(f"positionRisk에 {SYMBOL} 행이 없다 — flat 확인 불가")
+    legs = [f"{r.get('positionSide', 'BOTH')}={r.get('positionAmt')}" for r in rows if Decimal(str(r["positionAmt"])) != 0]
+    if legs:
+        raise ProbeAbort(f"{SYMBOL} 포지션 보유 중 {legs} — 프로브는 flat 계정에서만")
     if client.get(OPEN_ORDERS, {"symbol": SYMBOL}, signed=True).data:
         raise ProbeAbort(f"{SYMBOL} 미체결 주문 있음 — 프로브는 미체결 0에서만")
     if client.get(ALGO_OPEN_ORDERS, {"symbol": SYMBOL}, signed=True).data:

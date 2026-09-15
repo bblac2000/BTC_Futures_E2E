@@ -27,7 +27,7 @@ E2E를 fork하지 않고, 런타임에 E2E를 import하지 않는다. 필요한 
 |---|---|---|
 | 1 | `exchange/` 런타임 규칙 로더·정규화·주문 매트릭스·기동 게이트·rate-limit 카운터·서버 시각 오프셋 | ✅ 구현·테스트 (Codex 검토: 아래 §7) |
 | 2 | `sizing/` 위험 예산 → 목표 명목 → 최고 정수 L(브라켓·거래소 공식 청산 거리) → pos_pct 캡 → 수량 → 최종 재검증·손실 예산 (레지스트리 #2) | ✅ B1·B2로 재작업·테스트 — Codex 재검토 §7 · buffer 값 대기(#3) |
-| 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | ⏸ |
+| 3 | `paper/` 체결 엔진(taker-only·mark 기준+보수 슬리피지·같은 봉 SL 우선·펀딩 실율·maxQty 분할). 라이브 전송기는 LIVE+체크리스트 게이트 뒤 | 🔶 구현·테스트 완료 · Codex 검토 1회 FIX FIRST → 수정 → 재검토 중(§12) |
 | 4 | `db/` 버전 마이그레이션 SQLite(bars_1m·features_*·decisions·orders·positions·funding_events·account_snapshots·runtime_rules) | ⏸ (`runtime_rules` DDL은 임시로 `exchange/store.py`) |
 | 5 | `data/` 1m kline(/market) + REST 백필 · markPrice@1s 같은 소켓 · 스트림별 전달 감시 · manifest | ⏸ (`ops/delivery_counter.py`·`data/manifest.py` 복사 완료) |
 | 6 | `notify/` 텔레그램 명령·확인·재전송·만료 (2026-09-15 `telegram/`에서 개명 — PyPI `python-telegram-bot` import 이름 가림 방지) | ⏸ (`notify/sender.py` 복사 완료) |
@@ -162,3 +162,23 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 부가 기록(판정에 쓰지 않음): `isolatedMargin − isolatedWallet`와 `unRealizedProfit`의 차 · v2/v3 `isolated` 필드 존재(테스트넷 모양일 뿐 — 메인넷 `_is_isolated`는 메인넷 캡처로 확정).
 **재실행 규칙**: 운영 실패(주문 거부·청산 실패·전송 오류)로 판정까지 못 간 실행은 시도로만 기록하고 재실행 가능. **판정까지 간 첫 실행의 결과가 확정** — 결과를 보고 재실행해 다른 판정을 고르지 않는다.
 - 보충(2026-09-15 · 스크립트 작성 전 · 실행 전): B를 계산할 수 없으면(`liquidationPrice ≤ 0`·해석 불가·청산식 `RulesError`) "B≠…" 조건을 **충족하지 않은 것으로** 본다 → 그 다리는 INCONCLUSIVE. `userTrades`가 체결 직후 비어 있으면 최대 5회 1초 간격 재조회, 그래도 없으면 INCONCLUSIVE.
+
+
+## 12. layer 3 `paper/` 요약 (2026-09-15)
+| 모듈 | 역할 |
+|---|---|
+| `paper/sender.py` | `OrderSender` 프로토콜 · `PaperSender`(mark ± 슬리피지, 불리 방향·불리 tick · 수수료 = 런타임 taker · positionRisk 없음) · `LiveSender`(**생성 조건** `Mode.LIVE` + `LiveChecklist` 전 항목 True + 쓰기 클라이언트 · 레버리지 응답 확인 · MARKET RESULT · 수수료 userTrades · 전송 불명 → `OrderOutcomeUnknown`) |
+| `paper/engine.py` | 페이퍼·라이브 공통 엔진 — 모드 차이는 송신기 + LIVE 전용 positionRisk 검사·대사 + PAPER 전용 청산 시뮬레이션 |
+| `paper/config.py` | 슬리피지 0.0000016(0.016 bps, 2026-08 레짐 꼬리표 · 왕복 실측값을 **편도마다** 적용) |
+| `paper/types.py` | 피드 입력(MarkTick·MarkBar)·Fill·이벤트(layer 4 행의 원천) |
+
+**엔진 규칙** (테스트 `tests/test_paper_engine.py`가 잠근다)
+- 전략은 `EntryIntent`(방향·SL·TP·레짐)를 낸다. 결정 **이후** 첫 mark 틱(봉 재생은 다음 봉 시가)에서 **송신기의 예상 체결가(`quote_fill_price`: PAPER = mark ± 슬리피지 불리 tick, LIVE = mark)·현재 지갑으로 `size_entry` 재실행** → 레버리지 설정 응답 확인 → MARKET(maxQty 분할).
+  이유: 사이징은 #5를 통과하는 **최고** L을 고르므로 결정 시점 L은 게이트 경계에 붙어 있다 — 가격이 몇 USD만 움직여도 체결 기준으로 게이트를 깬다(구현 중 테스트로 발견).
+- 한 틱/봉 안 **청산 > SL > TP**(같은 봉 SL·TP → SL). 봉 SL 체결 기준 = min(SL, 시가)(LONG), 봉 TP = TP(갭 이득 없음). 판정 가격은 mark.
+- 체결 후 실제 체결가·수량으로 청산 추정(#4)·#5 게이트·SL 손실 재계산 → `PostFillCheck`. **#5가 깨지면 즉시 청산**(사전확약 게이트 — Codex L3 검토로 "기록만"에서 변경). PAPER는 체결가로 사이징하므로 깨지지 않고, LIVE는 실제 슬리피지만큼 깨질 수 있다. 예산 초과(`loss_over_budget`)는 기록만.
+- PAPER 청산: mark가 추정 청산가를 넘으면 손실 = N/L − 진입 수수료 − 누적 펀딩 + N×liquidationFee(진입부터 총 N/L + N×fee). 펀딩 정산마다 격리 지갑이 줄어든 만큼 추정 청산가를 갱신(#4 식에 `taker + 펀딩/N`). LIVE는 `LiquidationThresholdCrossed` 알림 후 SL 청산 시도(청산은 거래소가 한다 · #6).
+- 펀딩: 틱이 직전 틱의 nextFundingTime을 지나면 **직전 틱의** 펀딩율·mark로 정산(LONG·양수 → 지불). fundingInfo 간격(8h)이 있으면 경계가 격자(00/08/16 UTC) 위인지 확인 → 아니면 `FeedError`. 피드 공백으로 건너뛴 경계는 율을 모르므로 `FundingMissed` + 진입 차단(추정 금지). 봉 재생은 `on_funding`으로 실제 펀딩 이력을 넣는다.
+- LIVE만: 진입 후 `positionRisk` 1회 → `post_entry_liquidation_check` + 수량 대사(불일치·조회 실패 → 진입 차단, 포지션은 유지). 청산은 **거래소 보유 수량**을 닫고(반대 부호·0이면 멈추고 차단), 청산 후 flat 대사.
+- `OrderOutcomeUnknown` → 진입 차단. LIVE는 거래소 수량을 포지션으로 채택해 SL 감시(방치 금지). 청산 실패 → 포지션 유지·다음 트리거에서 재시도 + 진입 차단. 체결 후 수수료 조회 이상은 예외가 아니라 taker 추정 + 표시.
+- 아직 없음: 기동 배선(config → 모드 → 송신기), DB 기록(layer 4), 피드 어댑터(layer 5), 킬스위치(layer 7).

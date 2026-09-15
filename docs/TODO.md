@@ -3,8 +3,8 @@
 > 경위는 `docs/ops_log.md`, 판정·사전등록은 `docs/trial_registry.md`, 설계는 `docs/design_v1.md`.
 
 ## 📌 현황 (2026-09-15)
-- ✅ layer 1 수용(사용자 2026-09-15) · ✅ layer 2 `sizing/` 구현 — **layer 3 착수 전 보고·확인 대기**
-- 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 실주문 전송 경로 없음(layer 3에서 LIVE+체크리스트 게이트 뒤)
+- ✅ layer 1·2 수용(사용자 2026-09-15) · 🔶 layer 3 `paper/` 구현·테스트 완료 — Codex 검토 → **layer 4 착수 전 보고·확인 대기**
+- 🚫 전략 코드 없음(layer 1~8 통과 전 금지) · 🔴 실주문 경로 `paper/sender.py LiveSender` 존재(LIVE+체크리스트 전 항목 게이트 · 기동 배선 없음) · 테스트넷 프로브(테스트넷 전용)
 
 ## 다음
 1. [x] Codex 독립 검토 layer 1 — Q3·Q4·Q5 채택·수정 완료(ops_log 원문)
@@ -23,9 +23,11 @@
 3j. [ ] 페이퍼 14일차: 레지스트리 #5 재평가 새 행(체결 슬리피지 p99 · 모니터 주기 mark 이동 p99)
 3k. [ ] ~~첫 페이퍼 주~~ → **첫 라이브 진입부터**: 진입 후 검사 로그로 #4 수수료 가정 판정(레지스트리 #6) · 테스트넷/최소 명목 프로브로 앞당길지 사용자 결정 대기
 3l. [ ] **테스트넷 수수료 프로브** `scripts/testnet_fee_probe.py` — 해석 규칙 설계서 §11(사전확약) · 사용자 실행(테스트넷 키) → 레지스트리 #7 · INCONCLUSIVE면 실계정 프로브(Codex+승인)
-3h. [ ] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
+3m. [x] layer 3 `paper/` — 송신기·엔진·테스트(설계서 §12)
+3n. [ ] layer 3 사용자 확인: 체결 후 #5 버퍼 위반은 기록만(청산은 SL이 청산가 뒤일 때만) · 실행 시점 재사이징
+3h. [x] layer 3: 진입 전 `POST /leverage` 응답 == decision.leverage · 체결 후 positionRisk.liquidationPrice 재조회 → `post_entry_liquidation_check(실제 체결가·qty)` · 실제 체결 기준 SL 손실 재계산(Codex Q7)
 3b. [x] Codex layer 2 검토 반영 — 동의 7건 수정(최종 명목 재검증·브라켓 단조 검증·NOTIONAL_CAP·Decimal 문맥)
-3c. [ ] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
+3c. [x] layer 3: 진입 전 `POST /fapi/v1/leverage` 응답 == `SizingDecision.leverage` 확인 + 최종 브라켓 기록(Codex L2 Q5)
 4. [x] 전달 감시 임계 → 레지스트리 #1 확정(kline1m_update·kline1m_close·markprice) — layer 5 writer가 kline을 두 kind로 기록해야 재생 어댑터가 같은 값을 센다
 5. [ ] layer 4에서 `exchange/store.py` DDL을 마이그레이션 schema v1로 흡수
 6. [ ] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원 · layer 8: vps_health 스로틀 구조 · `data_stores` allowlist(설계 #131)

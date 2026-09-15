@@ -23,6 +23,8 @@ TDD: write the test, see it fail, then implement.
 - `exchange/rules.py` parses exchange responses into Decimal dataclasses (`RuntimeRules`). Missing data raises `RulesError` — never default. `loader.py` fetches or loads snapshots; `store.py` persists raw payloads to `runtime_rules`.
 - `exchange/normalize.py` → `orders.py`: floor qty → recheck MIN_NOTIONAL after flooring → split by MARKET_LOT maxQty; `Direction` and `Side` are distinct types so a direction can never reach `side`. Orders are built and validated, not sent.
 - `exchange/gate.py`: LIVE mutates the account (one-way, ISOLATED confirmed by re-read, leverage) and raises `StartupAbort` (entries off, exits on) on any failure. PAPER wraps the client in `ReadOnlyClient`, so it makes zero POSTs.
+- `paper/engine.py` is one engine for PAPER and LIVE; only the `OrderSender` differs. `LiveSender` (`paper/sender.py`) cannot be constructed without `Mode.LIVE` + every `LiveChecklist` item True + a writable client. Strategies submit an `EntryIntent`; sizing re-runs at the execution mark.
+- `scripts/testnet_fee_probe.py` sends real orders **to testnet only** (per-request host allowlist, redirects refused). Its verdict rule is pre-committed in `docs/design_v1.md` §11.
 - `ops/stream_tiers.py` is the only place WS endpoint URLs may be built (`build_stream_url`). Legacy `/ws` `/stream` URLs and hand-written tier URLs fail the scan. `ops/delivery_counter.py` detects silent zero-delivery streams per stream.
 - Files copied from `/home/cms/project/E2E_Hybrid_Bot` carry a PROVENANCE header. Log any change to a copied file in `docs/ops_log.md`. Never import E2E at runtime.
 
