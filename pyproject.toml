@@ -1,0 +1,41 @@
+[project]
+name = "btc-futures-e2e"
+version = "0.1.0"
+description = "BTCUSDT USDⓈ-M perpetual bot — paper first, live only after user approval + live checklist"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pyarrow>=17",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6",
+    "pyright>=1.1.380",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["var"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# RUF001/RUF003 would flag the Korean prose that is normal in this codebase; not selected.
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["exchange", "sizing", "paper", "db", "data", "telegram", "safety", "ops", "strategies", "tests"]
+exclude = ["var", ".venv", "**/__pycache__"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"

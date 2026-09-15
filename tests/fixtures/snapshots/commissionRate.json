@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "captured_at_utc": "2026-09-02T10:54:01.270781+00:00",
+    "server_time_ms": 1788346440765,
+    "base_url": "https://fapi.binance.com",
+    "net": "mainnet",
+    "method": "GET",
+    "read_only": true,
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "XRPUSDT",
+      "SOLUSDT",
+      "BNBUSDT"
+    ],
+    "endpoint": "/fapi/v1/commissionRate",
+    "signed": true
+  },
+  "response": {
+    "BTCUSDT": {
+      "symbol": "BTCUSDT",
+      "makerCommissionRate": "0.000200",
+      "takerCommissionRate": "0.000500",
+      "rpiCommissionRate": "0"
+    },
+    "ETHUSDT": {
+      "symbol": "ETHUSDT",
+      "makerCommissionRate": "0.000200",
+      "takerCommissionRate": "0.000500",
+      "rpiCommissionRate": "0"
+    },
+    "XRPUSDT": {
+      "symbol": "XRPUSDT",
+      "makerCommissionRate": "0.000200",
+      "takerCommissionRate": "0.000500",
+      "rpiCommissionRate": "0"
+    },
+    "SOLUSDT": {
+      "symbol": "SOLUSDT",
+      "makerCommissionRate": "0.000200",
+      "takerCommissionRate": "0.000500",
+      "rpiCommissionRate": "0"
+    },
+    "BNBUSDT": {
+      "symbol": "BNBUSDT",
+      "makerCommissionRate": "0.000200",
+      "takerCommissionRate": "0.000500",
+      "rpiCommissionRate": "0"
+    }
+  }
+}

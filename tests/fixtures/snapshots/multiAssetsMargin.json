@@ -1,0 +1,9 @@
+{
+  "_meta": {
+    "synthetic": true,
+    "created_at_utc": "2026-09-15",
+    "endpoint": "/fapi/v1/multiAssetsMargin",
+    "why": "no captured snapshot exists for this signed endpoint; shape per Binance docs, value per v6 §1.0(A) 2026-06-19 account measurement (multiAssetsMargin=False). Replace with a real read-only capture before live."
+  },
+  "response": {"multiAssetsMargin": false}
+}
