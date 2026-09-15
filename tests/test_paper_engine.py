@@ -722,3 +722,95 @@ def test_live_exit_sync_to_a_smaller_exchange_quantity_records_the_missing_part_
     assert kinds.index("PositionVanished") < kinds.index("PositionClosed")
     assert v.qty == D("0.004") and v.entry_price == entry and c.qty == probe.qty - D("0.004")
     assert v.qty + c.qty == probe.qty
+
+
+# ── layer 8 배치(사용자 2026-09-16): 부분 청산 행 · 강제 소실 · 차단 목록 · equity ─────────────
+def _split_rules(rules):
+    return replace(rules, symbol_rules=replace(rules.symbol_rules, market_max_qty=D("0.010")))
+
+
+def test_partial_exit_emits_position_reduced_with_its_fills_and_pnl(rules):
+    """부분 청산은 `ExitFailed`만 내던 것을 `PositionReduced`(체결·손익·잔량)로 — DB가 close 행을 써서 대사가 스스로 맞는다."""
+    from paper.types import PositionReduced
+    r2 = _split_rules(rules)
+    s = SpySender(PaperSender(r2))
+    e = engine(r2, s)
+    e.request_entry(intent(sl="59820", risk="0.02"))
+    (fill,) = of(e.on_tick(tick(DAY0 + 1000, "60000")), EntryFilled)
+    k = len(fill.fills)
+    assert k > 2
+    s.unknown_on_send = k + 2                                   # 청산 두 번째 조각에서 결과 불명
+    w_before = e.wallet
+    ev = e.close_now(ref_mark=D("60100"), ts_ms=DAY0 + 2000)
+    (red,) = of(ev, PositionReduced)
+    assert of(ev, PositionClosed) == [] and e.position is not None
+    assert red.qty == D("0.010") and red.remaining_qty == e.position.qty == fill.decision.qty - D("0.010")
+    assert len(red.fills) == 1 and red.exit_price == red.fills[0].price and red.reason is ExitReason.MANUAL
+    assert red.realized_pnl_usdt == (red.exit_price - red.entry_price) * red.qty
+    assert red.wallet_after == e.wallet == w_before + red.realized_pnl_usdt - red.exit_commission_usdt
+    assert of(ev, ExitFailed) and e.entries_blocked
+    (c,) = of(e.close_now(ref_mark=D("60100"), ts_ms=DAY0 + 3000), PositionClosed)
+    assert c.qty + red.qty == fill.decision.qty and e.position is None
+
+
+def test_vanish_forces_an_internal_close_without_any_order(rules):
+    """LIVE 대사에서 거래소 flat · 내부 보유 → 주문 없이 내부 포지션을 닫고 `PositionVanished`(전량) + 진입 차단."""
+    from paper.types import PositionVanished
+    s = FlakyLive(PaperSender(rules), mode=Mode.LIVE)
+    s.exchange_amt = D("1")
+    e = Engine(rules, s, mode=Mode.LIVE, wallet=W0, limits=SizingLimits())
+    e.request_entry(intent())
+    e.on_tick(tick(DAY0 + 1000, "60000"))
+    pos = e.position
+    assert pos is not None
+    sends = len([c for c in s.calls if c[0] == "send"])
+    ev = e.vanish(DAY0 + 5000, "봉 대사: 거래소 0")
+    (v,) = of(ev, PositionVanished)
+    assert (v.qty, v.entry_price, v.direction) == (pos.qty, pos.entry_price, LONG) and e.position is None
+    assert of(ev, EntriesBlocked) and e.entries_blocked
+    assert len([c for c in s.calls if c[0] == "send"]) == sends, "주문 없음"
+    assert e.vanish(DAY0 + 6000, "again") == []
+
+
+def test_entries_blocked_is_a_list_of_every_reason_and_a_human_clears_it(rules):
+    s = SpySender(PaperSender(rules), unknown_on_send=1)
+    e = engine(rules, s)
+    e.request_entry(intent())
+    e.on_tick(tick(DAY0 + 1000, "60000"))
+    e._block(DAY0 + 2000, "두 번째 사유")
+    e._block(DAY0 + 3000, "두 번째 사유")
+    assert isinstance(e.entries_blocked, list) and len(e.entries_blocked) == 2 and e.entries_blocked[1] == "두 번째 사유"
+    cleared = e.clear_blocks()
+    assert len(cleared) == 2 and e.entries_blocked == []
+    e.request_entry(intent(decided_ms=DAY0 + 3000))
+
+
+def test_equity_is_wallet_plus_unrealized_at_mark(rules):
+    e, _ = opened(rules, SHORT)
+    pos = e.position
+    assert pos is not None and e.equity(D("60000")) == e.wallet + (pos.entry_price - D("60000")) * pos.qty
+    assert e.unrealized_pnl(D("59000")) == (pos.entry_price - D("59000")) * pos.qty
+    assert engine(rules).equity(D("1")) == W0
+
+
+def test_wallet_resync_emits_an_event_with_the_previous_value(rules):
+    from paper.types import WalletResynced
+    e = engine(rules)
+    ev = e.sync_wallet(DAY0, D("912.5"), source="exchange", detail="소실 뒤 거래소 지갑")
+    assert isinstance(ev, WalletResynced) and (ev.previous, ev.wallet) == (W0, D("912.5")) and e.wallet == D("912.5")
+    with pytest.raises(TypeError):
+        e.sync_wallet(DAY0, 912.5, source="exchange", detail="")  # type: ignore[arg-type]
+
+
+def test_pending_entry_is_cancelled_with_a_recorded_skip_when_the_gate_closes(rules):
+    e = engine(rules)
+    e.request_entry(intent())
+    (skip,) = e.cancel_pending(DAY0 + 500, "kill_switch:daily_loss")
+    assert skip.reason is SkipReason.ENTRIES_BLOCKED and "kill_switch" in skip.detail and e.pending is None
+    assert e.cancel_pending(DAY0 + 600, "x") == []
+
+
+def test_stale_data_is_an_exit_reason(rules):
+    e, _ = opened(rules)
+    (c,) = of(e.close_now(ref_mark=D("60000"), ts_ms=DAY0 + 5000, reason=ExitReason.STALE_DATA), PositionClosed)
+    assert c.reason is ExitReason.STALE_DATA and ExitReason.STALE_DATA.value == "stale_data"

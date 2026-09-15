@@ -18,6 +18,9 @@
   율을 모르므로 `FundingMissed` + 진입 차단.
 - LIVE 청산은 거래소가 들고 있는 수량을 닫는다. 진입 응답 불명이면 거래소 수량을 포지션으로 채택한다.
 - 주문 결과 불명(`OrderOutcomeUnknown`) → 진입 차단(대사 전까지). 청산 실패는 포지션을 유지하고 다음 트리거에서 재시도.
+- 진입 차단 사유는 **목록**(`entries_blocked`) — 사유를 덮어쓰지 않는다 · 해제는 사람의 /start(`clear_blocks`)만(layer 8).
+- 부분 청산 → `PositionReduced`(체결·손익·잔량) · LIVE 봉 대사에서 거래소 flat → `vanish`(주문 없이 내부 close + `PositionVanished`)
+  · LIVE 소실 손익은 추정하지 않고 거래소 지갑 재동기화(`sync_wallet` → `WalletResynced`)로 들어온다(사용자 2026-09-16).
 """
 from __future__ import annotations
 
@@ -43,11 +46,13 @@ from paper.types import (
     MarkBar,
     MarkTick,
     PositionClosed,
+    PositionReduced,
     PositionRisk,
     PositionSynced,
     PositionVanished,
     PostFillCheck,
     SkipReason,
+    WalletResynced,
 )
 from sizing.config import RegimeSizing, SizingLimits
 from sizing.position import (
@@ -116,7 +121,7 @@ class Engine:
         self.wallet = wallet
         self.position: OpenPosition | None = None
         self.pending: EntryIntent | None = None
-        self.entries_blocked: str | None = None
+        self.entries_blocked: list[str] = []
         self._last_tick: MarkTick | None = None
 
     # ── 입력 ────────────────────────────────────────────────────────────────
@@ -124,7 +129,7 @@ class Engine:
         if type(intent.direction) is not Direction:
             raise EntryRefused(f"direction은 Direction: {intent.direction!r}")
         if self.entries_blocked:
-            raise EntryRefused(f"진입 차단 중: {self.entries_blocked}")
+            raise EntryRefused(f"진입 차단 중: {' · '.join(self.entries_blocked)}")
         if self.position is not None or self.pending is not None:
             raise EntryRefused("포지션 또는 대기 진입이 이미 있다(원웨이 단일 포지션)")
         long_ = intent.direction is Direction.LONG
@@ -174,6 +179,44 @@ class Engine:
     def close_now(self, *, ref_mark: Decimal, ts_ms: int, reason: ExitReason = ExitReason.MANUAL) -> list[object]:
         return self._exit(reason, ref_mark, ts_ms) if self.position is not None else []
 
+    def vanish(self, ts_ms: int, detail: str) -> list[object]:
+        """LIVE 봉 대사가 거래소 flat · 내부 보유를 봤다 → **주문 없이** 내부 포지션을 닫는다(사용자 2026-09-16).
+        손익은 모른다 — 지갑은 호출자가 거래소 지갑으로 `sync_wallet`한다."""
+        pos = self.position
+        if pos is None:
+            return []
+        self.position = None
+        return [PositionVanished(ts_ms, pos.direction, pos.qty, pos.entry_price, detail),
+                self._block(ts_ms, f"거래소 포지션 소실 — 내부 강제 close: {detail}")]
+
+    def sync_wallet(self, ts_ms: int, wallet: Decimal, *, source: str, detail: str) -> WalletResynced:
+        if not isinstance(wallet, Decimal):
+            raise TypeError("wallet은 Decimal")
+        previous, self.wallet = self.wallet, wallet
+        return WalletResynced(ts_ms, previous, wallet, source, detail)
+
+    def clear_blocks(self) -> list[str]:
+        """사람의 /start — 엔진 진입 차단 사유 전부 해제(돌려준 목록을 알린다)."""
+        cleared, self.entries_blocked = self.entries_blocked, []
+        return cleared
+
+    def cancel_pending(self, ts_ms: int, reason: str) -> list[EntrySkipped]:
+        """결정 뒤 체결 전에 진입 게이트가 닫혔다 → 대기 진입을 버리고 기록한다."""
+        if self.pending is None:
+            return []
+        self.pending = None
+        return [EntrySkipped(ts_ms, None, SkipReason.ENTRIES_BLOCKED, reason)]
+
+    def unrealized_pnl(self, mark: Decimal) -> Decimal:
+        pos = self.position
+        if pos is None:
+            return Decimal()
+        return (mark - pos.entry_price) * pos.qty if pos.direction is Direction.LONG else (pos.entry_price - mark) * pos.qty
+
+    def equity(self, mark: Decimal) -> Decimal:
+        """지갑 + mark 기준 미실현 손익 — 킬스위치 일일 손실의 equity(두 모드 같은 정의)."""
+        return self.wallet + self.unrealized_pnl(mark)
+
     # ── 내부 ────────────────────────────────────────────────────────────────
     def _check_funding_grid(self, t: MarkTick) -> None:
         interval = self.rules.funding.interval_hours
@@ -208,7 +251,8 @@ class Engine:
             pass
 
     def _block(self, ts_ms: int, reason: str) -> EntriesBlocked:
-        self.entries_blocked = reason
+        if reason not in self.entries_blocked:
+            self.entries_blocked.append(reason)
         return EntriesBlocked(ts_ms, reason)
 
     def _read_position(self, ts_ms: int) -> tuple[PositionRisk | None, list[object]]:
@@ -421,6 +465,9 @@ class Engine:
                                          pos.funding_paid, self.wallet))
             else:
                 pos.qty -= q
+                #  사용자 2026-09-16: 부분 청산도 행을 쓴다 — DB 남은 수량이 엔진 잔량과 같아져 대사가 스스로 맞는다
+                ev.append(PositionReduced(ts_ms, pos.direction, reason, q, pos.qty, pos.entry_price, px, tuple(fills), pnl,
+                                          comm, self.wallet, f"일부 청산 {q} · 잔량 {pos.qty}"))
                 ev.append(ExitFailed(ts_ms, reason, f"일부 청산 {q} · 잔량 {pos.qty}"))
         if failure is not None:
             ev.append(ExitFailed(ts_ms, reason, f"{type(failure).__name__}: {failure}"))

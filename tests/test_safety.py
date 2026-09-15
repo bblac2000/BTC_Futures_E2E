@@ -123,7 +123,7 @@ def test_stale_guard_uses_the_registry_1_counter_and_alerts_only_on_change():
     v, changes = g.update(DAY0 + 130_000, has_position=True)
     assert v.entries_allowed and v.stalled == () and changes == []
     v, changes = g.update(DAY0 + 260_000, has_position=True)                # 130초 무수신 > grace 120
-    assert not v.entries_allowed and "markprice" in v.stalled and v.position_action == "hold_and_alert"
+    assert not v.entries_allowed and "markprice" in v.stalled and v.position_action == "close", "grace 120초 초과 → 청산(#12)"
     assert len(changes) == 1 and changes[0].stalled == v.stalled
     assert g.update(DAY0 + 261_000, has_position=True)[1] == [], "같은 상태는 다시 알리지 않는다"
     assert g.update(DAY0 + 261_000, has_position=False)[0].position_action == "none"
@@ -209,7 +209,7 @@ def test_gate_lists_every_blocker_and_resume_clears_only_human_clearable_ones():
     blockers = gate.entry_blockers()
     assert any(b.startswith("paused") for b in blockers) and any(b.startswith("kill_switch") for b in blockers)
     assert any(b.startswith("stale") for b in blockers) and not gate.entries_allowed
-    text = gate.resume("telegram:111")
+    text = gate.resume("telegram:111", ts_ms=DAY0 + 2 * H)
     remaining = gate.entry_blockers()
     assert not any(b.startswith(("paused", "kill_switch")) for b in remaining)
     assert any(b.startswith("stale") for b in remaining) and "stale" in text, "피드 정지는 사람이 풀 수 없다 — 알려준다"
@@ -258,3 +258,82 @@ def test_per_bar_reconcile_seeing_the_exchange_flat_under_an_open_position_trips
     g2 = SafetyGate(KillSwitch(LIMITS, wallet=D("1000")), StaleDataGuard(counter), ReconcileGuard())
     g2.observe_reconcile(down, DAY0 + H)
     assert g2.kill_switch.tripped is None, "조회 실패는 청산 의심이 아니다"
+
+
+# ── 사용자 결정 2026-09-16 (레지스트리 #11·#12·#13) ─────────────────────────────
+def test_kill_switch_values_are_exactly_registry_11():
+    assert SC.REGISTERED_KILL_SWITCH == SC.KillSwitchLimits(daily_loss_pct=D("0.05"), max_consecutive_losses=5)
+    assert SC.DAILY_LOSS_PCT == D("0.05") and SC.MAX_CONSECUTIVE_LOSSES == 5
+    assert SC.MAX_LIQUIDATIONS == 1 and SC.MAX_VANISHED == 1
+    assert SC.DAILY_LOSS_RESUME_REFUSED == "blocked by daily-loss limit until 00:00 UTC"
+
+
+def test_five_consecutive_net_losses_trip_with_the_registered_limits():
+    ks = KillSwitch(SC.REGISTERED_KILL_SWITCH, wallet=D("1000"))
+    for i, w in enumerate(("999", "998", "997", "996")):
+        assert ks.observe([closed(w)], DAY0 + i * H) == []
+    (trip,) = ks.observe([closed("995")], DAY0 + 5 * H)
+    assert trip.reason == "consecutive_losses" and ks.consecutive_losses == 5
+
+
+def test_vanished_is_its_own_trigger_and_counter():
+    from paper.types import PositionVanished
+    ks = KillSwitch(LIMITS, wallet=D("1000"))
+    (trip,) = ks.observe([PositionVanished(DAY0 + H, Direction.LONG, D("0.01"), D("60000"), "x")], DAY0 + H)
+    assert trip.reason == "position_vanished" and ks.vanished == 1 and ks.liquidations == 0
+    back = KillSwitch.from_state(LIMITS, ks.to_state(), wallet=D("1"))
+    assert back.vanished == 1 and back.to_state() == ks.to_state()
+
+
+def test_flat_wallet_resync_after_a_vanish_keeps_the_vanished_loss_out_of_the_next_trade():
+    """LIVE: 소실 손실은 거래소 지갑 재동기화로 들어온다 — 직전 flat 지갑도 같이 옮겨야 다음 거래가 가짜 손실로 세지지 않는다."""
+    ks = KillSwitch(LIMITS, wallet=D("1000"))
+    ks.sync_flat_wallet(D("900"))
+    ks.observe([closed("905")], DAY0 + H)
+    assert ks.consecutive_losses == 0 and ks.last_flat_wallet == D("905")
+
+
+def test_daily_loss_resume_is_a_no_op_until_utc_midnight():
+    ks = KillSwitch(LIMITS, wallet=D("1000"))
+    ks.observe_equity(DAY0 + H, D("1000"))
+    ks.observe_equity(DAY0 + 3 * H, D("950"))
+    msg = ks.resume(DAY0 + 4 * H, actor="telegram:111")
+    assert SC.DAILY_LOSS_RESUME_REFUSED in msg and ks.tripped is not None and ks.tripped.reason == "daily_loss"
+    assert ks.resume_refused(DAY0 + 24 * H - 1) and not ks.resume_refused(DAY0 + 24 * H)
+    msg = ks.resume(DAY0 + 24 * H, actor="telegram:111")                       # 00:00 UTC 이후 사람의 /start
+    assert ks.entries_allowed and "daily_loss" in msg
+    assert ks.observe_equity(DAY0 + 24 * H + 1, D("950")) == [], "새 날짜 기준으로 재평가"
+
+
+def test_gate_resume_during_a_daily_loss_day_changes_nothing():
+    counter = DeliveryCounter(("kline1m_update", "kline1m_close", "markprice"), start_ms=DAY0)
+    gate = SafetyGate(KillSwitch(LIMITS, wallet=D("1000")), StaleDataGuard(counter), ReconcileGuard())
+    gate.pause("telegram:111")
+    gate.kill_switch.observe_equity(DAY0 + H, D("1000"))
+    gate.kill_switch.observe_equity(DAY0 + 2 * H, D("900"))
+    bad = reconcile(Mode.LIVE, internal_signed=D("0.01"), exchange=PositionRisk(D("0.02"), D("0"), D("0")),
+                    exchange_error=None, db=DbPosition(Direction.LONG, D("0.01")))
+    gate.observe_reconcile(bad, DAY0 + 2 * H)
+    before = gate.entry_blockers()
+    text = gate.resume("telegram:111", ts_ms=DAY0 + 3 * H)
+    assert SC.DAILY_LOSS_RESUME_REFUSED in text and gate.entry_blockers() == before and gate.resume_refused(DAY0 + 3 * H)
+    with pytest.raises(TypeError):
+        gate.resume("telegram:111")  # type: ignore[call-arg]  — ts_ms 필수(기본 0이면 1970년 날짜로 판정)
+
+
+def test_stale_within_grace_holds_and_past_grace_closes():
+    """레지스트리 #12: #1 정지(분당 규칙 포함) → 진입 금지 · 포지션 청산은 **grace(120초) 초과 무수신**일 때만."""
+    counter = DeliveryCounter(("kline1m_update", "kline1m_close", "markprice"), start_ms=DAY0)
+    g = StaleDataGuard(counter)
+    for t in range(0, 120_001, 1000):
+        counter.observe("kline1m_update", DAY0 + t)
+    counter.observe("kline1m_close", DAY0 + 59_999)
+    counter.observe("kline1m_close", DAY0 + 119_999)
+    for t in range(0, 59_001, 1000):
+        counter.observe("markprice", DAY0 + t)
+    v, _ = g.update(DAY0 + 120_500, has_position=True)                           # 직전 분 markprice 0건 · 나이 61.5초
+    assert v.stalled == ("markprice",) and not v.entries_allowed and v.position_action == "hold_and_alert"
+    assert v.close_streams == ()
+    v, _ = g.update(DAY0 + 179_001, has_position=True)                           # 나이 120.001초 > grace
+    assert v.position_action == "close" and "markprice" in v.close_streams
+    assert g.update(DAY0 + 179_001, has_position=False)[0].position_action == "none"

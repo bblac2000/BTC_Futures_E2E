@@ -5,8 +5,10 @@
 | `EntryFilled` | `decisions`(entered · SizingDecision 전 필드) + `positions` open(PostFillCheck `pf_*` · LiquidationCheck `lc_*`) + `orders` 체결마다 |
 | `EntrySkipped` | `decisions`(skipped · skip_reason · 결정이 있으면 전 필드) |
 | `PositionClosed` | `orders` 청산 체결마다 + `positions` close(열린 open 행에 연결 · 없으면 NULL + 사유) |
+| `PositionReduced` | 부분 청산 — `orders` 체결마다 + `positions` close(이번 체결분 · detail `partial`) → DB 남은 수량 = 엔진 잔량 |
 | `FundingSettled`·`FundingMissed` | `funding_events` |
-| `EntriesBlocked`·`ExitFailed`·`LiquidationThresholdCrossed` | `engine_events` |
+| `EntriesBlocked`·`ExitFailed`·`LiquidationThresholdCrossed`·`WalletResynced` | `engine_events` |
+| (layer 8) 킬스위치·stale 청산·재개 등 | `record_ops_event` → `engine_events` · 지갑/마진 | `record_account_snapshot` → `account_snapshots` |
 
 - 한 번의 `record_events` = 한 트랜잭션(모르는 이벤트가 섞이면 전부 롤백).
 - Decimal은 `str()` 원문 · float가 오면 `TypeError`(정밀도 손실을 조용히 저장하지 않는다).
@@ -34,8 +36,10 @@ from paper.types import (
     FundingSettled,
     LiquidationThresholdCrossed,
     PositionClosed,
+    PositionReduced,
     PositionSynced,
     PositionVanished,
+    WalletResynced,
 )
 from sizing.position import SizingDecision
 
@@ -276,6 +280,20 @@ def _position_closed(con: sqlite3.Connection, ev: PositionClosed, mode: str, sym
     })
 
 
+def _position_reduced(con: sqlite3.Connection, ev: PositionReduced, mode: str, symbol: str) -> None:
+    pid = open_position_id(con, mode=mode, symbol=symbol, direction=ev.direction)
+    for f in ev.fills:
+        _order(con, f, mode=mode, symbol=symbol, position_id=pid, intent="exit", exit_reason=ev.reason)
+    detail = f"partial · 잔량 {ev.remaining_qty} · {ev.detail}"
+    _insert(con, "positions", {
+        "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "event": "close", "position_id": pid,
+        "direction": _v(ev.direction), "reason": _v(ev.reason), "qty": _v(ev.qty), "entry_price": _v(ev.entry_price),
+        "exit_price": _v(ev.exit_price), "realized_pnl_usdt": _v(ev.realized_pnl_usdt),
+        "exit_commission_usdt": _v(ev.exit_commission_usdt), "wallet_after": _v(ev.wallet_after),
+        "detail": detail if pid is not None else f"{detail} · {ORPHAN_CLOSE}",
+    })
+
+
 def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: str, symbol: str,
                   tp: Decimal | None = None) -> None:
     mode = _mode(mode)
@@ -287,6 +305,8 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
                 _entry_skipped(con, ev, mode, symbol, tp)
             elif isinstance(ev, PositionClosed):
                 _position_closed(con, ev, mode, symbol)
+            elif isinstance(ev, PositionReduced):
+                _position_reduced(con, ev, mode, symbol)
             elif isinstance(ev, PositionSynced):
                 _position_synced(con, ev, mode, symbol)
             elif isinstance(ev, PositionVanished):
@@ -300,13 +320,36 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
                 _insert(con, "funding_events", {
                     "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "signed_qty": _v(ev.signed_qty), "missed": 1,
                     "boundaries_json": json.dumps(list(ev.boundaries_ms))})
-            elif isinstance(ev, EntriesBlocked | ExitFailed | LiquidationThresholdCrossed):
+            elif isinstance(ev, EntriesBlocked | ExitFailed | LiquidationThresholdCrossed | WalletResynced):
                 detail = getattr(ev, "detail", None) or str(_v(getattr(ev, "reason", "")))
                 _insert(con, "engine_events", {"mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms,
                                                "kind": type(ev).__name__, "detail": detail,
                                                "payload_json": _json(dataclasses.asdict(ev))})
             else:
                 raise TypeError(f"기록할 수 없는 이벤트 {type(ev).__name__}")
+
+
+def record_ops_event(con: sqlite3.Connection, kind: str, detail: str, *, ts_ms: int, mode: str, symbol: str,
+                     payload: Mapping[str, Any] | None = None) -> None:
+    """layer 8 운영 이벤트(킬스위치 발동·stale 청산·재개·차단 해제) — 엔진 이벤트와 같은 표에 나란히."""
+    mode = _mode(mode)
+    with _tx(con):
+        _insert(con, "engine_events", {"mode": mode, "symbol": symbol, "ts_ms": ts_ms, "kind": kind, "detail": detail,
+                                       "payload_json": _json(dict(payload)) if payload is not None else None})
+
+
+def record_account_snapshot(con: sqlite3.Connection, *, mode: str, symbol: str | None, ts_ms: int, source: str,
+                            wallet_balance: Decimal | None = None, margin_balance: Decimal | None = None,
+                            available_balance: Decimal | None = None, isolated_margin: Decimal | None = None,
+                            unrealized_pnl: Decimal | None = None, raw: Mapping[str, Any] | None = None) -> None:
+    """`source` = engine(엔진 지갑·미실현) | exchange(LIVE 거래소 계좌 응답 원문). 값은 Decimal만."""
+    mode = _mode(mode)
+    with _tx(con):
+        _insert(con, "account_snapshots", {
+            "mode": mode, "symbol": symbol, "ts_ms": ts_ms, "source": source, "wallet_balance": _v(wallet_balance),
+            "margin_balance": _v(margin_balance), "available_balance": _v(available_balance),
+            "isolated_margin": _v(isolated_margin), "unrealized_pnl": _v(unrealized_pnl),
+            "raw_json": _json(dict(raw)) if raw is not None else None})
 
 
 def record_bar(con: sqlite3.Connection, bar: BarRow, *, mode: str, symbol: str, source: str) -> str:

@@ -1,7 +1,9 @@
 """종합 진입 게이트 — 킬스위치 · 수동 일시정지 · stale-data · 대사. 사유를 **전부** 나열한다(첫 사유만 보면 나머지를 놓친다).
 
-- `/pause` → `pause(actor)` · `/start` → `resume(actor)`: 사람이 풀 수 있는 것(일시정지·킬스위치·sticky 대사)만 푼다.
+- `/pause` → `pause(actor)` · `/start` → `resume(actor, ts_ms=)`: 사람이 풀 수 있는 것(일시정지·킬스위치·sticky 대사)만 푼다.
   피드 정지는 사람이 풀 수 없다 — 남은 사유를 문구로 알린다.
+- 🔒 레지스트리 #13: 일일 손실 트립 날짜에는 `/start`가 **아무것도 바꾸지 않는다**(일시정지·대사도 그대로) —
+  "blocked by daily-loss limit until 00:00 UTC". `ts_ms`는 필수(기본값이 있으면 1970년 날짜로 판정해 풀어 버린다).
 - 일시정지·킬스위치·대사 sticky 상태는 함께 저장한다(`safety_state` "safety_gate").
 """
 from __future__ import annotations
@@ -10,7 +12,7 @@ import sqlite3
 from decimal import Decimal
 
 from db import record as R
-from safety.config import KillSwitchLimits
+from safety.config import DAILY_LOSS_RESUME_REFUSED, KillSwitchLimits
 from safety.killswitch import KillSwitch
 from safety.reconcile import ReconcileGuard, ReconcileResult
 from safety.stale import StaleDataGuard
@@ -33,10 +35,11 @@ class SafetyGate:
         """봉마다 대사 → 대사 차단 갱신. LIVE에서 내부 포지션이 있는데 거래소가 0이면 킬스위치(청산 의심)도 발동."""
         msgs = self.reconcile.update(result)
         if result.exchange_signed is not None and result.exchange_signed == 0 and result.internal_signed != 0:
+            #  정상 경로는 layer 8이 대사 **전에** `Engine.vanish`로 내부를 0으로 만들고 `PositionVanished`를 킬스위치에 넘긴다.
+            #  여기 걸리면 그 경로를 건너뛴 것 — 방어선으로 발동만 한다.
             for t in self.kill_switch.trip(ts_ms, "position_vanished",
                                             f"대사: 내부 {result.internal_signed} · 거래소 0 — 청산·수동 청산 의심"):
                 msgs.append(f"🛑 킬스위치 발동: {t.reason} — {t.detail}")
-            self.kill_switch.liquidations = max(self.kill_switch.liquidations, 1)
         return msgs
 
     def entry_blockers(self) -> list[str]:
@@ -55,9 +58,14 @@ class SafetyGate:
     def entries_allowed(self) -> bool:
         return not self.entry_blockers()
 
-    def resume(self, actor: str, *, ts_ms: int = 0) -> str:
+    def resume_refused(self, ts_ms: int) -> bool:
+        return self.kill_switch.resume_refused(ts_ms)
+
+    def resume(self, actor: str, *, ts_ms: int) -> str:
         if not actor:
             raise ValueError("재개는 사람(actor)만")
+        if self.resume_refused(ts_ms):
+            return f"{DAILY_LOSS_RESUME_REFUSED} — 변경 없음\n⚠️ 진입 금지: {', '.join(self.entry_blockers())}"
         lines = []
         if self.paused_by is not None:
             lines.append(f"일시정지 해제 ({actor})")

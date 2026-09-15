@@ -59,6 +59,7 @@ class ExitReason(StrEnum):
     LIQUIDATION = "liquidation"
     POST_FILL_GATE = "post_fill_gate"      # 실제 체결 기준 #5 게이트 실패(또는 SL이 청산가 뒤) → 즉시 청산
     MANUAL = "manual"                      # 텔레그램 /close 등
+    STALE_DATA = "stale_data"              # 레지스트리 #12 — 피드 무수신이 #1 grace를 넘었다(PAPER는 마지막 수신 mark로 체결)
 
 
 class SkipReason(StrEnum):
@@ -66,6 +67,7 @@ class SkipReason(StrEnum):
     SL_CROSSED_BEFORE_FILL = "sl_crossed_before_fill"
     SIZING_REJECTED = "sizing_rejected"       # 실행 mark로 다시 한 사이징이 거부(사유는 decision.reason)
     SEND_FAILED = "send_failed"
+    ENTRIES_BLOCKED = "entries_blocked"       # 결정 뒤 체결 전에 진입 게이트가 닫혔다(layer 8 EntryGate)
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,35 @@ class PositionClosed:
     exit_commission_usdt: Decimal
     funding_paid_usdt: Decimal             # 보유 중 누적(+ = 지불)
     wallet_after: Decimal
+
+
+@dataclass(frozen=True)
+class PositionReduced:
+    """청산 주문 일부만 체결(뒤 조각 실패·불명) — 체결된 부분의 손익·수수료는 지갑에 이미 반영됐다.
+    db: 체결마다 `orders` + root에 연결된 `positions` close 행(수량 = 이번 체결분) → DB 남은 수량 = 엔진 잔량
+    (사용자 2026-09-16: 대사가 스스로 맞도록). 킬스위치 연속 손실은 flat이 되는 `PositionClosed`에서만 센다."""
+    ts_ms: int
+    direction: Direction
+    reason: ExitReason
+    qty: Decimal                           # 이번에 닫힌 수량
+    remaining_qty: Decimal
+    entry_price: Decimal
+    exit_price: Decimal
+    fills: tuple[Fill, ...]
+    realized_pnl_usdt: Decimal
+    exit_commission_usdt: Decimal
+    wallet_after: Decimal
+    detail: str
+
+
+@dataclass(frozen=True)
+class WalletResynced:
+    """엔진 지갑을 외부 진리원으로 옮겼다(LIVE: 소실 뒤 거래소 지갑 — 소실 손익은 추정하지 않고 이 차이로 들어온다)."""
+    ts_ms: int
+    previous: Decimal
+    wallet: Decimal
+    source: str                            # exchange
+    detail: str
 
 
 @dataclass(frozen=True)

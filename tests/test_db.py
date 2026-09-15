@@ -509,3 +509,60 @@ def test_partial_vanish_then_close_leaves_the_position_flat_and_every_unit_accou
     R.record_events(con, [close], mode="live", symbol="BTCUSDT")
     assert R.open_position_state(con, mode="live", symbol="BTCUSDT") is None
     assert [r[0] for r in con.execute("SELECT reason FROM positions WHERE event='close' ORDER BY id")] == ["vanished", "manual"]
+
+
+# ── layer 8 배치(2026-09-16): 부분 청산 행 · 지갑 재동기화 · account_snapshots · 운영 이벤트 ─────────────
+def test_partial_close_writes_orders_and_a_close_row_so_db_remaining_equals_the_engine(con, rules):
+    import dataclasses as dc
+
+    from paper.types import PositionReduced
+    from tests.test_paper_engine import SpySender, intent, tick
+    r2 = dc.replace(rules, symbol_rules=dc.replace(rules.symbol_rules, market_max_qty=D("0.010")))
+    s = SpySender(PaperSender(r2))
+    e = Engine(r2, s, mode=Mode.PAPER, wallet=D("1000"), limits=SizingLimits())
+    e.request_entry(intent(sl="59820", risk="0.02"))
+    ev = e.on_tick(tick(DAY0 + 1000, "60000"))
+    R.record_events(con, ev, mode="paper", symbol="BTCUSDT")
+    k = len([c for c in s.calls if c[0] == "send"])
+    s.unknown_on_send = k + 2
+    ev = e.close_now(ref_mark=D("60100"), ts_ms=DAY0 + 2000)
+    (red,) = [x for x in ev if isinstance(x, PositionReduced)]
+    R.record_events(con, ev, mode="paper", symbol="BTCUSDT")
+    st = R.open_position_state(con, mode="paper", symbol="BTCUSDT")
+    assert e.position is not None and st is not None and st.remaining_qty == e.position.qty
+    (row,) = con.execute("SELECT qty, exit_price, realized_pnl_usdt, exit_commission_usdt, wallet_after, reason, detail,"
+                         " position_id FROM positions WHERE event='close'").fetchall()
+    root = con.execute("SELECT id FROM positions WHERE event='open'").fetchone()[0]
+    assert row[:6] == (str(red.qty), str(red.exit_price), str(red.realized_pnl_usdt), str(red.exit_commission_usdt),
+                       str(red.wallet_after), "manual") and "partial" in row[6] and row[7] == root
+    assert con.execute("SELECT count(*) FROM orders WHERE intent='exit'").fetchone()[0] == 1
+    R.record_events(con, e.close_now(ref_mark=D("60100"), ts_ms=DAY0 + 3000), mode="paper", symbol="BTCUSDT")
+    assert R.open_position_state(con, mode="paper", symbol="BTCUSDT") is None
+
+
+def test_wallet_resync_is_an_engine_event_row(con):
+    from paper.types import WalletResynced
+    R.record_events(con, [WalletResynced(DAY0, D("1000"), D("912.5"), "exchange", "소실 뒤")], mode="live", symbol="BTCUSDT")
+    (kind, detail, payload) = con.execute("SELECT kind, detail, payload_json FROM engine_events").fetchone()
+    assert kind == "WalletResynced" and "소실 뒤" in detail and json.loads(payload)["wallet"] == "912.5"
+
+
+def test_account_snapshot_rows_keep_exact_decimals_and_source(con):
+    R.record_account_snapshot(con, mode="paper", symbol="BTCUSDT", ts_ms=DAY0, source="engine", wallet_balance=D("999.1"),
+                              margin_balance=D("1000.2"), available_balance=D("959.1"), isolated_margin=D("40"),
+                              unrealized_pnl=D("1.1"), raw={"reason": "bar"})
+    row = con.execute("SELECT source, wallet_balance, margin_balance, available_balance, isolated_margin, unrealized_pnl,"
+                      " raw_json FROM account_snapshots").fetchone()
+    assert row[:6] == ("engine", "999.1", "1000.2", "959.1", "40", "1.1") and json.loads(row[6]) == {"reason": "bar"}
+    with pytest.raises(TypeError):
+        R.record_account_snapshot(con, mode="paper", symbol="BTCUSDT", ts_ms=DAY0, source="engine",
+                                  wallet_balance=999.1)  # type: ignore[arg-type]
+    with pytest.raises(sqlite3.IntegrityError):
+        R.record_account_snapshot(con, mode="paper", symbol="BTCUSDT", ts_ms=DAY0, source="guess", wallet_balance=D("1"))
+
+
+def test_ops_events_are_recorded_beside_engine_events(con):
+    R.record_ops_event(con, "KillSwitchTripped", "daily_loss …", ts_ms=DAY0, mode="paper", symbol="BTCUSDT",
+                       payload={"reason": "daily_loss"})
+    assert con.execute("SELECT kind, payload_json FROM engine_events").fetchone() == ("KillSwitchTripped",
+                                                                                      '{"reason": "daily_loss"}')
