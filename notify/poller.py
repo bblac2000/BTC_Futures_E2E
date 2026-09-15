@@ -32,16 +32,20 @@ class TelegramPoller:
         self.api.set_my_commands(api_commands())
         self.api.set_chat_menu_button(menu_button={"type": "commands"})
 
-    def execute(self, actions: list[Send | Answer]) -> None:
+    def execute(self, actions: list[Send | Answer]) -> list[Any]:
+        """행동마다 API 결과(sendMessage면 Message — `message_id`가 배달 증거) 또는 실패 시 None."""
+        results: list[Any] = []
         for a in actions:
             try:
                 if isinstance(a, Send):
-                    self.api.send_message(a.chat_id, a.text, a.reply_markup)
+                    results.append(self.api.send_message(a.chat_id, a.text, a.reply_markup))
                 else:
-                    self.api.answer_callback_query(a.callback_query_id, a.text)
+                    results.append(self.api.answer_callback_query(a.callback_query_id, a.text))
             except Exception as e:  # noqa: BLE001 — 한 발송 실패가 나머지 행동을 막지 않는다
                 self.send_errors += 1
+                results.append(None)
                 logger.warning("텔레그램 행동 실패 %s: %s", type(a).__name__, e)
+        return results
 
     def fetch(self, *, fast: bool | None = None) -> list[dict[str, Any]]:
         """getUpdates 1회 → update_id 순 목록. offset은 **받는 즉시** 넘긴다(처리 실패도 재처리하지 않게).

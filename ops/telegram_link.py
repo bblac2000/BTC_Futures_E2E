@@ -29,6 +29,7 @@ class TelegramLink:
         self.last_poll_error: str | None = None
         self.last_poll_ok_ms: int | None = None
         self.sent = 0
+        self.delivered_message_ids: list[int] = []            # sendMessage 응답 ok=true의 message_id — "보냈다"가 아니라 배달 증거
         self._poll = threading.Thread(target=self._poll_loop, name="tg-poll", daemon=True)
         self._send = threading.Thread(target=self._send_loop, name="tg-send", daemon=True)
 
@@ -58,7 +59,9 @@ class TelegramLink:
                 if self._stop.is_set():
                     return
                 continue
-            self.poller.execute([a])
+            for r in self.poller.execute([a]) or []:
+                if isinstance(r, dict) and isinstance(r.get("message_id"), int):
+                    self.delivered_message_ids.append(r["message_id"])
             self.sent += 1
 
     def stop(self, *, flush_timeout_s: float = 10.0) -> None:
@@ -72,5 +75,6 @@ class TelegramLink:
     def stats(self) -> dict[str, Any]:
         return {"poll_errors": self.poll_errors, "last_poll_error": self.last_poll_error,
                 "last_poll_ok_ms": self.last_poll_ok_ms, "sent": self.sent,
+                "delivered": len(self.delivered_message_ids), "last_message_id": (self.delivered_message_ids or [None])[-1],
                 "send_errors": getattr(self.poller, "send_errors", None),
                 "handler_errors": getattr(self.poller, "handler_errors", None)}

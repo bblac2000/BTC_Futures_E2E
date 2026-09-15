@@ -286,12 +286,12 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
         end = clock_ms()
         rt.snapshot(end, "shutdown")
         rt.save_state(end)
-        rt.write_status(end, {"shutdown": kind, "shutdown_detail": detail, "exit_code": code})
         if code == EXIT_CLEAN and kind == "stop_dirty":
             code = EXIT_DIRTY
         rt.alert(f"{'⚪' if code == EXIT_CLEAN else '🔴'} 정지 [{cfg.mode.value}] {kind} · {detail} · 종료 코드 {code}")
         if link is not None:
-            link.stop()
+            link.stop()                                   # 정지 알림까지 비운 뒤 상태를 쓴다(배달 수가 최종값)
+        rt.write_status(end, {"shutdown": kind, "shutdown_detail": detail, "exit_code": code})
         con.close()
     return code
 

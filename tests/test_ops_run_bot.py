@@ -72,6 +72,7 @@ class FakeTelegram:
 
     def send_message(self, chat_id, text, reply_markup=None):
         self._rec("send", chat_id, text)
+        return {"message_id": len(self.calls), "chat": {"id": chat_id}}
 
     def answer_callback_query(self, qid, text=None):
         self._rec("answer", qid, text)
@@ -155,6 +156,7 @@ def test_full_paper_replay_through_the_runner_records_bars_rules_snapshots_and_t
     assert con.execute("SELECT kind FROM engine_events WHERE kind='Backfill'").fetchall() == [("Backfill",)]
     status = json.loads(cfg.status_path.read_text())
     assert status["shutdown"] == "stop" and status["exit_code"] == 0 and status["counts"]["bars"] == 2
+    assert status["delivered"] == status["sent"] == len(tg.texts()) >= 2, "정지 알림 배달까지 센 뒤 상태를 쓴다"
     texts = tg.texts()
     assert any(t.startswith("🟢 기동 [paper]") and "exchangeInfo=rest" in t and "leverageBracket=snapshot" in t
                for t in texts)
@@ -225,6 +227,7 @@ class LinkPoller:
 
     def execute(self, actions):
         self.executed += actions
+        return [{"message_id": 7}]
 
 
 def test_link_poll_thread_backs_off_on_errors_and_only_queues_updates():
@@ -242,3 +245,4 @@ def test_link_poll_thread_backs_off_on_errors_and_only_queues_updates():
     assert [inbox.get_nowait()["update_id"] for _ in range(2)] == [1, 2]
     assert sleeps[:2] == [1.0, 2.0] and link.poll_errors == 2 and "down" in (link.last_poll_error or "")
     assert p.executed == ["a1"] and link.stats()["sent"] == 1 and p.fast_seen[0] is True
+    assert link.stats()["delivered"] == 1 and link.stats()["last_message_id"] == 7
