@@ -4,7 +4,10 @@
 - 엔진·`SafetyGate`·`CommandBot`·sqlite 연결은 **asyncio 루프 스레드 하나만** 만진다: `on_mark`·`on_kline`(피드 콜백) ·
   `safety_tick`(1초 벽시계 태스크) · 컨트롤러 메서드(`safety_tick` 안에서 `CommandBot`이 부른다).
 - 텔레그램 폴 스레드는 `TelegramPoller.fetch()`(네트워크·offset)만 하고 받은 업데이트를 `inbox`에 넣는다.
-  발송 스레드는 `outbox`의 행동을 실행한다. 두 스레드는 엔진·게이트·봇 상태를 바꾸지 않는다.
+  발송 스레드는 `outbox`의 행동을 실행한다. 두 스레드는 엔진·게이트·봇 상태를 **읽지도 바꾸지도 않는다** — 빠른 폴링 여부는
+  루프 스레드가 세우는 `fast_poll`(threading.Event)로만 전달한다(Codex L8 #4).
+- ⚠️ LIVE `ExchangeReader` 호출(positionRisk·계좌)은 지금 동기이며 루프 스레드에서 돈다(Codex L8 #3). 러너가 LIVE를 거부하므로
+  PAPER에서는 호출되지 않는다 — **LIVE 배선 전 선결 조건**: 타임아웃 있는 비동기/작업자 큐로 옮긴다(설계서 §10 체크리스트).
 - 그래서 `/close`의 청산은 틱 처리 중간에 끼어들 수 없다(같은 스레드에서 차례로 돈다).
 
 ## 안전 경로
@@ -15,7 +18,9 @@
 - **봉마다**(마감 kline): 봉 기록 → (LIVE) positionRisk → 거래소 flat · 내부 보유면 `Engine.vanish`(주문 없음) + 거래소 지갑
   재동기화(`sync_wallet` + `KillSwitch.sync_flat_wallet`) → 3자 대사 → 일일 손실 equity → account_snapshots → 상태 저장(바뀔 때만).
 - 이벤트 처리 순서: 킬스위치 관측(기록 실패와 무관하게) → DB 기록(실패하면 보관 후 매 틱 재시도 + 진입 금지) → 알림 → 스냅샷.
-- 킬스위치·stale·차단 해제 같은 운영 사건은 `engine_events`에 `record_ops_event`로 남긴다.
+- 킬스위치·stale·차단 해제 같은 운영 사건은 `engine_events`에 `record_ops_event`로 남긴다. **운영 이벤트·안전 상태 저장도**
+  실패하면 보관·재시도하고 저장될 때까지 진입 금지(`db:unrecorded_ops` · `db:unsaved_safety_state` · Codex L8 #1) —
+  DB가 잠긴 사이 킬스위치가 발동하고 재기동하면 트립이 사라지는 경로를 막는다.
 
 ## 사용자 결정 반영 (레지스트리 #11·#12·#13 · 2026-09-16)
 - `/stop` = 진입 차단 + 전량 청산 · `/close` = 청산만 · `/pause` = 진입 차단, 포지션 유지.
@@ -30,6 +35,7 @@ import logging
 import os
 import queue
 import sqlite3
+import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -113,6 +119,10 @@ class BotRuntime:
         self.last_mark_ms: int | None = None
         self.last_bar_open_ms: int | None = None
         self.unrecorded: list[tuple[list[object], Decimal | None]] = []
+        self.unrecorded_ops: list[tuple[str, str, int, dict[str, Any] | None]] = []
+        self.state_save_failed = False
+        self.db_read_failed = False
+        self.fast_poll = threading.Event()                        # 루프 스레드가 세운다 · 폴 스레드는 읽기만
         self.db_errors = 0
         self.bar_conflicts = 0
         self.wallet_resync_due = False
@@ -137,6 +147,12 @@ class BotRuntime:
         out += self.gate.entry_blockers()
         if self.unrecorded:
             out.append(f"db:unrecorded_events({len(self.unrecorded)})")
+        if self.unrecorded_ops:
+            out.append(f"db:unrecorded_ops({len(self.unrecorded_ops)})")
+        if self.state_save_failed:
+            out.append("db:unsaved_safety_state")
+        if self.db_read_failed:
+            out.append("db:read_failed")
         if self.wallet_resync_due:
             out.append("exchange:wallet_resync_due")
         return out
@@ -204,7 +220,17 @@ class BotRuntime:
                 self.wallet_resync_due = True
             if self.wallet_resync_due:
                 self._resync_wallet(ts_ms)
-        db = R.open_position_state(self.con, mode=self.mode.value, symbol=self.symbol)
+        try:
+            db = R.open_position_state(self.con, mode=self.mode.value, symbol=self.symbol)
+        except sqlite3.Error as e:
+            #  대사를 건너뛰는 봉 — 피드 콜백 밖으로 던지지 않고(프로세스가 죽으면 페이퍼 포지션도 잃는다) 진입을 막는다
+            self.db_errors += 1
+            if not self.db_read_failed:
+                self.alert(f"🔴 DB 읽기 실패 — 이번 봉 대사 생략 · 진입 금지: {type(e).__name__}: {e}", important=True)
+            self.db_read_failed = True
+            self._bar_equity_snapshot_state(ts_ms)
+            return
+        self.db_read_failed = False
         internal = self.engine.position.signed_qty if self.engine.position is not None else Decimal(0)
         result = reconcile(self.mode, internal_signed=internal, exchange=pr if self.mode is Mode.LIVE else None,
                            exchange_error=err if self.mode is Mode.LIVE else None, db=db)
@@ -214,6 +240,9 @@ class BotRuntime:
             self.alert(m, important=True)
         if was is None and self.gate.kill_switch.tripped is not None:     # 알림은 observe_reconcile 문구로 이미 나갔다
             self._on_trips([self.gate.kill_switch.tripped], ts_ms, alert=False)
+        self._bar_equity_snapshot_state(ts_ms)
+
+    def _bar_equity_snapshot_state(self, ts_ms: int) -> None:
         if self.last_mark is not None:
             self._on_trips(self.gate.kill_switch.observe_equity(ts_ms, self.engine.equity(self.last_mark)), ts_ms)
         self.snapshot(ts_ms, "bar")
@@ -237,6 +266,8 @@ class BotRuntime:
     def safety_tick(self, now_ms: int) -> None:
         self.counts["safety_ticks"] += 1
         self._retry_unrecorded(now_ms)
+        if self.state_save_failed:
+            self.save_state(now_ms)
         has_position = self.engine.position is not None
         verdict, changes = self.gate.stale.update(now_ms, has_position=has_position)
         for c in changes:
@@ -292,6 +323,10 @@ class BotRuntime:
         actions += self.bot.on_tick(now_ms)
         for a in actions:
             self.outbox.put(a)
+        if self.bot.pending is not None or self.bot.alerts:
+            self.fast_poll.set()
+        else:
+            self.fast_poll.clear()
 
     # ── 이벤트 ──────────────────────────────────────────────────────────────
     def handle_events(self, events: Iterable[object], ts_ms: int, *, alert_exits: bool = True) -> None:
@@ -319,6 +354,15 @@ class BotRuntime:
                 self.alert(f"🔴 DB 기록 실패 — 진입 금지 · 틱마다 재시도: {type(e).__name__}: {e}", important=True)
 
     def _retry_unrecorded(self, now_ms: int) -> None:
+        while self.unrecorded_ops:
+            kind, detail, ts, payload = self.unrecorded_ops[0]
+            try:
+                R.record_ops_event(self.con, kind, detail, ts_ms=ts, mode=self.mode.value, symbol=self.symbol,
+                                   payload=payload)
+            except (sqlite3.Error, R.TransactionOpen):
+                self.db_errors += 1
+                break
+            self.unrecorded_ops.pop(0)
         while self.unrecorded:
             events, tp = self.unrecorded[0]
             try:
@@ -364,12 +408,16 @@ class BotRuntime:
                        important=True)
 
     def record_ops(self, kind: str, detail: str, ts_ms: int, payload: dict[str, Any] | None = None) -> None:
+        if self.unrecorded_ops:                               # 순서 보존 — 앞선 실패가 남아 있으면 뒤에 붙인다
+            self.unrecorded_ops.append((kind, detail, ts_ms, payload))
+            return
         try:
             R.record_ops_event(self.con, kind, detail, ts_ms=ts_ms, mode=self.mode.value, symbol=self.symbol,
                                payload=payload)
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1
-            logger.error("운영 이벤트 기록 실패 %s: %s", kind, e)
+            self.unrecorded_ops.append((kind, detail, ts_ms, payload))
+            logger.error("운영 이벤트 기록 실패(보관·재시도) %s: %s", kind, e)
 
     # ── 스냅샷·상태 ─────────────────────────────────────────────────────────
     def snapshot(self, ts_ms: int, reason: str) -> None:
@@ -407,13 +455,18 @@ class BotRuntime:
         state = json.dumps({"paused_by": self.gate.paused_by, "kill_switch": self.gate.kill_switch.to_state(),
                             "reconcile": self.gate.reconcile.to_state()}, sort_keys=True)
         if state == self._saved_state:
+            self.state_save_failed = False
             return
         try:
             self.gate.save(self.con, ts_ms=ts_ms, mode=self.mode.value)
             self._saved_state = state
+            self.state_save_failed = False
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1
-            logger.error("안전 상태 저장 실패: %s", e)
+            if not self.state_save_failed:
+                self.alert(f"🔴 안전 상태 저장 실패 — 저장될 때까지 진입 금지 · 틱마다 재시도: {type(e).__name__}: {e}",
+                           important=True)
+            self.state_save_failed = True
 
     def status(self, now_ms: int) -> dict[str, Any]:
         pos = self.engine.position
@@ -428,7 +481,8 @@ class BotRuntime:
             "stalled": list(self.gate.stale.last.stalled) if self.gate.stale.last is not None else None,
             "delivery": self.gate.stale.counter.snapshot(now_ms),
             "kill_switch": self.gate.kill_switch.to_state(),
-            "db_errors": self.db_errors, "unrecorded": len(self.unrecorded), "bar_conflicts": self.bar_conflicts,
+            "db_errors": self.db_errors, "unrecorded": len(self.unrecorded) + len(self.unrecorded_ops),
+            "state_save_failed": self.state_save_failed, "bar_conflicts": self.bar_conflicts,
             "counts": dict(self.counts),
         }
 

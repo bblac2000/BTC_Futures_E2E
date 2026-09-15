@@ -8,6 +8,7 @@
 4. 보존 창 `retention_days`(30) 안은 무조건 보존 · 한 번에 최대 `--max-days`일.
 5. **기본 dry-run** — `--apply` 없이는 아무것도 지우지 않는다.
 6. 삭제 **전에** 원격 md5(`rclone lsf --format hp`)를 받아 대장(`mark_pruned`)에 크기·md5와 함께 남긴다.
+   🔴 Codex L8 #2: **모든** 삭제 대상의 md5가 있어야 한다 — 조회 실패·누락이 하나라도 있으면 그날 전체 보류(아무것도 지우지 않는다).
    **대장에 기록된 수 ≠ 지운 수**면 성공이 아니다(E2E #131 stage 0) → 마커 갱신 안 함 · 종료 코드 1.
 7. 경로 봉쇄: 날짜 디렉터리는 store 루트(봇 `var/` 안)의 직속 자식 · 지우는 파일은 `.parquet`만 · 심볼릭 링크는 따라가지 않는다.
 8. 0건 삭제·전부 보류면 `LAST_PRUNE.txt`를 갱신하지 않는다 → health의 prune 정체 경보(E2E DR03-A1).
@@ -117,6 +118,11 @@ def prune_day(spec: StoreSpec, day: dt.date, remote: str, *, apply: bool, runner
     if not targets:
         return res | {"skipped": "검증된 parquet 0"}
     rhash = remote_hashes(spec, day, remote, runner=runner) if apply else {}
+    if apply:
+        missing = [rel for rel, _f in targets if not rhash.get(rel)]
+        if missing:
+            return res | {"skipped": f"원격 md5 없음 {len(missing)}/{len(targets)}개 — 그날 전체 보류(내용 검증 불가한 유일본을 만들지 않는다)",
+                          "stats": stats}
     sizes: dict[str, int] = {}
     md5s: dict[str, str] = {}
     gone: list[Path] = []
@@ -126,8 +132,7 @@ def prune_day(spec: StoreSpec, day: dt.date, remote: str, *, apply: bool, runner
         freed += sz
         if apply:
             sizes[str(f)] = sz
-            if rel in rhash:
-                md5s[str(f)] = rhash[rel]
+            md5s[str(f)] = rhash[rel]
             f.unlink()
             gone.append(f)
     marked = mark_pruned(gone, f"pruned_verified_checksum:{manifest.utcnow()}", sizes, md5s) if gone else 0

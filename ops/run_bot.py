@@ -234,8 +234,7 @@ async def _run_locked(cfg: RunConfig, *, owners: frozenset[int] | None, token: s
             rt.poller.setup()
         except Exception as e:  # noqa: BLE001 — 메뉴 등록 실패는 기동을 막지 않는다(알림은 계속)
             logger.warning("텔레그램 setup 실패: %s", e)
-        bot = rt.bot
-        link = TelegramLink(rt.poller, rt.inbox, rt.outbox, fast=lambda: bot.pending is not None or bool(bot.alerts))
+        link = TelegramLink(rt.poller, rt.inbox, rt.outbox, fast=rt.fast_poll.is_set)   # 봇 상태가 아니라 루프가 세운 플래그
         link.start()
         rt.status_extra = link.stats
 

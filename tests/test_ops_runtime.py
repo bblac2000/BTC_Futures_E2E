@@ -365,3 +365,43 @@ def test_bar_conflicts_are_alerted_not_overwritten(rules):
 
 def test_stale_data_reason_value_is_the_registry_12_tag():
     assert ExitReason.STALE_DATA.value == "stale_data" and R.MODES == ("paper", "live")
+
+
+# ── Codex L8 #1: 킬스위치·운영 이벤트·안전 상태 저장도 DB 실패에서 살아남아야 한다 ──────────────
+def test_kill_switch_trip_during_a_db_outage_is_retried_and_blocks_until_durable(rules):
+    rt, counter, clock = build(rules)
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    real = rt.con
+    rt.con = sqlite3.connect(":memory:")                               # 표 없음 → 모든 쓰기 실패
+    rt.engine.wallet = D("900")
+    feed(rt, counter, clock, DAY0 + 61_000, DAY0 + 121_000)
+    assert rt.gate.kill_switch.tripped is not None
+    b = rt.entry_blockers()
+    assert "db:unsaved_safety_state" in b and any(x.startswith("db:unrecorded_ops") for x in b) and "db:read_failed" in b
+    rt.con = real
+    clock.t += 1000
+    rt.safety_tick(clock.t)
+    assert rt.entry_blockers().count("db:read_failed") == 1 and not rt.unrecorded_ops and not rt.state_save_failed
+    feed(rt, counter, clock, DAY0 + 121_000, DAY0 + 181_000)            # 다음 봉에서 읽기 성공 → 해제
+    assert not any(x.startswith("db:") for x in rt.entry_blockers())
+    back = SafetyGate.load(real, SC.REGISTERED_KILL_SWITCH, StaleDataGuard(counter), mode="paper", wallet=D("1"))
+    assert back.kill_switch.tripped is not None and back.kill_switch.tripped.reason == "daily_loss"
+    assert rows(rt, "SELECT kind FROM engine_events WHERE kind='KillSwitchTripped'") == [("KillSwitchTripped",)]
+
+
+# ── Codex L8 #4: 폴 스레드는 봇 상태를 읽지 않는다 — 루프 스레드가 세우는 플래그만 ─────────────────
+def test_fast_poll_flag_is_owned_by_the_loop_thread(rules):
+    from tests.test_notify_bot import msg
+    rt, counter, clock = build(rules)
+    attach_bot(rt, clock)
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    rt.submit_entry(intent(decided_ms=DAY0 + 60_000))
+    feed(rt, counter, clock, DAY0 + 61_000, DAY0 + 62_000)
+    assert not rt.fast_poll.is_set()
+    rt.inbox.put(msg("/close", user=OWNER, uid=1))
+    rt.safety_tick(clock.t)
+    assert rt.fast_poll.is_set(), "확인 대기 중 → 빠른 폴링"
+    for t in range(clock.t + 1000, clock.t + 14_000, 1000):
+        clock.t = t
+        rt.safety_tick(t)
+    assert rt.bot is not None and rt.bot.pending is None and not rt.fast_poll.is_set()

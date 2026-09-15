@@ -1,8 +1,7 @@
 """텔레그램 네트워크 스레드 두 개 — 폴(`getUpdates` → inbox) · 발송(outbox → sendMessage/answerCallbackQuery).
 
-- 🔒 두 스레드는 엔진·게이트·`CommandBot` 상태를 **바꾸지 않는다**. 봇 처리는 런타임 루프 스레드의 `safety_tick`이 한다
-  (`ops.runtime` 스레드 소유권). 폴 스레드가 읽는 것은 `fast()` 불리언 하나(확인·알림 대기 여부 — 오래된 값이어도
-  폴링 간격만 달라진다).
+- 🔒 두 스레드는 엔진·게이트·`CommandBot` 상태를 **읽지도 바꾸지도 않는다**. 봇 처리는 런타임 루프 스레드의 `safety_tick`이 한다
+  (`ops.runtime` 스레드 소유권). 폴 스레드가 읽는 것은 `fast()` — 러너가 루프 스레드 소유 `threading.Event.is_set`을 넘긴다(Codex L8 #4).
 - 폴 실패(전송·API 오류 · 409 다른 getUpdates 소비자 포함)는 백오프(1·2·5·10·30·60초) 후 재시도하고 세며, 마지막 오류
   문구(토큰은 `TelegramApi`가 이미 가림)를 `stats`에 둔다 → 상태 파일 → health 경보. 텔레그램이 죽은 사실은 텔레그램으로
   알릴 수 없다(E2E 2026-08-16) — health는 상태 파일을 본다.

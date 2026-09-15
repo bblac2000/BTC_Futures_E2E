@@ -1095,3 +1095,82 @@ Verification passed: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORA
 Codex session ID: 01a0a4f9-50c9-7e02-878f-f5148dddd3e7
 Resume in Codex: codex resume 01a0a4f9-50c9-7e02-878f-f5148dddd3e7
 ```
+
+## 2026-09-16 — 사용자 결정(#11·#12·#13) · layer 8 `ops/` 배선 · 페이퍼 드라이런 #1
+
+**사용자 지시(2026-09-16)**: layers 6/7 + 채택 수정 수용 · 로컬 6커밋 푸시(`3758daf..0f2e0e8` 완료) · 결정 5건 → 레지스트리 행 · layer 8 + 부분 청산 행을 한 Codex 배치로 · 드라이런(피드 → 엔진 → DB → 텔레그램, 거래소 쓰기 없음) 후 보고, VPS 배포는 그다음 논의.
+
+**구현(커밋)**: `4491a86` 레지스트리 #11–#13 · 킬스위치/stale/게이트 · 엔진 `PositionReduced`·`vanish`·차단 목록·equity·지갑 재동기화 · db 행 / `2dff230` `ops/runtime.py` / `e6dbfa6` `ops/run_bot.py`·`ops/telegram_link.py` / `b02a28d` 배달 증거(message_id) / `044cdcd` VPS 템플릿·prune·sync·health·런북.
+
+**해석 기록(보고 대상)**
+- #12 "stale data"를 레지스트리 #1의 **세 스트림 전부**(kline1m_update·kline1m_close·markprice)로 읽었다 — markprice만이 아니다(보수 쪽).
+- #12 청산 조건 = 나이 규칙(마지막 수신 > grace 120초). #1의 분당 규칙으로만 정지면 진입만 막고 청산하지 않는다(새 숫자를 만들지 않기 위해).
+- 드라이런은 **바이낸스 키를 쓰지 않았다**: 서명 엔드포인트(leverageBracket·commissionRate)는 2026-09-02 캡처 스냅샷, exchangeInfo·fundingInfo는 공개 GET. 실계정 읽기는 사용자 실행 캡처 스크립트 몫으로 남겼다(Codex 검토 + 사용자 승인 규칙).
+- 드라이런 셸에만 `TELEGRAM_OWNER_IDS=$TELEGRAM_CHAT_ID`(개인 채팅이면 chat.id == from.id) — `.env`는 수정하지 않았다. 값은 출력하지 않았다(양의 정수 형식만 확인).
+
+**드라이런 #1** (2026-09-15 15:44:30–15:48:46 UTC · `--duration-s 250` · `var/dryrun-20260916/`)
+| 항목 | 값 |
+|---|---|
+| 종료 | exit 0 · 기록기 `stop`(clean, dropped=0) |
+| 규칙 | exchangeInfo=rest(15:44:30Z) · fundingInfo=rest · leverageBracket·commissionRate=snapshot(2026-09-02) → `runtime_rules` 4행 |
+| 봉 | REST 백필 29(inserted 29 · conflict 0) + WS 마감 4 · 경계 연속(rest 마지막 open 1789486980000 → ws 첫 1789487040000) |
+| 틱 | mark 250 · 안전 틱 250 · stale 청산 0 · 정지 스트림 없음 · 차단 사유 없음 |
+| 전달 | kline1m_update 직전 분 159 · kline1m_close 1 · markprice 60 |
+| DB | account_snapshots engine 5(bar 4 + shutdown) · safety_state 1(첫 저장, 이후 변화 없음) · positions/orders/decisions 0(전략 없음 — 진입 경로는 재생 테스트) · db_errors 0 |
+| shard | kline1m_update 5파일 641행 · kline1m_close 3파일 4행 · markprice 5파일 250행 · 대장 connect 2 · disconnect 2 · stop 1 |
+| 텔레그램 | 폴 오류 0(409 없음) · setMyCommands · 발송 1(기동) — ⚠️ 이 실행은 배달 `message_id`를 기록하지 않았고 정지 알림 발송 전에 상태를 썼다 → `b02a28d`에서 수정, 드라이런 #2에서 확인 |
+| 거래소 쓰기 | 없음 — 공개 클라이언트는 `ReadOnlyClient(CcxtRestClient())`(키 없음), 러너에 `LiveSender` 경로 없음 |
+
+**드라이런 뒤 추가**: `b02a28d` 배달 증거 · `044cdcd` VPS 템플릿 · 러너 경로 절대경로화(shard 대장 path = prune 대조 키).
+
+### Codex 검토: layer 8 + 부분 청산 (`0f2e0e8..044cdcd`, read-only · `task-mu2uwybx-8790gs`)
+판정: A engine/db MERGE · B runtime FIX FIRST · C safety FIX FIRST · D prune FIX FIRST · E health/systemd MERGE.
+
+| # | 지적 | 동의 | 조치 |
+|---|---|---|---|
+| 1 HIGH | 운영 이벤트·안전 상태 저장 실패가 버려져 DB 잠김 중 킬스위치 트립이 재기동에서 사라질 수 있다 | ✅ 동의 — 코드로 확인(`record_ops`·`save_state`가 로그만) | 보관·틱마다 재시도 + `db:unrecorded_ops`·`db:unsaved_safety_state` 진입 금지 · 테스트 중 발견: 봉의 DB 읽기(`open_position_state`) 실패가 피드 콜백 밖으로 새어 프로세스를 죽였다 → `db:read_failed` 차단으로 흡수 |
+| 2 HIGH | `rclone lsf` 실패·누락이어도 삭제해 md5 없는 유일본이 생긴다 | ✅ 동의 | 모든 대상의 원격 md5가 있어야 삭제 · 하나라도 없으면 그날 전체 보류(파라미터 테스트 2종) |
+| 3 MEDIUM | LIVE 거래소 읽기가 루프 스레드에서 동기 | ✅ 동의 — 단 러너가 LIVE를 거부해 PAPER에서는 호출 경로 없음 | 코드 변경 대신 **LIVE 배선 선결 조건**으로 설계서 §10 체크리스트·런타임 docstring에 명시 |
+| 4 LOW | 폴 스레드가 `bot.pending`/`alerts`를 읽는다(소유권 문구 위반) | ✅ 동의 | 루프 스레드가 세우는 `threading.Event fast_poll`만 넘긴다 |
+
+```
+Codex session ID: `01a0a5ca-fee4-7482-8847-bbf7c4711c3d`  
+Reviewed range: `0f2e0e8..044cdcd6d5b7da79678f4be9a4c3925f943e1318`  
+Verification: `TMPDIR=/dev/shm PYTHONDONTWRITEBYTECODE=1 HYPOTHESIS_STORAGE_DIRECTORY=/dev/shm/hypothesis .venv/bin/python -m pytest -q -p no:cacheprovider tests/` passed.  
+Worktree remained clean.
+
+1. [HIGH] Safety/ops DB writes are not retained or retried, so a kill-switch trip can be lost across restart.
+Evidence: `ops/runtime.py:311-329` retries only `record_events`; `ops/runtime.py:333-339` records kill-switch trips via `record_ops` and `save_state`; `ops/runtime.py:366-372` drops failed ops-event writes after logging; `ops/runtime.py:406-416` drops failed safety-state saves after logging.
+Scenario: sqlite is locked or unavailable when daily loss trips. The in-memory gate blocks entries, but `KillSwitchTripped` and `safety_state` fail to persist. If the process restarts before a later successful bar save, the restored gate may not know daily-loss was tripped, allowing unsafe entries.
+Suggested fix: add retry queues for ops events and dirty safety-state writes, and expose a `db:` entry blocker until both are durably saved.
+
+2. [HIGH] Prune can delete files even when remote md5 collection failed or is incomplete.
+Evidence: `ops/prune.py:75-82` returns `{}` when `rclone lsf` fails; `ops/prune.py:119-131` still unlinks files when hashes are missing; `ops/prune.py:140-142` only reports `remote_md5_recorded`; `ops/prune.py:162-171` can still mark the run healthy if ledger count matches deletion count.
+Scenario: `rclone check` reports `=`, then `rclone lsf --format hp` fails or omits rows. Apply mode deletes local parquet files and marks prune success, but the ledger lacks remote md5s, breaking later verification of the only remaining copy.
+Suggested fix: in apply mode, require remote hashes for every deletion target before unlinking anything. Missing hash should fail/hold the whole day and leave files untouched.
+
+3. [MEDIUM] LIVE runtime paths perform synchronous exchange reads on the asyncio loop.
+Evidence: `ops/runtime.py:196-198` calls `exchange.position_risk()` in `on_bar_close`; `ops/runtime.py:224-229` calls `exchange.account()` for wallet resync; `ops/runtime.py:392-394` calls `exchange.account()` for snapshots; `ops/run_bot.py:265-273` runs safety ticks and feed on the same asyncio loop.
+Scenario: in future LIVE wiring, a signed GET stalls for 30s. During that time safety ticks, stale close retries, Telegram command handling, and feed callbacks can be delayed on the single owner loop.
+Suggested fix: make `ExchangeReader` async with explicit timeouts, or run blocking reads through a bounded executor/worker queue and feed results back onto the loop thread.
+
+4. [LOW] Telegram poll thread reads `CommandBot` state despite the “threads only touch queues/fetch/execute” ownership claim.
+Evidence: `ops/run_bot.py:237-238` passes `fast=lambda: bot.pending is not None or bool(bot.alerts)` into `TelegramLink`; `ops/telegram_link.py:40-45` calls that from the poll thread.
+Scenario: the loop thread mutates `bot.pending`/`bot.alerts` while the poll thread reads them. This likely only affects polling speed, but it violates the documented ownership boundary.
+Suggested fix: keep a thread-safe fast-poll flag owned by the runtime/link, or always use a fixed short poll timeout when confirmation/alert latency matters.
+
+Per-area verdicts:
+
+A. engine/db partial-close + vanish + wallet resync: MERGE. Partial close accounting, DB remaining qty, vanish, wallet resync, and `last_flat_wallet` handling match the stated contract.
+
+B. runtime/runner/threading/telegram: FIX FIRST. LIVE loop blocking and the poll-thread state read should be corrected or explicitly scoped out before relying on this architecture for live trading.
+
+C. safety decisions #11-#13: FIX FIRST. Runtime behavior is mostly correct, but kill-switch/ops persistence on DB failure is not durable enough.
+
+D. prune/sync/data stores deletion: FIX FIRST. The md5-before-delete invariant is not enforced.
+
+E. health + systemd + runbook: MERGE. OnFailure placement, oneshot shape, `%h` paths, collector-priority settings, first-deploy prune instructions, data-freshness health, fixed alert keys, throttling, and send-failure behavior look aligned.
+
+Codex session ID: 01a0a5ca-fee4-7482-8847-bbf7c4711c3d
+Resume in Codex: codex resume 01a0a5ca-fee4-7482-8847-bbf7c4711c3d
+```

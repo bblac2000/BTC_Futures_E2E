@@ -135,6 +135,8 @@ E2E HEAD = `f1e7d86`(2026-09-14). "커밋"은 해당 파일의 마지막 변경 
 - [ ] **USDⓈ-M 전용 계정 — COIN-M 포지션·미체결 0**(2026-09-15 B6 · 헤지 모드 전환 사전검사가 dapi를 보지 않는다)
 - [ ] 레지스트리 #4 수수료 가정 판정 결과 기록 — **첫 라이브 진입부터**의 진입 후 검사 로그(레지스트리 #6: 페이퍼 포지션은 `positionRisk`에 없다). 그때까지 보수 가정(수수료가 격리 마진을 줄인다) 유지 · 테스트넷 프로브는 **폐기**(사용자 2026-09-15)
 - [ ] 레지스트리 #5 14일차 재평가 행 존재
+- [ ] **LIVE 거래소 읽기(positionRisk·계좌)를 루프 스레드 밖으로** — 타임아웃 있는 비동기/작업자 큐(Codex L8 #3 · 지금은 동기 · PAPER에서는 호출 없음)
+- [ ] LIVE `ExchangeReader` 실구현 — 계좌 응답 필드를 공식 문서 렌더링 + 실캡처로 확인(v6에는 가중치 표만) · 러너 LIVE 경로 + 기동 게이트 호출 · 재기동 시 거래소 포지션 처리 결정
 
 
 ## 11. 테스트넷 수수료 가정 프로브 — 해석 규칙 사전확약 (2026-09-15 · 스크립트 작성·실행 **전**)
@@ -266,6 +268,8 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 - `Engine.vanish` — LIVE 봉 대사에서 거래소 flat · 내부 보유 → 주문 없이 내부 close(`PositionVanished` 전량) + 진입 차단. 손익은 거래소 지갑 재동기화(`sync_wallet` → `WalletResynced` + `KillSwitch.sync_flat_wallet` + account_snapshots source exchange)로 들어온다. 조회 실패면 `exchange:wallet_resync_due` 차단 · 다음 봉 재시도.
 - `Engine.entries_blocked`는 **사유 목록** · `/start`가 `clear_blocks`로 해제(일일 손실 날은 무변경) · `cancel_pending`(결정 뒤 게이트 닫힘 → `EntrySkipped(entries_blocked)`) · `equity(mark)` = 지갑 + 미실현.
 - `ExitReason.STALE_DATA` — PAPER stale 청산의 체결 기준가는 **마지막으로 받은 mark**(`orders.ref_mark`로 분리 가능).
+
+Codex L8 1차 반영: 운영 이벤트·안전 상태 저장 실패도 보관·재시도 + `db:unrecorded_ops`·`db:unsaved_safety_state` 차단 · 봉 DB 읽기 실패는 피드 밖으로 던지지 않고 `db:read_failed` 차단(다음 봉 성공으로 해제) · prune은 모든 대상의 원격 md5가 없으면 그날 전체 보류 · 폴 스레드는 루프 소유 `fast_poll` 이벤트만 읽는다 · LIVE 동기 읽기는 §10 체크리스트로 명시 보류.
 
 운영 경보 값(게이트 아님 · health): 상태 파일 나이 > 120초(레지스트리 #1 grace 재사용) · sync 마커 > 3시간 · prune 마커 > 8일 · 텔레그램 폴 마지막 성공 > 10분 · 디스크 여유 < 5 GB · 반복형 스로틀 3시간(E2E 값).
 

@@ -315,3 +315,20 @@ def test_unit_modules_exist_and_parse_their_arguments(tmp_path):
     r = subprocess.run([str(root / ".venv" / "bin" / "python"), "-m", "ops.prune", "--help"], capture_output=True,
                        text=True, cwd=root, timeout=60)
     assert r.returncode == 0 and "--apply" in r.stdout
+
+
+# ── Codex L8 #2: 삭제 전에 **모든** 대상의 원격 md5가 있어야 한다 ─────────────────────────────
+@pytest.mark.parametrize("broken", ["lsf_fails", "lsf_missing_one"])
+def test_missing_remote_md5_holds_the_whole_day_and_deletes_nothing(tmp_path, broken):
+    var = _var(tmp_path)
+    files = _shards(var, "2026-09-01")
+    base = _check_all_equal(var, lsf_ok=broken != "lsf_fails")
+    def handler(cmd):
+        r = base.handler(cmd)
+        if broken == "lsf_missing_one" and cmd[1] == "lsf":
+            return (r[0], "\n".join(ln for ln in r[1].splitlines() if "000002_000" not in ln or "markprice" not in ln), r[2])
+        return r
+    ledger = Ledger()
+    code, results = PR.run_prune(var, REMOTE, apply=True, max_days=7, today=TODAY, runner=Runner(handler), mark_pruned=ledger)
+    assert code == 1 and all(f.exists() for f in files) and ledger.calls == []
+    assert "md5" in results[0]["skipped"] and not (var / "markers" / "LAST_PRUNE.txt").exists()
