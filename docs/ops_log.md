@@ -736,3 +736,26 @@ Read-only review completed. I did not modify files, did not use network, and did
 Codex session ID: 01a0a49e-f24a-7e11-ba4f-ad31bff60030
 Resume in Codex: codex resume 01a0a49e-f24a-7e11-ba4f-ad31bff60030
 ```
+
+## 2026-09-15 — Codex 재검토 ccxt 어댑터 (`70e808e`, read-only · `task-mu2jhylz-ca92xu`)
+1·2·Q3 CLOSED · 3 PARTIAL: -1021 재동기화의 `/time` 응답 헤더가 카운터에 안 들어감 → ✅ 동의, 실패 테스트 → 수정(재동기화 후 헤더 관측) → 445 green.
+
+### Codex 재검토 원문 (verbatim)
+```
+**Verdict: FIX FIRST**
+
+1. **CLOSED**: `-1006` / `-1007` now map to `TransportError` even on 4xx. The unknown-code check is before `-1021` handling, and 5xx still wins first. See [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:163) and [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:168). Covered by [tests/test_ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/tests/test_ccxt_rest.py:311).
+
+2. **CLOSED**: `newOrderRespType` is pinned to `RESULT`; non-`RESULT` caller input is refused before send, and the ccxt order params always use `"RESULT"`. See [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:116) and [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:126). Covered by [tests/test_ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/tests/test_ccxt_rest.py:321).
+
+3. **PARTIAL**: hidden ccxt success-path calls now feed `RateLimitCounter` once via `_call()` at [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:157), and response construction no longer re-observes headers at [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:110) / [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:137). No double-observe regression found for normal calls.
+
+   Remaining gap: the `-1021` resync path still calls `self.ex.load_time_difference()` directly at [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:172), outside `_call()`, so that `/time` response’s rate-limit headers are not observed. That keeps the original hidden-ccxt-call issue partially open.
+
+4. **CLOSED**: `returnResponseHeaders` is explicitly disabled for constructed exchanges and rejected for injected exchanges at [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:75) and [exchange/ccxt_rest.py](/home/cms/project/BTC_Futures_E2E/exchange/ccxt_rest.py:79). Raw payloads stay clean, while `Response.headers` are still returned from `last_response_headers`.
+
+I could not run the tests: `pytest` is not installed, and `python3 -m pytest` reports no pytest module. Static review was against clean `70e808e`.
+
+Codex session ID: 01a0a4a6-65dd-7b11-be14-c69f20203efe
+Resume in Codex: codex resume 01a0a4a6-65dd-7b11-be14-c69f20203efe
+```

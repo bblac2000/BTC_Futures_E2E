@@ -359,3 +359,24 @@ def test_ccxt_validation_before_any_request_is_not_executed(rules, monkeypatch):
     with pytest.raises(BinanceAPIError) as e:
         c.post("/fapi/v1/order", p)
     assert e.value.code is None and http.sent == []
+
+
+def test_timestamp_resync_call_also_feeds_the_rate_limit_counter(snap):
+    """Codex 재검토: -1021 재동기화의 /time 응답 헤더도 카운터에 들어간다."""
+    from exchange.rules import parse_rate_limits
+    counter = RateLimitCounter(parse_rate_limits(snap["exchangeInfo"]["response"]))
+    http_ref = {}
+
+    def route(m, p, q):
+        if p.endswith("/time"):
+            http_ref["h"].headers = {"X-MBX-USED-WEIGHT-1M": "777"}
+            return 200, {"serverTime": 1}
+        http_ref["h"].headers = {}
+        return 400, {"code": -1021, "msg": "Timestamp for this request is outside of the recvWindow."}
+    c, http = make(route, rate_limits=counter, clock_ms=lambda: 120_000)
+    http_ref["h"] = http
+    with pytest.raises(BinanceAPIError):
+        c.get("/fapi/v2/positionRisk", signed=True)
+    limit_1m = [rl for rl in parse_rate_limits(snap["exchangeInfo"]["response"])
+                if rl.rate_limit_type == "REQUEST_WEIGHT" and rl.interval == "MINUTE"][0]
+    assert counter.usage(120_000)[f"REQUEST_WEIGHT/MINUTE/{limit_1m.interval_num}"] == 777 / limit_1m.limit
