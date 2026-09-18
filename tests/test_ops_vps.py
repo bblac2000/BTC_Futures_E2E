@@ -345,7 +345,31 @@ def test_units_are_bot_user_units_with_onfailure_in_unit_and_no_inline_code():
             assert cp["Timer"]["Persistent"] == "true" and cp["Install"]["WantedBy"] == "timers.target"
     bot = _unit("btcfut-bot.service")
     assert "--mode paper" in bot["Service"]["ExecStart"] and bot["Install"]["WantedBy"] == "default.target"
-    assert bot["Service"]["Nice"] == "10" and bot["Service"]["MemoryMax"], "수집기 우선"
+    assert bot["Service"]["Nice"] == "10", "수집기 우선"
+    #  사용자 2026-09-18(D1 계측): t4g.small 1834 MB·swap 없음 · E2E quality가 매일 00:10에 595 MB까지 쓴다
+    assert bot["Service"]["MemoryMax"] == "400M", "봇 상한은 수집기+일일 스파이크와 함께 들어가야 한다"
+    assert bot["Service"]["OOMScoreAdjust"] == "500", "전역 메모리 압박에서 커널이 수집기보다 봇을 먼저 고른다"
+
+
+def _fires_at(text: str) -> set[str]:
+    """`OnCalendar=*-*-* *:03/5:30 UTC` · `*-*-* 00:40:00 UTC` → 시:분 집합(하루 기준, 초는 무시)."""
+    line = [ln for ln in text.splitlines() if ln.startswith("OnCalendar=")][0].split("=", 1)[1].replace(" UTC", "").strip()
+    _date, clock = line.rsplit(" ", 1)
+    hh, mm, *_ = clock.split(":")
+    minutes = range(60) if mm == "*" else (
+        {int(mm)} if "/" not in mm else {m for m in range(60) if (m - int(mm.split("/")[0])) % int(mm.split("/")[1]) == 0})
+    hours = range(24) if hh == "*" else {int(hh)}
+    return {f"{h:02d}:{m:02d}" for h in hours for m in minutes}
+
+
+def test_no_bot_timer_fires_during_the_e2e_quality_window(tmp_path):
+    """사용자 2026-09-18: E2E quality(00:10 시작·~80초·최대 595 MB)와 겹치는 봇 타이머가 없어야 한다."""
+    window = {"00:10", "00:11", "00:12"}
+    for t in sorted(UNITS.glob("*.timer")):
+        fires = _fires_at(t.read_text())
+        assert not (fires & window), f"{t.name}: {sorted(fires & window)}가 E2E quality 창과 겹친다"
+    assert "00:40" in _fires_at((UNITS / "btcfut-health-digest.timer").read_text()), "digest는 00:40(E2E digest 00:30과 분리)"
+    assert "00:30" not in _fires_at((UNITS / "btcfut-health-digest.timer").read_text())
 
 
 def test_unit_modules_exist_and_parse_their_arguments(tmp_path):

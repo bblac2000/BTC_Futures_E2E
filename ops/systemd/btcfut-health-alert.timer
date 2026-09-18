@@ -2,7 +2,8 @@
 Description=BTC_Futures_E2E health alert every 5 minutes
 
 [Timer]
-OnCalendar=*-*-* *:00/5:30 UTC
+#  :03부터 5분 간격 — E2E quality 창(00:10~00:11:20)과 겹치지 않게(사용자 2026-09-18)
+OnCalendar=*-*-* *:03/5:30 UTC
 Persistent=true
 
 [Install]

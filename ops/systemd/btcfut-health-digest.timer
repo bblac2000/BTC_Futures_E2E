@@ -2,7 +2,8 @@
 Description=BTC_Futures_E2E daily digest 00:30 UTC
 
 [Timer]
-OnCalendar=*-*-* 00:30:00 UTC
+#  E2E digest(00:30)·quality(00:10)와 분리
+OnCalendar=*-*-* 00:40:00 UTC
 Persistent=true
 
 [Install]

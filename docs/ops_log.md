@@ -1792,3 +1792,32 @@ D1 창 09-18 00:35–02:30 UTC · 여기서 멈춤(사용자 항목: rclone remo
 **사용자 결정(2026-09-16 · 점검 중 수신)**: 읽기 전용 키 화이트리스트에 **로컬 IP를 남긴다**(VPS 35.79.38.63 추가됨) →
 §9.1/§9에서 "로컬 IP 제거" 단계 삭제 · D1 증명 = **VPS 캡처 `--dry-run` 성공**만. 거래 권한 키는 **LIVE 전환 때 새로 발급**(VPS IP 하나 · VPS `.env`에만) → 레지스트리 #17 · 라이브 체크리스트 필드.
 
+## 2026-09-18 00:31–00:57 UTC — **D1 실행**(도쿄 VPS · 커밋 `54b5af8` · 유닛 설치 없음)
+
+호스트 `ip-172-31-38-160`(i-0fbf1cd7e1d261bea · t4g.small · Ubuntu 26.04 · 2 vCPU) · 공인 IP 35.79.38.63(ifconfig.me = IMDS).
+
+**§9.2 읽기 전용 기준선(00:31)**: E2E 서비스 3종 active(l2collector·markprice·depthdiff) · `NRestarts=0` ·
+l2collector ActiveEnter 2026-09-17 00:13:23 UTC(= Restart B) · 최근 1시간 parquet 551개 · 09-17 판정 **PASS**(rows_1s 86,425/86,400 · gap 0.0% · reconnects 1 · `counts_toward_gate` true) ·
+디스크 96G 중 43G 사용(53G 여유) · 메모리 1834 MB(가용 1078 MB) · **swap 없음** · cgroup 위임에 `memory` 포함 ·
+E2E 타이머 실측: quality 00:10 · digest 00:30 · health-alert 30분 · sync 매시 :07 · prune 일 02:30 · integrity 일 03:30 ·
+btcfut 사용자·홈 없음 · rclone v1.74.4·git·python3 존재.
+🔴 **발견 — 메모리가 가장 좁다**: E2E quality가 매일 00:10에 **595 MB**(MemoryPeak 실측)까지 쓴다 + 수집기 117 MB + 봇 상한 700 MB vs 총 1834 MB·swap 0.
+사용자 결정: **A로 진행**(D1은 유닛 없음) · D2 전 템플릿만 수정(MemoryMax 400M · OOMScoreAdjust 500 · digest 00:40 · 00:10 창에 봇 타이머 없음) · swap은 D2 뒤 3일 실측(00:10 겹침 여유 < ~300 MB면 별도 날 변경).
+
+**D1 쓰기 단계**
+| 단계 | 결과 |
+|---|---|
+| 사용자 생성(00:34) | uid 1001 · 그룹 `btcfut`,`users`만 · linger yes · `/run/user/1001` 존재 · **수집기 홈 읽기 실패 확인**(`ls /home/ubuntu` → Permission denied) |
+| rclone(사용자 헤드리스 인증, 00:50) | remote `btcfut-drive` · type drive · **scope `drive.file`** · `lsd` exit 0 · conf 600 · 수집기 conf(00:30 갱신, OAuth 토큰 자동 갱신분) 그대로 |
+| 코드 | `git clone` → `checkout 54b5af8`(=`54b5af8b6f30…`) · uv 0.12.15 · `uv sync --frozen` · `var/` 700 |
+| `.env` | 로컬 `.env`를 파이프로 복사(값 출력 없음) · 600 · `BTCFUT_DRIVE_REMOTE=btcfut-drive:BTC_Futures_E2E`로 설정 · `remote_root()` 통과 |
+| 캡처 `--dry-run`(00:52, btcfut) | exit 0 · `enabled = ['enableReading','ipRestrict']` · BTCUSDT flat · **파일 쓰기 없음**(written []) → **D1 증명: VPS에서 키가 동작한다** |
+| 페이퍼 드라이런 240초(00:52:38–00:56:39) | exit 0 · `stop`(clean, dropped 0) · `rules.source runtime:signed`(6종) · `fallback_reason null` · blockers [] · stalled [] · confirmed_facts [] · db_errors 0 · bar_conflicts 0 · 봉 REST 179 + WS 4 · 스냅샷 5 · 포지션 0 · parquet 11 · 텔레그램 발송 2·배달 2·오류 0 · var 1.5M |
+
+**D1 뒤 E2E 대조(00:57)**: 서비스 active · `NRestarts=0` · ActiveEnter 불변 · 최근 5분 parquet 48개 · 디스크 44G 사용(+1G = btcfut 468M) ·
+가용 메모리 1066 MB(기준선 1078) · btcfut 프로세스 = `systemd --user`·`sd-pam`뿐(봇 미기동) · `~btcfut/.config/systemd/user` 없음(유닛 0).
+
+**D2 전 템플릿 수정(호스트 변경 아님 · Codex 검토 대상)**: `MemoryMax=400M` · `OOMScoreAdjust=500` · health-digest `00:40` ·
+health-alert `*:03/5:30`(00:10~00:12 창 회피) · 테스트 `test_no_bot_timer_fires_during_the_e2e_quality_window`·MemoryMax/OOMScoreAdjust 잠금.
+prune 타이머는 미설치 유지 — §9.6 시각 결정 때 실측 타이머 기준(quality 00:10·digest 00:30·health 30분·sync :07·prune 일 02:30·integrity 일 03:30) 사용.
+

@@ -45,7 +45,7 @@
 5h. [ ] 보류: `engine_events` op_id 조회 인덱스(스키마 v3) · shard `roll_failed` health 경보 · 키 `ipRestrict` 기동 확인 · [x] 짝 없는 start/connect → `dirty_previous_run`(#15 ⑤)
 5k. [ ] LIVE 체크리스트 추가(#15 ③④): 규칙 주기 재조회 ≥6h·24h 초과 규칙 진입 금지 · 일시정지 사유 집합화
 5l. [ ] prune 시각: D2(09-19) 뒤 VPS `list-timers` 실측 → 모든 E2E 타이머에서 ≥30분 떨어진 시각 · 별도 변경(런북 §9.6)
-5m. [ ] 배포: ✅ Codex 배포 전 배치 MERGE(2026-09-16) → Restart B 게이트 종료(09-18 00:16 UTC) → D1 09-18 · D2 09-19(00:35–02:30 UTC) · 사용자: rclone·OWNER_IDS·캡처 → §9.1 로컬 점검 → 화이트리스트
+5m. [ ] 배포: ✅ Codex 배포 전 배치 MERGE · ✅ **D1 완료(2026-09-18 00:31–00:57 UTC · 유닛 없음)** → Restart B 게이트 종료(09-18 00:16 UTC) → D1 09-18 · D2 09-19(00:35–02:30 UTC) · 사용자: rclone·OWNER_IDS·캡처 → §9.1 로컬 점검 → 화이트리스트
 5g. [ ] VPS 배포(런북 `docs/runbook_vps.md`) — 사용자 논의 후 · 외부 heartbeat · Drive 사본 재검증 도구 · 대장 reconcile 도구
 6. [x] layer 5: E2E ShardWriter + #138 종료 플러시 테스트 복원(`tests/test_data_shards.py`) · [x] layer 8: health 스로틀 구조 · `data_stores` allowlist(설계 #131) · [ ] shard `roll_failed` 대장 이벤트를 health가 읽는 경보(상태 파일에 없음)
 7. [x] VPS 템플릿: 봇 전용 Linux 사용자 user 유닛(`ops/systemd/`)·런북 — **배포는 Codex 검토 + 사용자 논의 후**
@@ -57,3 +57,5 @@
 
 5n. [ ] 비차단 잔여(Codex 배포 전 재검토 #2): 오래된 breadcrumb 격리 이동 뒤 재생 커밋 전 사망 시 운영 이벤트가 stale 파일에만 남음 — 복사 후 재생 성공 시 삭제로 바꿀지 결정
 5o. [ ] 설계 메모만(코드 없음 · D2 뒤 · 페이퍼 첫 주 뒤 평가, 사용자 2026-09-16): breadcrumb 파일을 **DB 쪽 journal 테이블**로 대체 검토 — DB와 동기화하는 두 번째 상태 저장소라 세 배치 연속 추가 검토 라운드를 불렀다. 단일 저장소 · op_id 멱등 · 5n 해소. 평가 때 볼 것: DB 자체가 잠겨 쓸 수 없을 때(breadcrumb가 존재한 이유)의 fail-closed 경로를 무엇이 대신하는가.
+5p. [ ] D2 전: 유닛 템플릿 수정(MemoryMax 400M·OOMScoreAdjust 500·digest 00:40·health-alert :03/5분) **Codex 검토** 후 D2에서 설치
+5q. [ ] D2 뒤 3일: 봇 실측 peak RSS · 00:10 겹침 여유 < ~300 MB면 swap 파일을 별도 날 라이브 변경으로(사용자 2026-09-18)

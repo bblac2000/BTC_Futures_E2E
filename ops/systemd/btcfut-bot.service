@@ -25,7 +25,9 @@ Nice=10
 CPUWeight=50
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-MemoryMax=700M
+MemoryMax=400M
+#  전역 메모리 압박(1834 MB·swap 없음 · E2E quality 매일 00:10 최대 595 MB)에서 커널이 수집기가 아니라 봇을 고르게 한다
+OOMScoreAdjust=500
 StandardOutput=append:%h/BTC_Futures_E2E/logs/bot.log
 StandardError=append:%h/BTC_Futures_E2E/logs/bot.log
 
