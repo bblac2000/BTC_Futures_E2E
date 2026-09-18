@@ -1871,3 +1871,35 @@ Codex session ID: 01a0b209-4b25-75f1-a713-4508db275016
 Resume in Codex: codex resume 01a0b209-4b25-75f1-a713-4508db275016
 ```
 </details>
+
+### Codex 재검토 #1: D2 템플릿 수정분 (`e59107f..0328653`, read-only · `task-mu69h2c8-e4wgcr`)
+판정: **FIX FIRST**(이전 3건 중 1 CLOSED · 2 PARTIAL · 새 MEDIUM 2).
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 1 MEDIUM | §9.4가 §3을 부르는데 §3 블록에 `enable --now`가 있어 **대조·cgroup 게이트 전에 기동**될 수 있다 | ✅ | §3을 **3a 설치 / 3b 대조 / 3c 기동**으로 분리 · §9.4는 3a→3b(→cgroup)→3c 순서 |
+| 2 MEDIUM | D2 해시가 리터럴이 아니다(`<D2>`) · `bsc cat` 검사에 health-alert `Persistent` 부재가 빠졌다 | ✅ | D2 = **ops_log "D2 해시" 줄의 리터럴** · 3b에 **`diff -q`(저장소 ↔ 설치본 8개 파일)** 추가 — 해시를 잘못 골라도 잡힌다 · `grep -E "OnCalendar|Persistent"`로 부재 확인 |
+| 잔여 PARTIAL | `btcfut-sync.timer`는 Persistent 유지(더 무겁다) | ✅ 유지 + 근거 | sync는 `Nice=15`·`IOSchedulingClass=idle`이라 따라잡기가 수집기를 밀어내지 않는다 — 타이머에 근거 주석 · 테스트로 잠금 |
+CLOSED: 설계서 §17·digest Description 문구.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+1. **MEDIUM:** D2 order is still unsafe as written. [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:179) says to use §3 for unit install, but §3’s command block includes `bsc enable --now` at [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:57). That can start the bot/timers before the installed-unit checks at [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:180) and before the cgroup `memory` STOP gate at [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:183). Fix first by splitting copy+`daemon-reload` from enable, or by inlining only the copy/reload commands in §9.4 step 3.
+
+2. **MEDIUM:** The D2 commit is still not a literal pinned hash. [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:114) says D2 is “the Codex MERGE commit,” and [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:177) uses `<D2>`. In this range, `e59107f` is the pre-fix unit-template commit and `0328653` is the review-fix commit. If the operator chooses the wrong “reviewed” commit, the current `bsc cat` checks cover `MemoryMax`/`OOMScoreAdjust`/`OnCalendar` but not `health-alert`’s missing `Persistent=`.
+
+**Prior Findings**
+- **D2 may install old unit templates: PARTIAL.** Fetch/checkout, `rev-parse`, `status --short`, `uv sync --frozen`, and post-copy `bsc cat` checks were added at [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:176). But the hash is not concrete, and §3 can enable before the checks.
+- **Persistent catch-up can fire in the quality window: PARTIAL.** `health-alert` removed `Persistent` at [ops/systemd/btcfut-health-alert.timer](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-health-alert.timer:6), and digest documents its retained risk at [ops/systemd/btcfut-health-digest.timer](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-health-digest.timer:7). Tests cover alert/digest at [tests/test_ops_vps.py](/home/cms/project/BTC_Futures_E2E/tests/test_ops_vps.py:375). Remaining gap: `btcfut-sync.timer` still has `Persistent=true` and is heavier.
+- **Stale design/digest text: CLOSED.** Design §17 now says `MemoryMax 400M`, `OOMScoreAdjust 500`, alert `:03`, digest `00:40` at [docs/design_v1.md](/home/cms/project/BTC_Futures_E2E/docs/design_v1.md:270), and the digest timer Description is updated at [ops/systemd/btcfut-health-digest.timer](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-health-digest.timer:2).
+
+**D2 Runbook Check**
+Intended order is good, but the written runbook does not enforce it because §3 includes enablement. No D2 step writes to the E2E user beyond read-only status/timer/baseline checks; the host risk is shared resources, not direct E2E mutation. Failed checkout should be caught by command failure, and dirty worktree should be caught by `status --short`, assuming the operator stops on mismatch. Rollback remains bot-only: [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:206) disables only `btcfut-*` units and [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:207) keeps deletion gated.
+
+Verdict: **FIX FIRST**. I did not modify files, use the network, read `.env`, print secrets, or SSH.
+
+Codex session ID: 01a0b210-087d-79f3-8beb-dbfd83b44244
+Resume in Codex: codex resume 01a0b210-087d-79f3-8beb-dbfd83b44244
+```
+</details>

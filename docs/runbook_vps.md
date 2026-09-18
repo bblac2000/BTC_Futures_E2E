@@ -48,12 +48,26 @@ cat var/dryrun/run/status.json          # shutdown=stop · exit_code=0 · delive
 ```
 
 ## 3. 유닛 설치 (user 유닛)
+**3a. 설치만**(기동하지 않는다 — Codex 2026-09-18 재검토 #1):
 ```bash
 B=/home/btcfut/BTC_Futures_E2E
 sudo -u btcfut mkdir -p /home/btcfut/.config/systemd/user
 sudo -u btcfut cp $B/ops/systemd/btcfut-{bot,failed@,health-alert,health-digest,sync}.service \
   $B/ops/systemd/btcfut-{health-alert,health-digest,sync}.timer /home/btcfut/.config/systemd/user/
 bsc daemon-reload
+```
+**3b. 설치본 대조**(하나라도 다르면 STOP · 해시를 몰라도 잡힌다):
+```bash
+for f in btcfut-bot.service btcfut-failed@.service btcfut-health-alert.service btcfut-health-digest.service \
+         btcfut-sync.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer; do
+  sudo -u btcfut diff -q $B/ops/systemd/$f /home/btcfut/.config/systemd/user/$f || echo "MISMATCH $f"
+done
+bsc cat btcfut-bot.service | grep -E "MemoryMax|OOMScoreAdjust|Nice="        # 400M · 500 · 10
+bsc cat btcfut-health-digest.timer | grep OnCalendar                         # 00:40
+bsc cat btcfut-health-alert.timer  | grep -E "OnCalendar|Persistent"         # *:03/5:30 · Persistent 줄 없음
+```
+**3c. 기동**(§9.4에서는 cgroup 확인 뒤에):
+```bash
 bsc enable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer
 ```
 - ⚠️ **prune은 이 단계에서 설치·enable하지 않는다** — §6.
@@ -111,8 +125,9 @@ free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 
 ### 9.0 전제 — 하나라도 아니면 창을 열지 않는다
 - E2E Restart B 24h 게이트 판정이 닫혔다(E2E 쪽 보고로 확인 — 이 봇은 판정하지 않는다).
-- Codex 배포 전 배치 MERGE · 배포 커밋 해시 고정(브랜치가 아니라 해시): **D1 = `54b5af8`** · **D2 = 유닛 템플릿 수정을 Codex가 MERGE한 커밋**
-  (D1 뒤에 바뀐 유닛이 설치되게 — §9.4 2단계).
+- Codex 배포 전 배치 MERGE · 배포 커밋 해시 고정(브랜치가 아니라 해시): **D1 = `54b5af8`** ·
+  **D2 = `docs/ops_log.md`의 "D2 해시" 줄에 적힌 리터럴 해시**(유닛 템플릿 수정을 Codex가 MERGE한 커밋 · D1 뒤에 유닛이 바뀌었다).
+  해시를 잘못 고르더라도 §3 3b의 `diff -q`(저장소 체크아웃 ↔ 설치본)가 잡는다.
 - 사용자 측 완료(D1 전): `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
 - btcfut의 rclone remote는 **D1 전에는 만들 수 없다**(사용자가 D1에 생긴다) → §9.3 3단계(사용자 정정 2026-09-16).
 - 키 IP 화이트리스트(사용자 2026-09-16 최종): 읽기 전용 키는 `ipRestrict=true` · 허용 IP = **로컬 + VPS `35.79.38.63`**(사용자가 2026-09-16 추가).
@@ -176,12 +191,10 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 2. 코드 갱신: `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E fetch --tags origin` →
    `sudo -u btcfut git -C … checkout <D2>` → `rev-parse HEAD` == `<D2>` · `git -C … status --short` 비어 있음 ·
    `sudo -u btcfut bash -c 'cd /home/btcfut/BTC_Futures_E2E && ~/.local/bin/uv sync --frozen'`(lock 변화 없으면 no-op).
-3. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
-   설치 직후 **내용 대조**: `bsc cat btcfut-bot.service | grep -E "MemoryMax|OOMScoreAdjust|Nice"` = `400M`·`500`·`10` ·
-   `bsc cat btcfut-health-digest.timer | grep OnCalendar` = `00:40` · `bsc cat btcfut-health-alert.timer | grep OnCalendar` = `*:03/5:30` ·
-   다르면 **STOP**(옛 해시가 설치됐다).
+3. §3 **3a(설치만)** → **3b(대조)** — prune 제외 · 🚫 여기서 기동하지 않는다.
+   3b의 `diff -q`가 저장소 체크아웃과 설치본을 직접 비교하므로 **해시를 잘못 골라도 잡힌다**. `MISMATCH`가 하나라도 나오면 STOP.
 4. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
-5. `bsc enable --now …`(§3 명령 그대로) → `bsc is-active btcfut-bot` · §5 기동 후 대조표 전체.
+5. §3 **3c 기동** → `bsc is-active btcfut-bot` · `bsc list-timers 'btcfut-*'`(다음 발화 시각이 00:10~00:12 밖) · §5 기동 후 대조표 전체.
 6. 9.5 보고.
 
 ### 9.5 배포 후 보고 항목 (D1·D2 각각 · 24시간 뒤 한 번 더)

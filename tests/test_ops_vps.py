@@ -375,6 +375,9 @@ def test_no_bot_timer_fires_during_the_e2e_quality_window(tmp_path):
     #  Codex 2026-09-18 #2: 5분 타이머는 놓친 실행을 따라잡지 않는다(부팅 직후 창 안 발화 방지) · 하루 1통 digest는 따라잡는다
     assert "Persistent" not in _unit("btcfut-health-alert.timer")["Timer"]
     assert _unit("btcfut-health-digest.timer")["Timer"]["Persistent"] == "true"
+    #  Codex 2026-09-18 재검토 #2: sync는 Persistent를 유지하는 대신 부팅 직후 따라잡기가 수집기를 밀어내지 않아야 한다
+    sync = _unit("btcfut-sync.service")["Service"]
+    assert sync["Nice"] == "15" and sync["IOSchedulingClass"] == "idle"
 
 
 def test_unit_modules_exist_and_parse_their_arguments(tmp_path):

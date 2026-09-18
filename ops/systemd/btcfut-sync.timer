@@ -3,6 +3,8 @@ Description=BTC_Futures_E2E Drive copy hourly (:20, away from E2E sync)
 
 [Timer]
 OnCalendar=*-*-* *:20:00 UTC
+#  Persistent 유지 — 놓친 시간의 업로드는 따라잡아야 한다. 부팅 직후 따라잡기가 E2E quality 창(00:10~00:12)에 겹쳐도
+#  이 유닛은 `Nice=15`·`IOSchedulingClass=idle`이라 수집기를 밀어내지 않는다(Codex 2026-09-18 재검토 #2 수용).
 Persistent=true
 
 [Install]
