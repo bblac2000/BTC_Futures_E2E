@@ -64,7 +64,8 @@ for f in btcfut-bot.service btcfut-failed@.service btcfut-health-alert.service b
 done
 bsc cat btcfut-bot.service | grep -E "MemoryMax|OOMScoreAdjust|Nice="        # 400M · 500 · 10
 bsc cat btcfut-health-digest.timer | grep OnCalendar                         # 00:40
-bsc cat btcfut-health-alert.timer  | grep -E "OnCalendar|Persistent"         # *:03/5:30 · Persistent 줄 없음
+bsc cat btcfut-health-alert.timer  | grep OnCalendar                          # *:03/5:30
+bsc cat btcfut-health-alert.timer  | grep -c "^Persistent"                    # 0 이어야 한다(주석 줄은 세지 않는다)
 ```
 **3c. 기동**(§9.4에서는 cgroup 확인 뒤에):
 ```bash
@@ -126,8 +127,9 @@ free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 ### 9.0 전제 — 하나라도 아니면 창을 열지 않는다
 - E2E Restart B 24h 게이트 판정이 닫혔다(E2E 쪽 보고로 확인 — 이 봇은 판정하지 않는다).
 - Codex 배포 전 배치 MERGE · 배포 커밋 해시 고정(브랜치가 아니라 해시): **D1 = `54b5af8`** ·
-  **D2 = `docs/ops_log.md`의 "D2 해시" 줄에 적힌 리터럴 해시**(유닛 템플릿 수정을 Codex가 MERGE한 커밋 · D1 뒤에 유닛이 바뀌었다).
-  해시를 잘못 고르더라도 §3 3b의 `diff -q`(저장소 체크아웃 ↔ 설치본)가 잡는다.
+  **D2 = `05d6031b49fbba24df20ac3a133f6712bd11575c`**(= `05d6031` · 유닛 템플릿 최종본 · D1 뒤에 유닛이 바뀌었다 — ops_log "D2 해시" 줄과 같다).
+  🔴 두 검사는 잡는 것이 다르다: `rev-parse HEAD == 05d6031…`가 **잘못·오래된 체크아웃**을 잡고,
+  §3 3b의 `diff -q`는 **체크아웃과 설치본의 불일치**만 잡는다(체크아웃 자체가 옛 커밋이면 diff는 통과한다).
 - 사용자 측 완료(D1 전): `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
 - btcfut의 rclone remote는 **D1 전에는 만들 수 없다**(사용자가 D1에 생긴다) → §9.3 3단계(사용자 정정 2026-09-16).
 - 키 IP 화이트리스트(사용자 2026-09-16 최종): 읽기 전용 키는 `ipRestrict=true` · 허용 IP = **로컬 + VPS `35.79.38.63`**(사용자가 2026-09-16 추가).
@@ -189,10 +191,12 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 → **D2에서 설치되는 파일 = `D2`(Codex MERGE 받은 커밋)**. 체크아웃하지 않으면 D1 해시의 옛 유닛(700M·00:30)이 설치된다.
 1. §0 호스트 확인 · E2E 기준선 재기록.
 2. 코드 갱신: `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E fetch --tags origin` →
-   `sudo -u btcfut git -C … checkout <D2>` → `rev-parse HEAD` == `<D2>` · `git -C … status --short` 비어 있음 ·
+   `sudo -u btcfut git -C … checkout 05d6031` → **`rev-parse HEAD` == `05d6031b49fbba24df20ac3a133f6712bd11575c`**(리터럴 대조 · 여기서 옛 체크아웃이 걸린다) ·
+   `git -C … status --short` 비어 있음 ·
    `sudo -u btcfut bash -c 'cd /home/btcfut/BTC_Futures_E2E && ~/.local/bin/uv sync --frozen'`(lock 변화 없으면 no-op).
 3. §3 **3a(설치만)** → **3b(대조)** — prune 제외 · 🚫 여기서 기동하지 않는다.
-   3b의 `diff -q`가 저장소 체크아웃과 설치본을 직접 비교하므로 **해시를 잘못 골라도 잡힌다**. `MISMATCH`가 하나라도 나오면 STOP.
+   3b의 `diff -q`는 **체크아웃 ↔ 설치본**만 본다(옛 커밋을 체크아웃했으면 통과한다 — 그 경우는 2단계의 리터럴 `rev-parse` 대조가 잡는다).
+   `MISMATCH`가 하나라도 나오면 STOP.
 4. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
 5. §3 **3c 기동** → `bsc is-active btcfut-bot` · `bsc list-timers 'btcfut-*'`(다음 발화 시각이 00:10~00:12 밖) · §5 기동 후 대조표 전체.
 6. 9.5 보고.

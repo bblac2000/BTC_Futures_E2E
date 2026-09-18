@@ -1903,3 +1903,9 @@ Codex session ID: 01a0b210-087d-79f3-8beb-dbfd83b44244
 Resume in Codex: codex resume 01a0b210-087d-79f3-8beb-dbfd83b44244
 ```
 </details>
+
+### D2 해시 (2026-09-18 고정)
+**D2 = `05d6031b49fbba24df20ac3a133f6712bd11575c`** — 유닛 템플릿 최종본(MemoryMax 400M · OOMScoreAdjust 500 · digest 00:40 · health-alert `*:03/5:30`·Persistent 없음 ·
+sync Persistent 유지 + Nice 15·IO idle). D1은 `54b5af8`이었다. D2 창에서 VPS 체크아웃을 이 해시로 옮기고 `rev-parse`로 리터럴 대조한다
+(`diff -q`는 체크아웃↔설치본만 본다 — 옛 커밋 체크아웃은 잡지 못한다 · Codex 2026-09-18 재검토 #2).
+
