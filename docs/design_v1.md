@@ -267,7 +267,7 @@ tol = Q × tick_size / L + 0.00000002(진입가 1 tick + 8자리 표시 반올�
 | `ops/prune.py` | 🔴 삭제: `=`만 · 그날 하나라도 미검증이면 전체 보류 · 삭제 전 원격 md5 · 대장 기록 수 ≠ 삭제 수 → 실패 · `.parquet`만 · 심볼릭 링크 불추종 · 기본 dry-run · 보존 30일 · 최대 7일/회 |
 | `ops/health.py` | 상태 파일·마커·디스크 → 고정 키 문제 목록 · 반복형 3h 스로틀 · 확정 사실 하루 1회 · 발송 실패 시 상태 미갱신 · digest |
 | `ops/notify_failure.py` | `OnFailure=` 알림(유닛에 코드 박지 않음) |
-| `ops/systemd/` | 봇 사용자 user 유닛 템플릿: bot(Nice 10·IO best-effort 7·MemoryMax 700M) · health-alert 5분 · digest 00:30 UTC · sync 매시 :20 · prune 일 03:30 UTC(첫 배포 미설치) · failed@ |
+| `ops/systemd/` | 봇 사용자 user 유닛 템플릿: bot(Nice 10·IO best-effort 7·**MemoryMax 400M·OOMScoreAdjust 500** — VPS 1834 MB·swap 0·E2E quality 00:10 피크 595 MB) · health-alert **:03부터 5분**(00:10~00:12 창 회피·Persistent 없음) · digest **00:40 UTC** · sync 매시 :20 · prune 일 03:30 UTC(첫 배포 미설치) · failed@ |
 | `docs/runbook_vps.md` | 사용자 생성·설치·수집기 우선 확인·기동 후 대조표(vps-ops §8)·prune 켜기 절차·정지/재기동 |
 
 엔진·안전 변경(같은 배치 · Codex 검토):

@@ -342,7 +342,9 @@ def test_units_are_bot_user_units_with_onfailure_in_unit_and_no_inline_code():
             if n != "btcfut-failed@.service":
                 assert cp["Unit"]["OnFailure"] == "btcfut-failed@%n.service"
         else:
-            assert cp["Timer"]["Persistent"] == "true" and cp["Install"]["WantedBy"] == "timers.target"
+            assert cp["Install"]["WantedBy"] == "timers.target"
+            #  health-alert만 예외(5분 주기 · 따라잡기 불필요 · 부팅 직후 quality 창 발화 방지)
+            assert (cp["Timer"].get("Persistent") == "true") is (n != "btcfut-health-alert.timer"), n
     bot = _unit("btcfut-bot.service")
     assert "--mode paper" in bot["Service"]["ExecStart"] and bot["Install"]["WantedBy"] == "default.target"
     assert bot["Service"]["Nice"] == "10", "수집기 우선"
@@ -370,6 +372,9 @@ def test_no_bot_timer_fires_during_the_e2e_quality_window(tmp_path):
         assert not (fires & window), f"{t.name}: {sorted(fires & window)}가 E2E quality 창과 겹친다"
     assert "00:40" in _fires_at((UNITS / "btcfut-health-digest.timer").read_text()), "digest는 00:40(E2E digest 00:30과 분리)"
     assert "00:30" not in _fires_at((UNITS / "btcfut-health-digest.timer").read_text())
+    #  Codex 2026-09-18 #2: 5분 타이머는 놓친 실행을 따라잡지 않는다(부팅 직후 창 안 발화 방지) · 하루 1통 digest는 따라잡는다
+    assert "Persistent" not in _unit("btcfut-health-alert.timer")["Timer"]
+    assert _unit("btcfut-health-digest.timer")["Timer"]["Persistent"] == "true"
 
 
 def test_unit_modules_exist_and_parse_their_arguments(tmp_path):

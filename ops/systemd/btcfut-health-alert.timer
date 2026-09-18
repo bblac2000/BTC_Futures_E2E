@@ -4,7 +4,8 @@ Description=BTC_Futures_E2E health alert every 5 minutes
 [Timer]
 #  :03부터 5분 간격 — E2E quality 창(00:10~00:11:20)과 겹치지 않게(사용자 2026-09-18)
 OnCalendar=*-*-* *:03/5:30 UTC
-Persistent=true
+#  5분 주기라 놓친 실행을 따라잡을 이유가 없다 → Persistent 없음(부팅 직후 00:10~00:12 창 발화도 막는다 · Codex 2026-09-18 #2)
+#  (Persistent 미설정)
 
 [Install]
 WantedBy=timers.target

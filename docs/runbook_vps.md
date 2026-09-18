@@ -111,7 +111,8 @@ free -m ; df -h / ; sudo du -sh /home/btcfut/BTC_Futures_E2E/var/*
 
 ### 9.0 전제 — 하나라도 아니면 창을 열지 않는다
 - E2E Restart B 24h 게이트 판정이 닫혔다(E2E 쪽 보고로 확인 — 이 봇은 판정하지 않는다).
-- Codex 배포 전 배치 MERGE · 배포 커밋 해시 `D` 고정(브랜치가 아니라 해시).
+- Codex 배포 전 배치 MERGE · 배포 커밋 해시 고정(브랜치가 아니라 해시): **D1 = `54b5af8`** · **D2 = 유닛 템플릿 수정을 Codex가 MERGE한 커밋**
+  (D1 뒤에 바뀐 유닛이 설치되게 — §9.4 2단계).
 - 사용자 측 완료(D1 전): `.env`의 `TELEGRAM_OWNER_IDS` · 캡처 스크립트 실행.
 - btcfut의 rclone remote는 **D1 전에는 만들 수 없다**(사용자가 D1에 생긴다) → §9.3 3단계(사용자 정정 2026-09-16).
 - 키 IP 화이트리스트(사용자 2026-09-16 최종): 읽기 전용 키는 `ipRestrict=true` · 허용 IP = **로컬 + VPS `35.79.38.63`**(사용자가 2026-09-16 추가).
@@ -169,11 +170,19 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 
 ### 9.4 창 D2 (2026-09-19) — 유닛 설치·기동 (두 번째 변경)
 시각: 9.3과 같은 규칙.
-1. §0 호스트 확인 · E2E 기준선 재기록 · `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E rev-parse HEAD` == `D`.
-2. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
-3. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
-4. `bsc enable --now …`(§3 명령 그대로) → `bsc is-active btcfut-bot` · §5 기동 후 대조표 전체.
-5. 9.5 보고.
+🔴 **D2 해시 `D2`는 D1 해시가 아니다**(Codex 2026-09-18 #1): 유닛 템플릿은 D1 뒤에 바뀌었다(MemoryMax 400M·OOMScoreAdjust·digest 00:40·health-alert :03)
+→ **D2에서 설치되는 파일 = `D2`(Codex MERGE 받은 커밋)**. 체크아웃하지 않으면 D1 해시의 옛 유닛(700M·00:30)이 설치된다.
+1. §0 호스트 확인 · E2E 기준선 재기록.
+2. 코드 갱신: `sudo -u btcfut git -C /home/btcfut/BTC_Futures_E2E fetch --tags origin` →
+   `sudo -u btcfut git -C … checkout <D2>` → `rev-parse HEAD` == `<D2>` · `git -C … status --short` 비어 있음 ·
+   `sudo -u btcfut bash -c 'cd /home/btcfut/BTC_Futures_E2E && ~/.local/bin/uv sync --frozen'`(lock 변화 없으면 no-op).
+3. §3 유닛 설치(bot · failed@ · health-alert · health-digest · sync) — prune 제외.
+   설치 직후 **내용 대조**: `bsc cat btcfut-bot.service | grep -E "MemoryMax|OOMScoreAdjust|Nice"` = `400M`·`500`·`10` ·
+   `bsc cat btcfut-health-digest.timer | grep OnCalendar` = `00:40` · `bsc cat btcfut-health-alert.timer | grep OnCalendar` = `*:03/5:30` ·
+   다르면 **STOP**(옛 해시가 설치됐다).
+4. §4 cgroup `memory` 위임 확인 — 없으면 **STOP**, 사용자 결정(system 유닛 `User=btcfut` 전환 여부).
+5. `bsc enable --now …`(§3 명령 그대로) → `bsc is-active btcfut-bot` · §5 기동 후 대조표 전체.
+6. 9.5 보고.
 
 ### 9.5 배포 후 보고 항목 (D1·D2 각각 · 24시간 뒤 한 번 더)
 | 항목 | 기준 |

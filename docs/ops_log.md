@@ -1828,3 +1828,46 @@ prune 타이머는 미설치 유지 — §9.6 시각 결정 때 실측 타이머
 - `scope = drive.file`은 **그 클라이언트가 만든 파일만** 보여준다 → `rclone lsd`에 VolumeClockBot 폴더(`VCB_null_paper_tokyo`·`VCB_t1_paper_tokyo`)가 보이는 것은 **예상된 동작**이다.
 - 🔒 쓰기 경로는 `BTCFUT_DRIVE_REMOTE=btcfut-drive:BTC_Futures_E2E` 하나뿐이다(`ops/drive_sync.py`는 그 아래로만 copy · 원격 삭제 동사 없음 · `ops/prune.py`는 로컬만 지운다 · E2E 폴더 이름은 `remote_root()`가 거부).
 
+### Codex 검토: D2 유닛 템플릿 (`77597e0..e59107f`, read-only · `task-mu697jxr-os0eck`)
+판정: **FIX FIRST**(1 MEDIUM · 2 LOW).
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 1 MEDIUM | 런북이 D1 해시를 그대로 쓰면 **D2가 옛 유닛(700M·00:30)을 설치**한다 | ✅ (실제 함정) | §9.0·§9.4: D2 해시는 **Codex MERGE 커밋** · VPS에서 fetch·checkout·`rev-parse` 대조 · `uv sync --frozen` · 설치 직후 `bsc cat`으로 MemoryMax/OOMScoreAdjust/OnCalendar 대조, 다르면 STOP |
+| 2 LOW | `Persistent=true` 따라잡기가 부팅 직후 00:10 창에 발화할 수 있다 | ✅ | health-alert(5분)는 **Persistent 제거** · digest(하루 1통)는 유지하고 사유 기록 · 테스트로 두 조건 잠금 |
+| 3 LOW | 설계서 §17·digest Description이 옛 값(700M·00:30) | ✅ | 둘 다 갱신 |
+Codex 답변(기록): `MemoryMax=400M`은 정상 경로에서 그럴듯하나 **미증명** — 온호스트 `MemoryPeak`(기동·백필·첫 shard roll·텔레그램·00:10 겹침)과 `memory.events`로 판정,
+부족하면 700M 복귀가 아니라 500~512M. `OOMScoreAdjust=500`은 전역 OOM에서 봇을 먼저 고르게 하며 cgroup(MemoryMax) 킬과는 무관 ·
+반복 OOM은 `StartLimitBurst=5`에 걸릴 수 있다. `*:03/5:30`은 `systemd-analyze calendar`로 :03,:08,:13… 확인(00:10~00:12 없음).
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+1. [MEDIUM] D2 can still install the old unit templates unless the VPS checkout is explicitly advanced.
+Evidence: `docs/ops_log.md:1812` records D1 checked out `54b5af8`; `docs/ops_log.md:1820` says the 400M/timer changes are D2-before-template changes; `docs/runbook_vps.md:114` fixes deploy hash `D`; `docs/runbook_vps.md:172` only checks current VPS HEAD equals `D` before copying units.
+Scenario: If D remains the D1 hash, D2 copies the old `54b5af8` unit files, leaving `MemoryMax=700M`, digest `00:30`, and health-alert on the old schedule.
+Suggested fix: Update §9.4 to set/verify the D2 deploy hash as the reviewed commit (`e59107f`) and fetch/checkout it on the VPS before copying units. Then show copied unit contents with `bsc cat/show` before enabling.
+
+2. [LOW] `Persistent=true` can bypass the scheduled quality-window avoidance.
+Evidence: `ops/systemd/btcfut-health-digest.timer:6-7` and `ops/systemd/btcfut-health-alert.timer:6-7`; the test only parses nominal `OnCalendar` minutes at `tests/test_ops_vps.py:354-370`.
+Scenario: A missed `00:40` digest, or another persistent timer, can catch up immediately when the user timer is activated/booted, including at `00:10` during E2E quality. The health jobs are light, but this weakens the “no bot timer in quality window” guarantee.
+Suggested fix: Either remove `Persistent=true` from health timers, or document/test the residual catch-up behavior and accept it as lightweight. Sync is heavier, so be especially deliberate there.
+
+3. [LOW] Some authoritative text still says the old timer/memory values.
+Evidence: `docs/design_v1.md:270` still says `MemoryMax 700M` and digest `00:30 UTC`; `ops/systemd/btcfut-health-digest.timer:2` still describes the digest as `00:30 UTC`.
+Scenario: Later D2/audit work may follow the summary text rather than the template and miss the collector-priority change.
+Suggested fix: Update §17 and the timer description to `MemoryMax=400M`, `OOMScoreAdjust=500`, digest `00:40`.
+
+Notes on the direct questions: `MemoryMax=400M` looks plausible for normal operation but not proven. The normal path is bounded: 180 one-minute backfill, two ccxt.pro watches, three 60s parquet writers, sqlite, Telegram threads. Local import-only RSS reached about 130 MB before sockets/runtime state, so I do not see an obvious normal-operation OOM. The settling evidence is on-host `MemoryPeak` across startup/backfill, first shard rolls, Telegram active, and the 00:10 quality overlap, plus `memory.events`. If it OOMs normally, I’d try `500M`/`512M`, not jump back to `700M`.
+
+`OOMScoreAdjust=500` does make the kernel strongly prefer the bot over a default `oom_score_adj=0` collector under global OOM. It does not affect `MemoryMax` cgroup kills; those happen inside the bot service cgroup. `Restart=on-failure` should restart an OOM-killed bot, but repeated OOMs can hit `StartLimitBurst=5`.
+
+The calendar expression is right: `systemd-analyze calendar` confirms `*:03/5:30 UTC` fires at `:03,:08,:13,...` with second `:30`, so not `00:10-00:12` on its scheduled path. `_fires_at()` is correct enough for the current timer forms and would fail if a timer moved back into that window.
+
+I could not run pytest in this sandbox because there is no usable temp directory. I did not use the network, read `.env`, modify files, or SSH.
+
+Verdict: FIX FIRST, because D2 needs an explicit checkout/hash step or the reviewed unit changes may not be what gets installed.
+
+Codex session ID: 01a0b209-4b25-75f1-a713-4508db275016
+Resume in Codex: codex resume 01a0b209-4b25-75f1-a713-4508db275016
+```
+</details>
