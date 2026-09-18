@@ -1909,3 +1909,24 @@ Resume in Codex: codex resume 01a0b210-087d-79f3-8beb-dbfd83b44244
 sync Persistent 유지 + Nice 15·IO idle). D1은 `54b5af8`이었다. D2 창에서 VPS 체크아웃을 이 해시로 옮기고 `rev-parse`로 리터럴 대조한다
 (`diff -q`는 체크아웃↔설치본만 본다 — 옛 커밋 체크아웃은 잡지 못한다 · Codex 2026-09-18 재검토 #2).
 
+### Codex 재검토 #2(D2 최종 게이트) (`05d6031..da42ed8`, read-only · `task-mu69tu4z-fahjfy`)
+판정: **MERGE** · 새 발견 없음 · MEDIUM #2 CLOSED. Codex 확인: 고정 해시 `05d6031…` = `HEAD^`이고 그 뒤 커밋은 docs 2개만 바꾼다(`ops/systemd/` 불변) ·
+D2 검사 3종 커버 확인 — (a) 오래된 체크아웃 = 리터럴 `rev-parse`, (b) 설치 불일치 = 8파일 `diff -q`, (c) 손으로 고친 설치본 = 같은 diff.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+No findings.
+
+MEDIUM #2: **CLOSED**. Evidence: [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:130) pins `D2 = 05d6031b49fbba24df20ac3a133f6712bd11575c`; [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:131) says `rev-parse HEAD` catches stale/wrong checkout, while [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:132) and [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:198) correctly limit `diff -q` to checkout-to-installed mismatch. The health-alert absence check is now `grep -c "^Persistent"` at [docs/runbook_vps.md](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:68), so the comment line no longer counts.
+
+Pinned hash consistency: **confirmed**. `05d6031b49fbba24df20ac3a133f6712bd11575c` is exactly `HEAD^`, and `05d6031..HEAD` changes only `docs/ops_log.md` and `docs/runbook_vps.md`; `ops/systemd/` is unchanged. The pinned unit contents match the reviewed final state: bot `MemoryMax=400M` / `OOMScoreAdjust=500` at [ops/systemd/btcfut-bot.service](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-bot.service:28), digest `00:40` with retained `Persistent=true` at [ops/systemd/btcfut-health-digest.timer](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-health-digest.timer:6), health-alert `*:03/5:30` with no `Persistent=` directive at [ops/systemd/btcfut-health-alert.timer](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-health-alert.timer:6), and sync retains `Persistent=true` with `Nice=15` / IO idle at [ops/systemd/btcfut-sync.timer](/home/cms/project/BTC_Futures_E2E/ops/systemd/btcfut-sync.timer:8).
+
+D2 checks now cover the requested cases: stale checkout is caught by the literal `rev-parse HEAD` comparison in §9.4 step 2; install mismatch is caught by the eight-file `diff -q` loop in §3 3b; a hand-edited installed unit is also caught by that same checkout-to-installed diff.
+
+Verdict: **MERGE**. Read-only review only; I did not modify files, use the network, read `.env`, print secrets, or SSH.
+
+Codex session ID: 01a0b219-2042-7ed1-a6eb-01fcf5ec638f
+Resume in Codex: codex resume 01a0b219-2042-7ed1-a6eb-01fcf5ec638f
+```
+</details>

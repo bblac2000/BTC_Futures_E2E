@@ -57,5 +57,5 @@
 
 5n. [ ] 비차단 잔여(Codex 배포 전 재검토 #2): 오래된 breadcrumb 격리 이동 뒤 재생 커밋 전 사망 시 운영 이벤트가 stale 파일에만 남음 — 복사 후 재생 성공 시 삭제로 바꿀지 결정
 5o. [ ] 설계 메모만(코드 없음 · D2 뒤 · 페이퍼 첫 주 뒤 평가, 사용자 2026-09-16): breadcrumb 파일을 **DB 쪽 journal 테이블**로 대체 검토 — DB와 동기화하는 두 번째 상태 저장소라 세 배치 연속 추가 검토 라운드를 불렀다. 단일 저장소 · op_id 멱등 · 5n 해소. 평가 때 볼 것: DB 자체가 잠겨 쓸 수 없을 때(breadcrumb가 존재한 이유)의 fail-closed 경로를 무엇이 대신하는가.
-5p. [ ] D2 전: 유닛 템플릿 수정(MemoryMax 400M·OOMScoreAdjust 500·digest 00:40·health-alert :03/5분) **Codex 검토** 후 D2에서 설치
+5p. [x] D2 전 유닛 템플릿 수정 + **Codex MERGE(2026-09-18 · 3라운드)** → D2 해시 `05d6031`
 5q. [ ] D2 뒤 3일: `bsc show btcfut-bot -p MemoryPeak` · `memory.events`(cgroup) 포함 — 봇 실측 peak RSS · 00:10 겹침 여유 < ~300 MB면 swap 파일을 별도 날 라이브 변경으로(사용자 2026-09-18)
