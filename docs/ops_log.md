@@ -1821,3 +1821,10 @@ btcfut 사용자·홈 없음 · rclone v1.74.4·git·python3 존재.
 health-alert `*:03/5:30`(00:10~00:12 창 회피) · 테스트 `test_no_bot_timer_fires_during_the_e2e_quality_window`·MemoryMax/OOMScoreAdjust 잠금.
 prune 타이머는 미설치 유지 — §9.6 시각 결정 때 실측 타이머 기준(quality 00:10·digest 00:30·health 30분·sync :07·prune 일 02:30·integrity 일 03:30) 사용.
 
+### btcfut Drive remote — OAuth 클라이언트 출처(사용자 확인 2026-09-18)
+- `btcfut-drive`는 **vcb-rclone** OAuth 클라이언트를 쓴다(VolumeClockBot과 같은 클라이언트) · 수집기(`ubuntu`의 `gdrive:`)는 **e2e-rclone** 클라이언트로 별개다.
+  대조는 값 없이 지문으로: client_id sha256 앞 16자 — btcfut `f983259b5940a7e0` ≠ ubuntu `8444fd3f00aa97c4`.
+- 두 클라이언트 모두 **프로덕션 게시**(published) 상태라 7일 refresh 만료가 없다 → 봇 전용 클라이언트를 따로 만들지 않는다(사용자 결정).
+- `scope = drive.file`은 **그 클라이언트가 만든 파일만** 보여준다 → `rclone lsd`에 VolumeClockBot 폴더(`VCB_null_paper_tokyo`·`VCB_t1_paper_tokyo`)가 보이는 것은 **예상된 동작**이다.
+- 🔒 쓰기 경로는 `BTCFUT_DRIVE_REMOTE=btcfut-drive:BTC_Futures_E2E` 하나뿐이다(`ops/drive_sync.py`는 그 아래로만 copy · 원격 삭제 동사 없음 · `ops/prune.py`는 로컬만 지운다 · E2E 폴더 이름은 `remote_root()`가 거부).
+
