@@ -1956,3 +1956,90 @@ E2E 서비스 3종 active · `NRestarts=0` · 최근 5분 shard 49개 · 디스�
 - **E2E 불변**: 서비스 3종 active · `NRestarts=0` · ActiveEnter 2026-09-17 00:13:23(Restart B) 그대로 · 최근 5분 shard 45개 · 가용 메모리 962 MB(봇 기동 후).
 
 **다음**: 3일 실측(09-22 보고) — `MemoryPeak`·`memory.events`·00:10 겹침 여유. 겹침 여유 < ~300 MB면 swap을 별도 날 변경으로(레지스트리 #16 · TODO 5q).
+
+## 2026-09-19 — 트라이얼 #1 사전등록 Codex 1차 검토 (`task-mu7pkyzf-r3duoh` · read-only · 코드 없음)
+판정: **FIX FIRST**(BLOCKER 3 · MAJOR 4 · MINOR 1). Codex가 통과로 확인한 것: §7 기각 목록과 비중복 · 비용이 G2에 들어감 · B2 사이징 표 재현(0.30%→L100·margin 33.308·liq 0.5522% / 1.20% 거부) · 15m SL + 1m 감시가 옛 실패의 반대편.
+| # | Codex | 동의 | 조치 |
+|---|---|---|---|
+| 1 BLOCKER | 레벨 결합·SL 앵커·TP 레벨이 모호(터치가 VP면 SL 근거 불명) | ✅ | 롱=지지/숏=저항 각 3개 · 결합 레벨 = 봉 극값에 가장 가까운 터치 레벨(동률 저가) · SL 앵커 = 확정 15m 스윙(없으면 `no_sl_anchor` 건너뜀) · TP = 시각 유효 레벨 중 최근접(없으면 2R) · 동시 신호 `conflict_signal` |
+| 2 BLOCKER | 1m OHLCV로 VP를 구현할 수 없다(분배·동률 미정) | ✅ | 봉 quote volume 전부를 **종가 bin**에 · 창 = 직전 마감 1440봉 · POC 동률 저가 · VA 확장은 큰 쪽(동률 아래) · VAH/VAL = 포함 bin의 바깥 경계 |
+| 3 BLOCKER | 매수보유를 보고만 하면 최종 벤치마크를 못 이겨도 ACCEPT 가능 | ⚠️ **사용자 결정(P3)과 충돌** | 문서 §8-1에 미결로 명시 — (A) 사용자안 유지 (B) Sharpe 게이트 (C) 노출 조정 Sharpe 게이트 중 **앵커 전 사용자 확정** |
+| 4 MAJOR | `n_eff` 표기와 Arm B 게이트 의미가 불명확 | ✅ | `n_eff = n/(1+4ρ̂) ≥ 30` · ρ̂ > 0.15면 ρ̂로 재계산 · G1~G-B·벤치마크는 **Arm A만** · B는 대조군(짝지음 전제로만 n_eff ≥ 30) |
+| 5 MAJOR | A/B 짝지음 비교가 N=2 다중검정 밖 | ✅ | 짝지음 차이도 **97.5% CI** |
+| 6 BLOCKER | P4가 "당일 range"로 미래 정보 누출 | ✅ | 추출 범위 = 시각 t 기준 **직전 24h 마감 1m 고저** |
+| 7 MAJOR | 플라시보 기각 규칙이 층마다 불일치 | ✅ | P2·P3는 결정론적 대조(원판 ≤ 지연/반전이면 기각) · P1·P4는 분포 p95 유지 |
+| 8 MAJOR | OOS 끝이 앵커 시각에 따라 안전하지 않다 | ✅ | `OOS_end` = createdTime 이전 **완전 마감된 마지막 UTC 일** |
+| 9 MINOR | `skip_rate` 분모 미정의 | ✅ | 분모 = 터치+확인+필터+쿨다운+단일포지션 통과 셋업(=`sl_dist`·사이징 게이트 직전) · 암별·창별 · `no_sl_anchor`·`conflict_signal`도 같은 분모로 별도 보고 |
+**사용자 입장(§9-1)에 대한 Codex 판단**: (a) 1.00% 천장 = 사전확약 안전 밴드이지 튜닝 아님 — **동의** · (b) `sl_dist` 건너뜀은 결정 시점 정보라 룩어헤드 아님 — **동의**, 무효화 임계 **불필요**(G0가 이미 검정력 부족을 잡는다), 단 분모 정의는 필요(#9).
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+**Findings**
+
+1. [BLOCKER] S/R trade construction is still ambiguous enough to produce different trades.  
+Evidence: [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:26), [line 34](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:34), [line 37](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:37).  
+Why: “nearest 3 levels,” “SL = swing_low/high,” and “opposite level” do not say which level binds the trade, especially when the touched level is VP rather than a swing level.  
+Fix: precommit rules: eligible long levels are support levels below/at mark, shorts resistance above/at mark; bind the touched level with deterministic tie-breaks; SL anchor = nearest confirmed valid 15m swing outside the entry side, else skip `no_sl_anchor`; TP = nearest valid level on profit side from the timestamp-valid level set, else `2R`; simultaneous long/short confirmations skip as `conflict_signal`.
+
+2. [BLOCKER] Volume profile is not implementable from 1m klines as written.  
+Evidence: [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:23), [line 25](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:25), [line 139](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:139).  
+Why: 1m OHLCV does not say how volume is allocated into price bins; POC/VAH/VAL ties are unspecified.  
+Fix: define one deterministic method, e.g. “assign each closed 1m bar’s quote volume to the close-price bin; POC tie = lower price; VA expansion picks larger adjacent volume, tie = lower side; include whole bins until cumulative volume >=70%; use only the 1440 closed bars strictly before the decision close.”
+
+3. [BLOCKER] Benchmark gate is weakened versus the protocol.  
+Evidence: protocol requires benchmark after G-B [research-protocol.md](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:24); draft says BTC buy-and-hold is “보고만 · 게이트 아님” [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:87).  
+Why: this makes ACCEPT possible without beating the stated final benchmark.  
+Fix: make it mechanical: `Arm A daily net-equity Sharpe > BTC buy-and-hold daily Sharpe over the same window`, and keep `Arm A net return > 0` as the flat gate.
+
+4. [MAJOR] G0 notation and Arm B gate semantics are not clean.  
+Evidence: protocol says `n_eff >= 30 ⇔ n >= 30(1+4ρ)` [research-protocol.md](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:22); draft writes `n_eff >= 30(1+4ρ)` but interprets it as `n >= 48` [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:82). It also says gates are evaluated per arm [line 79](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:79), while the hypothesis is Arm A superiority.  
+Why: one implementation may require B to be independently profitable; another may treat B only as control.  
+Fix: write `n_eff = n / (1 + 4ρ_hat); require n_eff >= 30; prereg planning rho=0.15 implies n >= 48, but if rho_hat > 0.15 use rho_hat and fail as power-shortfall if short.` Apply G1/G2/G3/G-B/benchmark to Arm A; require Arm B `n_eff >= 30` only for the paired A/B comparison; report B standalone metrics.
+
+5. [MAJOR] PSR/DSR/Bonferroni are partly specified, but the paired A/B test is not integrated with N=2.  
+Evidence: N=2 is declared [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:151), G-B uses N=2 [line 86](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:86), A/B uses a separate 95% CI [line 88](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:88).  
+Why: the primary two-arm comparison can escape the same multiplicity discipline.  
+Fix: declare A as the only alpha candidate for PSR/DSR, with B as paired control, or keep N=2 and use Bonferroni-adjusted `97.5%` CI for the A-B paired difference too.
+
+6. [BLOCKER] P4 placebo leaks future information via “당일 range.”  
+Evidence: random levels are drawn from the day’s range [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:98).  
+Why: intraday decisions before the daily close cannot know the full day high/low.  
+Fix: draw random levels from a decision-time range only, e.g. rolling prior 24h closed 1m high-low as of timestamp `t`, preserving level counts and validity.
+
+7. [MAJOR] Placebo rejection rules are inconsistent across layers.  
+Evidence: P1/P4 use distributions and p95; P2/P3 use direct comparisons [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:95).  
+Why: “must exceed each placebo distribution’s p95” is not actually defined for P2/P3.  
+Fix: either define P2/P3 as deterministic controls: reject if original net edge `<= max(delay+1, delay+5)` or `<= inverted`; or bootstrap each placebo 1,000 times and require original `> p95`.
+
+8. [MAJOR] OOS endpoint depends on anchor timing.  
+Evidence: OOS is `2026-07-01 00:00Z → 앵커일 전일 23:59Z` [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:112).  
+Why: if Drive createdTime is before that prior UTC day is fully available, the endpoint is not mechanically safe.  
+Fix: `OOS_end = latest fully closed UTC day strictly before Drive createdTime`; if anchoring on 2026-09-19 UTC after 00:05Z, end may be 2026-09-18 23:59Z; otherwise use 2026-09-17 23:59Z.
+
+9. [MINOR] `skip_rate` denominator needs a rule.  
+Evidence: skip reporting is precommitted but “후보 셋업 수” is not defined [trial_01_preregistration.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:36).  
+Why: skip rate can change depending on whether candidates are counted before/after filter, cooldown, conflict, or one-position rules.  
+Fix: report per arm and per window: denominator = setups that pass S/R touch, rejection confirmation, direction filter if applicable, cooldown, and one-position rule, before `sl_dist` and sizing/liquidation gates.
+
+**Checks That Pass**
+
+The non-overlap argument is mostly honest: this is not Donchian breakout + meta-label, not volatility/chop as base signal, not spread, VPIN, funding-alone, or sub-30-minute signal reuse. The 1m bar is timing, while direction is 4h and SL/TP geometry is 15m/hours-scale.
+
+The cost model is at the right gate: 14 bps plus realized funding enters G2, after gross edge and before OOS.
+
+The sizing table is consistent with the current B2 path. I verified the canonical snapshot path gives `0.30% -> L=100, margin=33.308, liq_dist=0.5522%`; `0.50% -> L=83`; `1.00% -> L=51`; `1.20% -> liq_distance reject`.
+
+I agree with §9-1(a): the 1.00% cap is a precommitted geometry/safety band alongside the dynamic #5 gate, not tuning. I agree with §9-1(b): the skip uses decision-time information and should shrink `n`, not create look-ahead. I do not require an invalidation threshold; G0 already invalidates underpowered realized samples. Just define the denominator as above.
+
+The 15m SL monitored on 1m mark is the correct side of the prior scale failure, not a repeat of “15m buffer + 4h SL.”
+
+**Verdict: FIX FIRST**
+
+No data should be examined to settle these. Realized `n`, `rho_hat`, skip rate, MDE, and placebo distributions are only settleable after anchoring and implementation.
+
+Codex session ID: 01a0b747-8a87-7ec3-8509-a0b862cc3571
+Resume in Codex: codex resume 01a0b747-8a87-7ec3-8509-a0b862cc3571
+```
+</details>
+
