@@ -2043,3 +2043,9 @@ Resume in Codex: codex resume 01a0b747-8a87-7ec3-8509-a0b862cc3571
 ```
 </details>
 
+
+### 트라이얼 #1 재검토 보류 — Codex 쿼터 소진 (2026-09-19 01:38 UTC · `task-mu7pxyo7-845c95` **failed**)
+1차 검토(FIX FIRST)는 끝났고 수정도 반영했으나, **재검토(MERGE 판정)는 시작 직후 쿼터로 중단**됐다.
+로그 원문: `Codex error: You've hit your usage limit. … try again at Sep 21st, 2026 7:25 AM.` — 모델이 diff를 읽은 뒤 판정 전에 끊겼다(부분 출력만 존재, 판정 없음).
+→ **앵커는 재검토 MERGE 뒤**. 프롬프트는 `scratchpad/codex_trial01_b_prompt.md`에 그대로 대기(범위 `22cddbd..HEAD`). 쿼터 복구 시각 이후 재전송한다.
+그 사이 문서 변경 금지(변경하면 재검토 범위가 달라진다).
