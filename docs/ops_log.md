@@ -1930,3 +1930,29 @@ Codex session ID: 01a0b219-2042-7ed1-a6eb-01fcf5ec638f
 Resume in Codex: codex resume 01a0b219-2042-7ed1-a6eb-01fcf5ec638f
 ```
 </details>
+
+## 2026-09-19 00:39–00:45 UTC — **D2 실행**(유닛 설치·기동 · 커밋 `05d6031`)
+
+**게이트**: 09-18 판정 **PASS**(rows_1s 86,380/86,400 · gap 0.0231% · reconnects 1 · `counts_toward_gate` true · 00:11:26Z 기록) ·
+E2E 서비스 3종 active · `NRestarts=0` · 최근 5분 shard 49개 · 디스크 45G/96G · 가용 메모리 1074 MB.
+
+| 단계 | 결과 |
+|---|---|
+| 2 코드 | `fetch` → `checkout 05d6031b…` → **`rev-parse` 리터럴 일치** · `status --short` 비어 있음 · `uv sync --frozen` 변화 없음(34 패키지) |
+| 3a 설치 | 유닛 8개 복사 + `daemon-reload`(기동 없음) |
+| 3b 대조 | 8파일 `diff -q` **MISMATCH 0** · `MemoryMax=400M`·`OOMScoreAdjust=500`·`Nice=10` · digest `00:40` · health-alert `*:03/5:30` · health-alert `^Persistent` **0줄** |
+| 4 cgroup 게이트 | btcfut(uid 1001) controllers = `cpu memory pids` → **memory 위임 확인**(MemoryMax 실효) |
+| 5 기동(00:40:20) | `enable --now` 4개 · `btcfut-bot` **active(running)** · `NRestarts=0` · 다음 타이머 health-alert 00:43:30 · sync 01:20 · digest 내일 00:40 — **00:10~00:12 발화 없음** |
+
+**기동 후 대조**
+- 🟢 기동 알림 **배달 확인**(`sent 1 = delivered 1` · poll_errors 0 · send_errors 0).
+- 상태 파일 나이 0~1초 · `blockers []` · `stalled []` · `entries_allowed true` · `confirmed_facts []`(첫 기동 = 대장 비어 있음 → dirty 없음) · db_errors 0.
+- 규칙 `runtime:signed` 6종 · `fallback_reason null` — VPS에서 읽기 전용 키로 런타임 조회 성공.
+- 봉: REST 백필 179 + WS 누적 · 전달 나이 mark 0.06초·update 0.14초·close 55초(전부 grace 안).
+- **첫 sync 수동 실행(00:42:06 → 00:42:16 success)**: 원격에 **`BTC_Futures_E2E` 폴더 생성**(`db/bot.sqlite`·`db/manifest.sqlite`) ·
+  마커 `LAST_SYNC.txt` = `sync ok · raw_live: ok · bot_db: ok · manifest: ok` · E2E 폴더는 건드리지 않는다.
+- 첫 health-alert(00:43:30): `[health] alert none` — 문제 없음.
+- **메모리**: 봇 RSS 218 MB(기동·백필) → 227 MB(정상) · `MemoryPeak` 227 MB · cgroup `memory.events` **전부 0**(low/high/max/oom/oom_kill 0) → 400 MB 상한 대비 여유.
+- **E2E 불변**: 서비스 3종 active · `NRestarts=0` · ActiveEnter 2026-09-17 00:13:23(Restart B) 그대로 · 최근 5분 shard 45개 · 가용 메모리 962 MB(봇 기동 후).
+
+**다음**: 3일 실측(09-22 보고) — `MemoryPeak`·`memory.events`·00:10 겹침 여유. 겹침 여유 < ~300 MB면 swap을 별도 날 변경으로(레지스트리 #16 · TODO 5q).
