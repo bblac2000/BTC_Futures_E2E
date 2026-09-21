@@ -60,6 +60,7 @@ class ExitReason(StrEnum):
     POST_FILL_GATE = "post_fill_gate"      # 실제 체결 기준 #5 게이트 실패(또는 SL이 청산가 뒤) → 즉시 청산
     MANUAL = "manual"                      # 텔레그램 /close 등
     STALE_DATA = "stale_data"              # 레지스트리 #12 — 피드 무수신이 #1 grace를 넘었다(PAPER는 마지막 수신 mark로 체결)
+    TRAIL = "trail"                        # 트레일링으로 옮겨진 SL에서 청산(`EntryIntent.trail`이 있을 때만 · 기본 꺼짐)
 
 
 class SkipReason(StrEnum):
@@ -156,6 +157,14 @@ class EntrySkipped:
     decision: SizingDecision | None
     reason: SkipReason
     detail: str
+
+
+@dataclass(frozen=True)
+class StopTrailed:
+    """트레일링이 SL을 조였다(`EntryIntent.trail`이 있을 때만 나온다). 새 SL은 **다음 봉/틱부터** 판정한다."""
+    ts_ms: int
+    old_sl: Decimal
+    new_sl: Decimal
 
 
 @dataclass(frozen=True)

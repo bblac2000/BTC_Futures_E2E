@@ -23,6 +23,11 @@
   · LIVE 소실 손익은 추정하지 않고 거래소 지갑 재동기화(`sync_wallet` → `WalletResynced`)로 들어온다(사용자 2026-09-16).
 - PAPER 재기동 복원: `position_state()`(엔진 스냅샷에 들어감) ↔ `restore_position()`(→ `PositionRestored`) — 대조·판단은
   `ops.restore`. 복원 뒤 첫 틱이 내려가 있던 동안의 펀딩 경계를 넘었으면 `FundingMissed` + 진입 차단(율 추정 없음).
+- **트레일링(단계 2c · 트라이얼 #1 사전등록 §1)**: `EntryIntent.trail`이 있을 때만 켜진다 — **기본 None = 꺼짐**.
+  None이면 `_trail`이 곧바로 돌아가고 스냅샷에 `trail` 키도 없다 → **돌고 있는 페이퍼 봇(전략 없음 · trail 없음) 경로는 그대로다**.
+  켜지면: R = 체결 진입가와 초기 SL의 거리 · 유리한 극값(틱 = mark, 봉 = 롱 고가/숏 저가)이 진입가 ± arm_r×R에 닿으면 무장 →
+  SL = 극값 ∓ dist로 **조이기만** 한다. 판정(`_evaluate`) **뒤에** 갱신하므로 새 SL은 다음 봉/틱부터 쓴다(봉 안 순서 불명 · 보수적).
+  옮겨진 SL에서 나가면 `ExitReason.TRAIL`(체결 기준은 SL과 같다).
 """
 from __future__ import annotations
 
@@ -56,6 +61,7 @@ from paper.types import (
     PositionVanished,
     PostFillCheck,
     SkipReason,
+    StopTrailed,
     WalletResynced,
 )
 from sizing.config import RegimeSizing, SizingLimits
@@ -80,6 +86,13 @@ class FeedError(ValueError):
 
 
 @dataclass(frozen=True)
+class Trail:
+    """트레일링 설정(전략 config에서 온다) — `arm_r` R 이익 뒤 SL = 극값 ∓ `dist`(가격 거리 · 결정 시점에 고정)."""
+    arm_r: Decimal
+    dist: Decimal
+
+
+@dataclass(frozen=True)
 class EntryIntent:
     """전략 출력 — 무엇을 원하는가. 크기·레버리지는 실행 시점에 엔진이 정한다."""
     direction: Direction
@@ -88,6 +101,7 @@ class EntryIntent:
     regime: RegimeSizing
     decided_ms: int
     decision_mark: Decimal                 # 결정 시점 mark(기록·TP 방향 검사용 — 체결가 아님)
+    trail: Trail | None = None             # 기본 꺼짐 — 트라이얼 전략 config가 켤 때만
 
 
 @dataclass
@@ -104,6 +118,10 @@ class OpenPosition:
     decision: SizingDecision | None                 # 재기동 복원 포지션은 None(진입 뒤에는 읽지 않는다)
     funding_paid: Decimal
     liq_alerted: bool = False
+    trail: Trail | None = None
+    trail_r: Decimal | None = None                  # 초기 R(가격 거리) — 체결 진입가와 초기 SL
+    trail_armed: bool = False
+    trail_moved: bool = False                       # SL이 한 번이라도 옮겨졌다 → 그 SL 청산은 TRAIL
 
     @property
     def signed_qty(self) -> Decimal:
@@ -138,6 +156,8 @@ class Engine:
         if self.position is not None or self.pending is not None:
             raise EntryRefused("포지션 또는 대기 진입이 이미 있다(원웨이 단일 포지션)")
         long_ = intent.direction is Direction.LONG
+        if intent.trail is not None and not (intent.trail.arm_r > 0 and intent.trail.dist > 0):
+            raise ValueError(f"trail 값은 양수여야 한다: {intent.trail}")
         if intent.tp is not None and ((long_ and intent.tp <= intent.decision_mark)
                                       or (not long_ and intent.tp >= intent.decision_mark)):
             raise EntryRefused(f"TP {intent.tp}가 {intent.direction} 결정 mark {intent.decision_mark}의 잘못된 쪽")
@@ -167,6 +187,7 @@ class Engine:
                 return ev
         if self.position is not None:
             ev += self._evaluate(t.ts_ms, low=t.mark, high=t.mark, sl_ref=t.mark, tp_ref=t.mark, mark=t.mark)
+            ev += self._trail(t.ts_ms, t.mark, t.mark)
         return ev
 
     def on_bar(self, b: MarkBar) -> list[object]:
@@ -181,6 +202,7 @@ class Engine:
         else:
             sl_ref, tp_ref = max(pos.sl, b.open), pos.tp
         ev += self._evaluate(b.close_ms, low=b.low, high=b.high, sl_ref=sl_ref, tp_ref=tp_ref, mark=b.close)
+        ev += self._trail(b.close_ms, b.low, b.high)
         return ev
 
     def on_funding(self, *, ts_ms: int, rate: Decimal, mark: Decimal) -> list[object]:
@@ -205,11 +227,16 @@ class Engine:
         pos = self.position
         if pos is None:
             return None
-        return {"direction": pos.direction.value, "qty": str(pos.qty), "entry_price": str(pos.entry_price),
-                "leverage": pos.leverage, "sl": str(pos.sl), "tp": None if pos.tp is None else str(pos.tp),
-                "liq_price_est": str(pos.liq_price_est), "entry_commission": str(pos.entry_commission),
-                "funding_paid": str(pos.funding_paid), "opened_ms": pos.opened_ms, "liq_alerted": pos.liq_alerted,
-                "next_funding_ms": self._restored_next_funding_ms if self._last_tick is None else self._last_tick.next_funding_ms}
+        st: dict[str, Any] = {
+            "direction": pos.direction.value, "qty": str(pos.qty), "entry_price": str(pos.entry_price),
+            "leverage": pos.leverage, "sl": str(pos.sl), "tp": None if pos.tp is None else str(pos.tp),
+            "liq_price_est": str(pos.liq_price_est), "entry_commission": str(pos.entry_commission),
+            "funding_paid": str(pos.funding_paid), "opened_ms": pos.opened_ms, "liq_alerted": pos.liq_alerted,
+            "next_funding_ms": self._restored_next_funding_ms if self._last_tick is None else self._last_tick.next_funding_ms}
+        if pos.trail is not None:                      # 트레일링 없는 포지션(현 봇)은 키 자체가 없다 — 스냅샷 형태 불변
+            st["trail"] = {"arm_r": str(pos.trail.arm_r), "dist": str(pos.trail.dist), "r": str(pos.trail_r),
+                           "armed": pos.trail_armed, "moved": pos.trail_moved}
+        return st
 
     def restore_position(self, state: dict[str, Any], *, ts_ms: int, detail: str) -> list[object]:
         """PAPER 재기동 복원 — 호출자(`ops.restore`)가 DB와 스냅샷이 일치함을 확인한 뒤에만 부른다."""
@@ -223,6 +250,10 @@ class Engine:
                            None if state["tp"] is None else Decimal(state["tp"]), Decimal(state["liq_price_est"]),
                            Decimal(state["entry_commission"]), int(state["opened_ms"]), None,
                            Decimal(state["funding_paid"]), bool(state["liq_alerted"]))
+        tr = state.get("trail")
+        if tr is not None:
+            pos.trail, pos.trail_r = Trail(Decimal(tr["arm_r"]), Decimal(tr["dist"])), Decimal(tr["r"])
+            pos.trail_armed, pos.trail_moved = bool(tr["armed"]), bool(tr["moved"])
         #  Codex L8b #2: 스냅샷의 추정 청산가는 쓰지 않는다 — 현재 규칙으로 다시 계산(`_refresh_liquidation`과 같은 식).
         #  계산할 수 없으면 복원하지 않는다(RulesError를 호출자에게).
         n = pos.qty * pos.entry_price
@@ -367,6 +398,8 @@ class Engine:
         post = self._post_fill(d, entry, qty)
         self.position = OpenPosition(d.direction, qty, entry, d.leverage, d.sl, pe.tp, post.liq_price_est, commission,
                                      ts_ms, d, Decimal())
+        if pe.trail is not None:
+            self.position.trail, self.position.trail_r = pe.trail, abs(entry - d.sl)
         live_ev: list[object] = []
         if self.mode is Mode.LIVE:
             post, live_ev = self._live_after_entry(ts_ms, d, post)
@@ -430,11 +463,29 @@ class Engine:
                 ev.append(LiquidationThresholdCrossed(ts_ms, mark, pos.liq_price_est))
         sl_hit = low <= pos.sl if long_ else high >= pos.sl
         if sl_hit:
-            return ev + self._exit(ExitReason.SL, sl_ref, ts_ms)
+            return ev + self._exit(ExitReason.TRAIL if pos.trail_moved else ExitReason.SL, sl_ref, ts_ms)
         tp = pos.tp
         if tp is not None and (high >= tp if long_ else low <= tp):
             return ev + self._exit(ExitReason.TP, tp if tp_ref is None else tp_ref, ts_ms)
         return ev
+
+    def _trail(self, ts_ms: int, low: Decimal, high: Decimal) -> list[object]:
+        """판정 뒤에 부른다 — 여기서 조인 SL은 다음 봉/틱부터 쓴다. trail이 없으면(기본) 아무것도 하지 않는다."""
+        pos = self.position
+        if pos is None or pos.trail is None or pos.trail_r is None:
+            return []
+        long_ = pos.direction is Direction.LONG
+        best = high if long_ else low
+        if not pos.trail_armed:
+            gain = best - pos.entry_price if long_ else pos.entry_price - best
+            if gain < pos.trail.arm_r * pos.trail_r:
+                return []
+            pos.trail_armed = True
+        cand = best - pos.trail.dist if long_ else best + pos.trail.dist
+        if (long_ and cand <= pos.sl) or (not long_ and cand >= pos.sl):
+            return []
+        old, pos.sl, pos.trail_moved = pos.sl, cand, True
+        return [StopTrailed(ts_ms, old, cand)]
 
     def _liquidate(self, ts_ms: int) -> list[object]:
         """PAPER — 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩) 전부 + N × liquidationFee."""

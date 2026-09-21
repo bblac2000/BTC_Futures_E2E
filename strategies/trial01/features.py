@@ -12,16 +12,21 @@
 """
 from __future__ import annotations
 
+import decimal
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from decimal import ROUND_FLOOR, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 
 import numpy as np
 
 from backtest.data import MINUTE_MS, Bar1m
 
 H_MS = 3_600_000
+#  정본 10진 문맥(파이썬 기본값과 같다: 28자리 · HALF_EVEN). **명시적으로 고정**한다 — ccxt `decimal_to_precision`이
+#  호출되면 스레드 전역 문맥의 rounding을 HALF_UP으로 바꿔 놓는다(되돌리지 않음). 그러면 같은 봉에서 피처의 마지막 자리가
+#  프로세스의 import·호출 이력에 따라 달라진다(단계 2c 테스트 순서 의존으로 발견). 기본값과 같으므로 2b 값은 그대로다.
+DECIMAL_CTX = decimal.Context(prec=28, rounding=ROUND_HALF_EVEN)
 
 
 @dataclass(frozen=True)
@@ -278,6 +283,10 @@ class FeatureEngine:
 
     def step(self, b: Bar1m) -> FeatureRow:
         """봉 b가 마감된 직후의 피처(결정 시각 = b 마감). VP는 b를 넣기 **전** 값(결정 봉 제외)."""
+        with decimal.localcontext(DECIMAL_CTX):
+            return self._step(b)
+
+    def _step(self, b: Bar1m) -> FeatureRow:
         vp = self.vp.value()
         a1 = self.atr1.update(b.d("high"), b.d("low"), b.d("close"))
         row: dict[str, Decimal | None] = {"atr_1m": a1, "vp_poc": vp.poc if vp else None,

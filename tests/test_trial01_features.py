@@ -206,3 +206,17 @@ def test_slow_features_are_carried_from_warmup_into_the_first_window_row():
     assert [r.bar_open_ms for r in out] == [T0, T0 + M]
     assert out[0].values == {"atr_15m": D(5), "tsmom_4h": D(1), "bucket_incomplete_15m": D(0), "atr_1m": D(3)}
     assert out[1].values == rows[3].values, "둘째 행부터는 그대로"
+
+
+def test_features_do_not_depend_on_the_callers_decimal_context():
+    """ccxt `decimal_to_precision`은 전역 rounding을 HALF_UP으로 바꿔 놓는다 — 피처는 정본 문맥으로 고정돼 같아야 한다."""
+    import decimal
+
+    from strategies.trial01.features import run as frun
+    from tests.fixtures.dummy_replay_strategy import bars as tri_bars
+    bs = tri_bars(3000)
+    base, _ = frun(bs, Decimal("0.1"))
+    with decimal.localcontext() as c:
+        c.rounding, c.prec = decimal.ROUND_HALF_UP, 12
+        other, _ = frun(bs, Decimal("0.1"))
+    assert [r.values for r in base] == [r.values for r in other]

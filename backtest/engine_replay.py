@@ -6,6 +6,7 @@
    같은 봉에서 청산 > SL > TP 우선순위 · SL 체결 기준 = SL과 시가 중 불리한 쪽(엔진 규칙 그대로).
 3. 분 m **마감 뒤** 전략이 판단한다(분 m 종가까지의 정보만) → 진입 의도는 `decided_ms = 분 m 마감`으로 낸다.
 전략은 `on_minute_closed(bar, ctx) -> EntryIntent | None`만 구현하면 된다. 결정·건너뜀 사유는 전략이 `ctx.skip(reason)`으로 남긴다.
+`ctx.bar_events` = 그 분 `on_bar`의 엔진 이벤트(전략이 청산 시각을 알아 쿨다운을 건다).
 창 끝에 열린 포지션은 **트레이드로 세지 않고** `open_at_end`로 따로 보고한다(사전등록이 정하지 않았다 — 단계 d Codex 질문).
 """
 from __future__ import annotations
@@ -31,6 +32,7 @@ class ReplayContext:
     engine: Engine
     decisions: list[dict[str, Any]] = field(default_factory=list)
     now_ms: int = 0
+    bar_events: list[object] = field(default_factory=list)     # 이번 분 `on_bar`가 낸 엔진 이벤트(체결·청산 — 쿨다운 등)
 
     @property
     def has_position(self) -> bool:
@@ -68,7 +70,8 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
             fi += 1
         wallet_before = eng.wallet
         liq_now = eng.position.liq_price_est if eng.position is not None else None   # 이 봉에서 청산되면 gross 기준가
-        for ev in eng.on_bar(mark_bar(b)):
+        ctx.bar_events = eng.on_bar(mark_bar(b))
+        for ev in ctx.bar_events:
             if on_event is not None:
                 on_event(ev)
             if isinstance(ev, EntryFilled):

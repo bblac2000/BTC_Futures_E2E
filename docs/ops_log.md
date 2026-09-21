@@ -2277,3 +2277,29 @@ features_adv 5,439,164행 · 넓은 형식 1,313,278행(느린 피처 빈 값 0)
 **features_adv 행 SHA256 `dec39c92daebf8ccf78b94a4f3dc24a0abc44529f763b2e6bea48efab7b5bc08`**(두 번 동일).
 **단계 d 질문으로 넘길 구현 선택**: POC 가격 = POC bin **중앙**(사전등록은 VAH/VAL 경계만 정함) · 워밍업 35일(창 전 아카이브로 피처만) ·
 VP 창은 **봉 1440개**(결손 분이 있으면 시간상 1440분보다 길다) · 결손이 버킷 마지막 분이면 버킷은 다음 버킷 첫 봉에서 낸다.
+
+
+## 2026-09-21 — 단계 2c 전략 플러그인 trial_01(Arm A/B) + 트레일링(엔진 · 기본 꺼짐) · 손익 계산 없음
+**구성**: `strategies/trial01/config.py`(§1 표 값 · sr_v1 SHA256) · `strategy.py`(`Trial01` — touch → confirmation(도지 가드) → conflict_signal →
+filter(Arm A만) → cooldown 60분 → one_position → [분모 `candidate=True`] → SL 앵커(no_sl_anchor) → sl_dist 범위(sl_dist_out_of_range) → TP → 의도 ·
+`--delay`(P2)·`--invert`(P3) 플래그) · `run.py`(정본 CLI `python -m strategies.trial01.run --window IS --arm A|B [--delay K] [--invert] --out DIR` ·
+워밍업 35일은 피처만 · 출력 decisions/trades/open_at_end.jsonl + summary.json(**개수·설정만, 지갑·수익 없음**)) ·
+`backtest/engine_replay.py`: `ctx.bar_events`(그 분 엔진 이벤트 — 쿨다운용 청산 시각).
+**트레일링(`paper/engine.py`)**: `EntryIntent.trail: Trail | None = None` — **기본 None = 꺼짐**. None이면 `_trail`이 즉시 돌아가고 스냅샷에 `trail` 키도 없다
+→ **돌고 있는 페이퍼 봇(D2 `05d6031` · 전략 없음 · trail 없음)의 경로·이벤트·스냅샷 형태는 바뀌지 않는다**(테스트: 3R 상승에도 SL 불변 · 기본값 = 명시적 None과
+이벤트 동일 · 스냅샷 키 집합 불변). 켜지면 R = |체결 진입가 − 초기 SL| · 유리한 극값(봉 = 롱 mark 고가/숏 저가 · 틱 = mark)이 +arm_r×R이면 무장 →
+SL = 극값 ∓ dist로 조이기만 · **판정 뒤 갱신 → 다음 봉/틱부터 적용**(봉 안 순서 불명 · 보수적) · 옮겨진 SL 청산 = `ExitReason.TRAIL`(새 값) · 이벤트 `StopTrailed` ·
+스냅샷/복원에 trail 상태 포함(있을 때만). 트라이얼 #1 config는 `trailing=True`(사전등록 §1에 트레일링 행이 있다).
+**10진 문맥 고정**: ccxt `decimal_to_precision`은 호출 시 스레드 전역 rounding을 **HALF_UP으로 바꿔 놓고 되돌리지 않는다**(전체 테스트 순서에서 ATR_15m
+28번째 자리 차이로 발견). 백테스트 프로세스는 ccxt를 import하지 않아(`load_rules()` 뒤에도 `sys.modules`에 없음 — 확인) 2b 값은 영향 없음 — 그래도 `features.DECIMAL_CTX`(28자리·HALF_EVEN = 파이썬 기본)를
+`FeatureEngine.step`·`Trial01.on_minute_closed`·`run.run`(엔진 산술 포함)에 명시 고정. **재빌드 features_adv SHA256 `dec39c92…` 동일**.
+🔴 단계 d 질문: 봇 프로세스는 ccxt를 쓰므로 `sizing/position.py`의 `localcontext()`(prec만 설정)는 HALF_UP rounding을 물려받는다 — 기존 동작, 이번에 바꾸지 않음.
+**검증**: 814 passed · ruff·pyright 0 · stream-tiers 위반 0. 규칙별 테스트 32개(손으로 만든 봉 + 고정 피처) · 트레일링 11개 · 2b 정본 피처와 전략 피처 대조(표본 분) ·
+**30일 조각(IS 첫 30일 + 워밍업 35일) 결정론: 별도 프로세스 두 번 × 두 암 = 출력 SHA256 전부 동일**(A decisions `29e0e2fb…` · trades `5178ef05…` ·
+B decisions `8e94247f…` · trades `e8f65063…`) · 조각 1회 약 16초 · RSS 0.8 GB. trades.jsonl의 수익 필드는 읽지 않았다.
+**조각 개수(성과 아님)**: 터치 롱 5,344·숏 4,975 · 확인 롱 2,263·숏 2,100 · 만료 1,043 · 동시 신호 32봉 ·
+A: filter 2,186 · cooldown 18 · one_position 1,393 · 후보 702(no_sl_anchor 40 · sl_dist_out_of_range 525 · 의도 137 → 체결 136 · 엔진 사이징 거부 1) ·
+B: cooldown 66 · one_position 3,401 · 후보 832(no_sl_anchor 84 · sl_dist_out_of_range 564 · 의도·체결 184).
+**단계 d 질문(레지스트리 #21 후보)**: `strategy.py` 머리말 ⓐ~ⓚ(터치·확인 = mark 봉 · 봉 시작 기준 레벨 집합 · 밴드 "안" 문언 · 최근 터치가 대체 · conflict는 필터 전 ·
+쿨다운 레벨 신원 · 결정 봉 마감 기준 SL/TP · TP 후보 = 전체 유효 레벨 · 트레일 거리 진입 때 고정 · 지연/반전 정의) + 트레일 무장·극값 봉 근사 · equity 1,000.
+  + R 기준 두 가지: 트레일 R = |체결 진입가(2 bps 슬리피지 포함) − SL| · TP 2R·1.5R = |결정 mark − SL| · conflict를 필터 뒤로 두면 Arm A 분모가 커진다(조각 32봉).
