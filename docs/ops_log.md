@@ -2127,3 +2127,33 @@ Resume in Codex: codex resume 01a0c32c-5f8c-7a62-abd3-3c2a58c740e4
 **문구 정정(2026-09-21 · 위 사용자 입장 기록을 고치지 않고 덧붙인다)**: "신호 정보는 넘어가지 않는다"는 과한 표현이었다(Codex) →
 **"전략이 만든 기하(노출·위험·보유시간)는 설계상 넘어가고, 원 신호의 시각·방향과 이후 수익의 정렬은 넘어가지 않는다."** 사전등록 P1 행에 이 문구로 반영.
 사용자 지시로 3개 수정 적용: 레지스트리 초안 G0 표기·Arm A 판정 주체 · 초안 `OOS_end` createdTime 규칙 · P1 쌍 공동 재표집 + 창 안 청산만 추출(창 끝 과소표집 수용).
+
+### 좁힌 재검토 (`206401a..233ce74` · `task-mub0o6xc-3amkft` · 쿼터 오류 없음)
+판정: **FIX FIRST** — #4 **CLOSED** · #8 **CLOSED** · P1 **PARTIAL(결정론만)**: 통계 설계와 룩어헤드 없음은 확인, 1,000회·p95 규칙 유지 확인.
+남은 것 = 같은 시드로 두 구현자가 같은 귀무분포를 내도록 **① 진입 시각 격자 ② 진입+보유시간 → 청산 관측 매핑 ③ 구간 끝점·겹침·배치 순서 ④ RNG 알고리즘·추출 순서 ⑤ 재추출·사이징 실패 시 처리** 고정. 동의 — 사용자 확인 후 반영.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+Verdict: **FIX FIRST**
+
+1. **#4 — CLOSED.** The registry now matches the pre-registration: identical `n_eff = n/(1+4ρ̂) ≥ 30`, planning threshold `n ≥ 48`, recomputation above `ρ̂=0.15`, power-shortfall classification, Arm A as verdict subject, and Arm B’s requirement limited to the paired-comparison precondition. Evidence: [registry draft:8](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_registry_row_draft.md:8), [pre-registration:84](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:84), [pre-registration:88](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:88), [pre-registration:94](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:94).
+
+2. **#8 — CLOSED.** Both documents derive `OOS_end` mechanically from Drive `createdTime` as the end of the preceding fully closed UTC day; the registry explicitly forbids separately entering the date. Evidence: [registry draft:8](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_registry_row_draft.md:8), [pre-registration:118](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:118).
+
+3. **P1 — PARTIAL.** The substantive statistical design is now present: joint `(sl_dist, holding_time)` resampling, B2 sizing, duration-only exit without SL/TP, identical costs, in-window eligibility, overlap redraw, no clipping/dropping/out-of-window reads, accepted edge under-sampling, and the revised rationale. It introduces no return-based look-ahead: eligibility depends only on the sampled duration and fixed window boundary. The row also retains **1,000 draws** and rejection at **strategy net edge ≤ placebo p95**. Evidence: [pre-registration:101](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101).
+
+The remaining blocker is determinism. Two implementers given the same seed can still obtain different null samples because line 101 does not define:
+
+- The eligible “timestamp” grid—1-minute boundaries, available mark observations, or another set.
+- How `entry + holding_time` maps to an exit observation.
+- Interval endpoint/overlap semantics and placement order.
+- RNG algorithm and random-draw order.
+- Deterministic handling when overlap redraws or B2 sizing cannot produce the required trade count.
+
+Until those conventions are frozen, the P1 null distribution and its p95 are implementation-dependent. No files were modified.
+
+Codex session ID: 01a0c333-a67b-7ed3-81dd-0586899056f6
+Resume in Codex: codex resume 01a0c333-a67b-7ed3-81dd-0586899056f6
+```
+</details>
