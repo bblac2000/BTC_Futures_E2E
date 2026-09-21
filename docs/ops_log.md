@@ -2832,3 +2832,157 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
 **문서**: 레지스트리 #23(1·2는 **봇 결함 수정**이지 트라이얼 변경이 아님) · TODO 5o에 두 결함을 "두 번째 저장소" 증거로 · 런북 §9.7에 v3 마이그레이션(사본 → `--status` → 적용 → `--status`)과 새 스냅샷의 arith 태그 확인.
 **검증**: 856 passed · ruff·pyright 0 · stream-tiers 0 · 백테스트 경로 불변: 30일 조각 A decisions `789bf4d5…`·trades `80991df7…` · P4 추출 0 decisions `cd81a95a…`·trades `49327350…`(이전과 동일).
 **메모리 판독**: 작업 a8905872는 살아 있고 09-22 00:07 UTC(00:10 겹침 창 직전)에 실행 예정 — 수동 실행은 그 창을 놓치므로 하지 않음.
+
+
+## 2026-09-21 — 단계 d 후속 3차 Codex 검토(97a89a9) · task-mubog0qp-clw9vz · 판정 **MERGE**
+비차단 지적 처리: #1(FIFO 전역 아님)·#3(장애 중 큐 무한 성장) → TODO 5o에 기록 · #2(롤백 절차 없음) → 런북 §9.7에 `.backup` 사본·integrity_check·롤백 절차 추가(문서만). 아래 원문 그대로.
+
+> ## Findings
+> 
+> 1. **MEDIUM — FIFO is not global**
+>    [runtime.py:359](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:359),
+>    [runtime.py:452](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:452),
+>    [runtime.py:502](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:502)
+> 
+>    `unrecorded` orders engine-event/snapshot batches only.
+>    Ops events and safety state may commit ahead of an older failed batch.
+> 
+>    A close can remain memory-only while its kill-switch state becomes durable.
+>    A crash then restores the pre-close position with post-close safety state.
+> 
+>    This is fail-closed, but causally inconsistent.
+>    Fix through the durable journal design in TODO 5o.
+>    Do not merely delay safety persistence behind the volatile queue.
+> 
+> 2. **LOW — rollback procedure is incomplete**
+>    [migrate.py:112](/home/cms/project/BTC_Futures_E2E/db/migrate.py:112),
+>    [runbook_vps.md:237](/home/cms/project/BTC_Futures_E2E/docs/runbook_vps.md:237)
+> 
+>    `05d6031` cannot normally start on a v3 DB.
+>    Its migration guard rejects the unknown version.
+> 
+>    The runbook creates a pre-v3 copy but does not document restoring it.
+>    A code rollback against the migrated DB therefore causes startup failure.
+> 
+>    Add explicit rollback steps.
+>    Prefer SQLite `.backup`, or checkpoint WAL before copying.
+> 
+> 3. **LOW — outage queue is unbounded**
+>    [runtime.py:381](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:381),
+>    [runtime.py:481](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:481),
+>    [runtime.py:408](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:408)
+> 
+>    Every bar adds a snapshot-only batch while DB recording is unavailable.
+>    A long outage grows memory without limit.
+>    Recovery drains the complete backlog synchronously on the loop thread.
+> 
+>    Restore ordering remains correct.
+>    Consider coalescing consecutive snapshot-only entries and alerting on depth.
+> 
+> ## Q1 — Seven items
+> 
+> | Item | Status | Evidence |
+> |---|---|---|
+> | 1. Atomic event + snapshot | **RESOLVED** | [record.py:313](/home/cms/project/BTC_Futures_E2E/db/record.py:313), [runtime.py:355](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:355); `test_kill_between_event_rows_and_snapshot_rolls_back_both_and_restore_stays_consistent` |
+> | 2. FIFO retry | **RESOLVED for engine batches** | [runtime.py:379](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:379), [runtime.py:395](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:395); `test_db_retry_is_fifo_entry_failure_then_trail_partial_and_full_close` |
+> | 3. Upgrade guard | **RESOLVED** | [decimal_context.py:18](/home/cms/project/BTC_Futures_E2E/exchange/decimal_context.py:18), [restore.py:114](/home/cms/project/BTC_Futures_E2E/ops/restore.py:114), [restore.py:142](/home/cms/project/BTC_Futures_E2E/ops/restore.py:142); arithmetic-version and flat-upgrade tests |
+> | 4. Position ownership | **RESOLVED** | [schema.py:229](/home/cms/project/BTC_Futures_E2E/db/schema.py:229), [record.py:346](/home/cms/project/BTC_Futures_E2E/db/record.py:346), [restore.py:71](/home/cms/project/BTC_Futures_E2E/ops/restore.py:71); same-ms ownership and v2→v3 tests |
+> | 5. Snapshot context | **RESOLVED** | [runtime.py:468](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:468); `test_runtime_db_including_account_snapshots_is_byte_identical_under_any_caller_context` |
+> | 6. P4 retention | **RESOLVED** | [p4.py:55](/home/cms/project/BTC_Futures_E2E/strategies/trial01/p4.py:55), [p4.py:121](/home/cms/project/BTC_Futures_E2E/strategies/trial01/p4.py:121); long-gap retention test |
+> | 7. Armed/unmoved test | **RESOLVED** | [test_ops_restore.py:371](/home/cms/project/BTC_Futures_E2E/tests/test_ops_restore.py:371); asserts armed before and after restart |
+> 
+> The crash test is genuine.
+> 
+> The fixture inserts all event rows, writes a marker, then calls `os._exit(137)`
+> from the patched snapshot insertion:
+> [fixture:31](/home/cms/project/BTC_Futures_E2E/tests/fixtures/crash_between_event_and_snapshot.py:31).
+> 
+> That occurs inside `record_events()`’ still-open transaction.
+> `os._exit` performs no Python context-manager cleanup.
+> The next connection verifies SQLite rolled back both sides.
+> 
+> ## Q2 — FIFO boundaries
+> 
+> No ownership-sensitive engine event or `source='engine'` snapshot bypasses
+> `unrecorded`.
+> 
+> These independent paths can still write while it is non-empty:
+> 
+> - Ops events: [runtime.py:452](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:452)
+> - Safety state: [runtime.py:502](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:502)
+> - Exchange snapshots: [runtime.py:485](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:485)
+> - Bar rows: [runtime.py:211](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:211)
+> 
+> Exchange snapshots, bars, and safety rows are not inputs to paper-position restore.
+> Ops events that bypass the queue are not trail events and have no ownership role.
+> 
+> Thus they do not recreate the orphan-close/phantom-root defect.
+> They do leave the broader crash-consistency risk in Finding 1.
+> 
+> Queued per-bar snapshots are restore-safe because each is replayed FIFO.
+> Any committed prefix ends at a transaction boundary.
+> Growth and recovery-loop latency remain unbounded as noted above.
+> 
+> ## Q3 — Migration and rollback
+> 
+> The v2→v3 migration is safe for the forward deployment:
+> 
+> - Only nullable columns and indexes are added.
+> - Existing rows remain `NULL`.
+> - Applied v1/v2 checksums are validated.
+> - The entire v3 step and its version row share one transaction:
+>   [migrate.py:128](/home/cms/project/BTC_Futures_E2E/db/migrate.py:128).
+> - Rollback on statement failure is explicit.
+> - Standard v2 upgrade does not depend on legacy absorption.
+> - The migration regression test passed here.
+> 
+> Old SQL inserts would tolerate the extra nullable columns.
+> Normal `05d6031` startup does not: its migration code rejects schema v3.
+> 
+> Section 9.7 is sufficient for the planned forward, flat-only deployment.
+> It is not a complete code-rollback procedure.
+> Document restoring the pre-v3 backup or rolling forward to a compatibility build.
+> 
+> ## Q4 — Default path
+> 
+> No unintended trading-path change found.
+> 
+> The healthy default path changes only as intended:
+> 
+> - Atomic event/snapshot commits.
+> - FIFO engine-batch retry.
+> - Arithmetic tags.
+> - Nullable ownership IDs.
+> - Snapshot calculations under `EXEC_CTX`.
+> - The status file gains `pending`.
+> - P4 retention affects only the trial P4 feed.
+> 
+> Flat restore remains compatible with untagged snapshots.
+> [restore.py:134](/home/cms/project/BTC_Futures_E2E/ops/restore.py:134)
+> returns `none` before applying the arithmetic-version guard.
+> 
+> An untagged snapshot with an open DB position deliberately fails closed.
+> 
+> ## Q5 — Other risks and verification
+> 
+> Registry row 23, TODO 5o evidence, and §9.7 match the implementation.
+> No OOS command, backtest runner, trade file, VPS, or credential was touched.
+> 
+> Passed in this read-only environment:
+> 
+> - FIFO retry
+> - v2→v3 migration
+> - Full runtime Decimal-context invariance
+> - P4 long-gap retention
+> - Status `pending` coverage
+> 
+> The five file-backed restore/crash tests could not run because no writable
+> temporary directory exists; `.codex_tmp` is absent and unwritable.
+> Their code and assertions were reviewed statically.
+> 
+> The worktree remained clean.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0c594-ed57-74f2-b004-72ec53ce8cb5
+> Resume in Codex: codex resume 01a0c594-ed57-74f2-b004-72ec53ce8cb5

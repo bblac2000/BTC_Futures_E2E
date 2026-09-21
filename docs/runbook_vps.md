@@ -234,10 +234,17 @@ E2E에 닿는 명령은 롤백에도 없다. 봇 사용자·데이터 삭제는 
    CAST(qty AS REAL) > (SELECT COALESCE(SUM(CAST(qty AS REAL)),0) FROM positions c WHERE c.event='close' AND c.position_id=p.id)"` → `0`.
    (경로 = `btcfut-bot.service`의 `--db`.) 0이 아니면 기동하지 않고 보고.
 4. 코드: `sudo -u btcfut git -C $B fetch` → `git -C $B checkout <MERGE된 커밋>`(해시 고정) → `uv sync --frozen` → `git -C $B rev-parse HEAD` 기록.
-   **스키마 v3가 든 배포**(레지스트리 #23 · position_id 추가 열 — 추가 전용): 기동 전에 `sudo -u btcfut cp $B/var/bot.sqlite $B/var/bot.sqlite.pre-v3`(사본 ·
-   삭제하지 않는다) → `sudo -u btcfut $B/.venv/bin/python -m db.migrate $B/var/bot.sqlite --status`(2) → 인자 없이 한 번(3까지) → `--status`(3).
+   **스키마 v3가 든 배포**(레지스트리 #23 · position_id 추가 열 — 추가 전용): 봇이 **정지된 상태에서** 기동 전에
+   `sudo -u btcfut sqlite3 $B/var/bot.sqlite ".backup $B/var/bot.sqlite.pre-v3"`(SQLite 온라인 백업 — `cp`가 아니라 · 삭제하지 않는다) →
+   `sudo -u btcfut sqlite3 -readonly $B/var/bot.sqlite.pre-v3 "PRAGMA integrity_check"`(ok) →
+   `sudo -u btcfut $B/.venv/bin/python -m db.migrate $B/var/bot.sqlite --status`(2) → 인자 없이 한 번(3까지) → `--status`(3).
    같은 배포에 **산술 버전 태그**(`exec_ctx/v1/prec34/half_even`)가 들어간다 — flat 기동이므로 옛(태그 없는) 스냅샷과 대조할 일이 없다.
 5. 기동: `bsc start btcfut-bot` → §5 기동 후 확인 · 기동 알림에 복원 없음(`DB flat · 스냅샷 …`) · `status.json`의 `position None` · `pending False`.
    **새 스냅샷 확인**: 기동 뒤 첫 봉이 지난 다음 `sqlite3 -readonly $B/var/bot.sqlite "SELECT ts_ms, json_extract(raw_json,'$.arith') FROM account_snapshots
    WHERE source='engine' ORDER BY id DESC LIMIT 1"` → 기동 뒤 시각 · `exec_ctx/v1/prec34/half_even`.
 6. `docs/ops_log.md`에 1·3의 출력, 커밋 해시, 기동 알림을 기록.
+**롤백(스키마 v3 배포 뒤 옛 코드로 · Codex 단계 d 후속 3차 #2)**: 옛 코드(`05d6031`)는 v3 DB를 열면 마이그레이션 가드가 **알 수 없는 버전**으로 기동을 거부한다 →
+DB도 함께 되돌린다. ① flat 확인(§9.7-1) → `bsc stop btcfut-bot` ② `sudo -u btcfut mv $B/var/bot.sqlite $B/var/bot.sqlite.v3-rolledback`(버리지 않고 옆으로) ·
+`-wal`·`-shm` 파일이 있으면 같이 옆으로 ③ `sudo -u btcfut cp $B/var/bot.sqlite.pre-v3 $B/var/bot.sqlite` → `--status`(2) ④ `git -C $B checkout 05d6031` → `uv sync --frozen`
+⑤ `bsc start btcfut-bot` → §5 확인. **v3 기동 뒤 쌓인 행(봉·스냅샷·운영 이벤트)은 옛 DB에 없다** — flat 배포라 포지션 기록은 잃지 않지만,
+그 구간 행은 `bot.sqlite.v3-rolledback`에 남는다(ops_log에 구간 기록). 롤백도 사용자 지시 후에만.
