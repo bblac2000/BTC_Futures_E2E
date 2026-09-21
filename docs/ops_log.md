@@ -2582,3 +2582,18 @@ B 후보 838(84 · 569 · 의도·체결 185) · cooldown 66 · one_position 3,3
 **검증**: 847 passed · ruff·pyright 0 · stream-tiers 0 · **IS 피처 재빌드 SHA256 `dec39c92…` 동일** · 30일 조각 별도 프로세스 두 번:
 A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리 엔진 산술로 값 문자열 변화) · P4 추출 0 decisions `cd81a95a…` · trades `49327350…` 동일.
 조각 1회: 정본 약 22초 · P4 약 30초 → 전체 IS P4 200회는 추출당 약 15분 × 200(병렬 필요 — 단계 e 계획 사항).
+
+
+## 2026-09-21 — push `ce1cd2c` · 사용자 결정 기록 · 배포 flat 조건
+- push 전 점검(읽기만): 작업트리 깨끗 · 올릴 커밋 1개 · 저장소 **PUBLIC** · 비밀 값 grep(`api key|secret|token|password|export X=`) 걸림 0 ·
+  새 파일은 `strategies/trial01/p4.py`·`tests/test_trial01_p4.py`뿐(로그·보고 파일 없음) · 로컬 게이트 847 passed · pyright·ruff 0 → `8fd658c..ce1cd2c` push(force 없음).
+- **앵커 후 실행 경로 변경(sizing·normalize·engine)의 의미 판정**: 버그 수정·결정론 강화이지 규칙 변경이 아니다 — 30일 조각 Arm A에서
+  수정 전(f9bbae9)·후(ce1cd2c) **결정 행 바이트 동일** · 트레이드 136건의 구조 필드(진입·청산 시각·방향·수량·레버리지·SL·TP·청산 사유·체결가) **전부 동일**
+  (수익 필드는 비교·출력하지 않음) · 달라진 것은 34자리 산술로 생긴 값 문자열 자릿수뿐 → **거래 집합·사이징 불변, 정정 행 불필요**.
+  사이징(자금) 코드 변경의 Codex 검토: 단계 d(task-mub68i9q) 지적 #7·#8의 수정 · 후속 검토 task-mubcqczj 진행 중.
+- 사용자 확정: P4 VP 시드 `(20260921, 4, draw, minute_index)`가 맞다 — 사용자 문언이 추출 번호를 빠뜨렸을 뿐, **#22가 정본**.
+- 사용자 사전확약(배포 조건): 엔진 문맥 업그레이드는 **flat(열린 포지션·대기 진입 없음)일 때만 깨끗한 정지 → 기동** — 업그레이드 전 스냅샷을
+  업그레이드 뒤 DB 값과 대조하는 일이 없게. 현 봇은 전략이 없어 늘 성립하지만 점검은 매번 → 런북 §9.7(정지 전 status.json `position None · pending False` ·
+  정지 알림 `stop` · 정지 후 DB 열린 root 0 · 해시 고정 checkout · 기동 알림 복원 없음). `status.json`에 `pending` 필드 추가(상태 파일만 · DB·이벤트 불변 · 테스트).
+- 사용자 단계 e 계획(Codex MERGE 뒤): 전체 IS Arm A·B → P1(1,000) · P2(+1/+5) · P3 · P4(200 · **로컬 병렬, VPS 금지**) · 사전등록 200회 유지 ·
+  **모든 게이트를 한 보고서에서 함께 계산·개봉** · IS 통과 전 OOS 미개봉.

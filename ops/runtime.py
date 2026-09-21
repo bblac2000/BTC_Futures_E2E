@@ -539,6 +539,7 @@ class BotRuntime:
             "entries_allowed": not self.entry_blockers(), "blockers": self.entry_blockers(),
             "position": None if pos is None else {"direction": pos.direction.value, "qty": str(pos.qty),
                                                   "entry_price": str(pos.entry_price)},
+            "pending": self.engine.pending is not None,          # 결정 뒤 체결 전 진입 의도 — 배포 flat 조건(런북 §9.7)
             "wallet": str(self.engine.wallet), "last_mark": None if self.last_mark is None else str(self.last_mark),
             "last_mark_age_s": None if self.last_mark_ms is None else (now_ms - self.last_mark_ms) / 1000,
             "last_bar_open_ms": self.last_bar_open_ms,

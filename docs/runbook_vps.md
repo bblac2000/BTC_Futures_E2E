@@ -222,3 +222,17 @@ V=$PWD/var/predeploy && uv run python -m ops.run_bot --mode paper --duration-s 2
 
 롤백(봇만): `bsc disable --now btcfut-bot.service btcfut-health-alert.timer btcfut-health-digest.timer btcfut-sync.timer` → `bsc list-units 'btcfut-*' --all`로 비활성 확인.
 E2E에 닿는 명령은 롤백에도 없다. 봇 사용자·데이터 삭제는 사람 확인 + Codex(삭제) 후.
+
+### 9.7 코드 업그레이드 배포 — **flat일 때만**(사용자 사전확약 2026-09-21 · 엔진 10진 문맥 EXEC_CTX 등)
+엔진 산술 정밀도가 바뀌는 업그레이드(레지스트리 #22 `EXEC_CTX` · 28 → 34자리)는 **업그레이드 전 스냅샷을 업그레이드 뒤 DB 값과 대조하는 일이
+생기지 않게** 한다: 봇이 flat(열린 포지션 없음 · 대기 진입 없음)일 때만, 깨끗한 정지 → 기동으로. 현재 봇은 전략이 없어 늘 flat이지만 **이 점검은 매번 한다**.
+전제: 그 커밋의 Codex 배치 **MERGE** · 사용자 배포 지시 · 하루 한 번의 라이브 호스트 변경(§9 규칙).
+1. **정지 전 flat 확인**(읽기만): `sudo -u btcfut python3 -c "import json;s=json.load(open('$B/var/run/status.json'));print(s['position'],s['pending'],s['blockers'])"`
+   → `None False [...]`이어야 한다. 포지션·대기 진입이 있으면 **배포하지 않는다**(청산을 기다리거나 사용자 판단 — 배포를 위해 /close 하지 않는다).
+2. 정지: `bsc stop btcfut-bot` → 알림이 `stop`(`stop_dirty` 아님)인지 확인.
+3. **정지 후 DB flat 확인**(읽기만): `sudo -u btcfut sqlite3 -readonly $B/var/bot.sqlite "SELECT COUNT(*) FROM positions p WHERE event='open' AND position_id=id AND
+   CAST(qty AS REAL) > (SELECT COALESCE(SUM(CAST(qty AS REAL)),0) FROM positions c WHERE c.event='close' AND c.position_id=p.id)"` → `0`.
+   (경로 = `btcfut-bot.service`의 `--db`.) 0이 아니면 기동하지 않고 보고.
+4. 코드: `sudo -u btcfut git -C $B fetch` → `git -C $B checkout <MERGE된 커밋>`(해시 고정) → `uv sync --frozen` → `git -C $B rev-parse HEAD` 기록.
+5. 기동: `bsc start btcfut-bot` → §5 기동 후 확인 · 기동 알림에 복원 없음(`DB flat · 스냅샷 …`) · `status.json`의 `position None` · `pending False`.
+6. `docs/ops_log.md`에 1·3의 출력, 커밋 해시, 기동 알림을 기록.

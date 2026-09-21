@@ -452,3 +452,16 @@ def test_unsaved_safety_state_leaves_a_breadcrumb_outside_the_db_until_durable(r
     clock.t += 1000
     rt.safety_tick(clock.t)
     assert not crumb_path.exists(), "DB에 저장된 뒤에만 지운다"
+
+
+def test_status_reports_position_and_pending_for_the_deploy_flat_check(rules):
+    """런북 §9.7: 엔진 문맥 등 코드 업그레이드는 flat(포지션 없음 · 대기 진입 없음)일 때만 — 상태 파일이 둘 다 보여 준다."""
+    rt, counter, clock = build(rules)
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    st = rt.status(DAY0 + 61_000)
+    assert st["position"] is None and st["pending"] is False
+    rt.submit_entry(intent(decided_ms=DAY0 + 61_000))
+    assert rt.status(DAY0 + 61_500)["pending"] is True
+    feed(rt, counter, clock, DAY0 + 62_000, DAY0 + 63_000)
+    st = rt.status(DAY0 + 63_000)
+    assert st["position"] is not None and st["pending"] is False
