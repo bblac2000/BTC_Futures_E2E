@@ -2326,3 +2326,229 @@ B: cooldown 66 · one_position 3,401 · 후보 832(no_sl_anchor 84 · sl_dist_ou
 A decisions `789bf4d5…` · trades `13ca3691…` · summary `2fe670b5…` / B decisions `f9155ad6…` · trades `c55d018d…` · summary `2c58064b…`.
 **조각 개수(성과 아님)**: A 후보 703(no_sl_anchor 40 · sl_dist_out_of_range 526 · 의도 137 → 체결 136 · 엔진 사이징 거부 1) · filter 2,186 · cooldown 18 · one_position 1,392 ·
 B 후보 838(84 · 569 · 의도·체결 185) · cooldown 66 · one_position 3,395. (TP가 체결 기준으로 바뀌어 청산 시각이 달라지면 one_position이 조금 움직인다.)
+
+
+## 2026-09-21 — 단계 d Codex 검토(2a~2c + rounding + 트레일/TpFromFill + #19~#21) · task-mub68i9q-a0yhgl · 판정 FIX-FIRST
+프롬프트: 손익 금지(trades.jsonl·var/backtest 산출물 열람 금지 · 전체 IS 실행 금지 · OOS 금지) · 읽기 전용. 아래 원문 그대로.
+확인(Claude): #3 `db/record.py` 알 수 없는 이벤트 → TypeError 확인 · #1 `placebo_exec` `bars[t]` 내부 분 인덱싱 확인(IS 결손 2분 존재) ·
+#9 IS quote_volume 소수 자릿수 최대 5(1,313,278행 중 5 초과 0) → 정수 변환은 IS에서 정확, 규약 기록만 빠짐.
+
+> ## Findings
+> 
+> 1. **HIGH** — [backtest/placebo_exec.py:78](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:78)
+> 
+>    **Wrong:** P1 eligibility requires marks only at entry and exit, but execution indexes every
+>    intervening minute with `bars[t]`.
+> 
+>    **Scenario:** A placebo interval crosses a known missing mark minute. Its endpoints are valid,
+>    yet execution raises `KeyError`, aborting the mandatory 1,000-draw placebo run.
+> 
+>    **Fix:** Iterate observed bars within the interval while preserving clock-time duration and
+>    endpoint-only eligibility. Add an interior-gap regression test.
+> 
+> 2. **HIGH** — [backtest/placebo.py:180](/home/cms/project/BTC_Futures_E2E/backtest/placebo.py:180),
+>    [strategies/trial01/strategy.py:179](/home/cms/project/BTC_Futures_E2E/strategies/trial01/strategy.py:179)
+> 
+>    **Wrong:** P4 only has a random-level generator. The strategy has no injection path that
+>    replaces both entry-band levels and swing SL anchors.
+> 
+>    **Scenario:** Step e cannot run the preregistered 200 P4 draws through the canonical
+>    strategy/engine chain.
+> 
+>    **Fix:** Add a deterministic level-provider interface and a P4 runner that replaces both
+>    level classes using only the prior 24-hour range. Add end-to-end P4 tests.
+> 
+> 3. **HIGH** — [paper/engine.py:503](/home/cms/project/BTC_Futures_E2E/paper/engine.py:503),
+>    [db/record.py:300](/home/cms/project/BTC_Futures_E2E/db/record.py:300)
+> 
+>    **Wrong:** The engine emits `StopTrailed`, but the DB recorder has no handler for it and
+>    raises `TypeError`.
+> 
+>    **Scenario:** The first enabled trail ratchet terminates event recording. If execution
+>    continues or restarts, the DB still contains the original SL.
+> 
+>    **Fix:** Persist effective SL/trail state durably and add a runtime→DB→restart test.
+> 
+> 4. **HIGH** — [ops/restore.py:103](/home/cms/project/BTC_Futures_E2E/ops/restore.py:103)
+> 
+>    **Wrong:** Restore compares the snapshot’s ratcheted SL with the DB’s initial SL.
+> 
+>    **Scenario:** Any restart after a successful ratchet is treated as a DB/snapshot mismatch,
+>    causing the position to be abandoned.
+> 
+>    **Fix:** Restore from the latest persisted effective SL and trail state, not only the
+>    original entry row.
+> 
+> 5. **HIGH** — [paper/engine.py:428](/home/cms/project/BTC_Futures_E2E/paper/engine.py:428),
+>    [ops/runtime.py:175](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:175),
+>    [db/record.py:220](/home/cms/project/BTC_Futures_E2E/db/record.py:220)
+> 
+>    **Wrong:** `_tp_from_fill` resolves TP inside the engine, but runtime records the original
+>    intent TP, which is `None` for `TpFromFill`.
+> 
+>    **Scenario:** The snapshot contains the resolved TP while the DB contains null. A restart
+>    rejects or abandons an otherwise valid open position.
+> 
+>    **Fix:** Put resolved TP on `EntryFilled`, or record `engine.last_entry_tp` atomically.
+>    Test normal and immediate `POST_FILL_GATE` cases.
+> 
+> 6. **HIGH** — [strategies/trial01/feature_build.py:53](/home/cms/project/BTC_Futures_E2E/strategies/trial01/feature_build.py:53),
+>    [strategies/trial01/run.py:51](/home/cms/project/BTC_Futures_E2E/strategies/trial01/run.py:51)
+> 
+>    **Wrong:** Warm-up loads only the archive. That archive does not reach the OOS boundary,
+>    leaving a substantial gap before OOS.
+> 
+>    **Scenario:** A future approved OOS run starts with stale ATR, momentum, swing, and VP
+>    state rather than a continuous 35-day feature warm-up.
+> 
+>    **Fix:** Before step e, freeze a unified archive-plus-prior-IS warm-up loader. Add synthetic
+>    boundary tests. Do not open or execute OOS while doing this.
+> 
+> 7. **MEDIUM** — [exchange/decimal_context.py:19](/home/cms/project/BTC_Futures_E2E/exchange/decimal_context.py:19)
+> 
+>    **Wrong:** `pinned_rounding` pins rounding and traps but inherits caller precision,
+>    exponent limits, capitals, and clamp.
+> 
+>    **Scenario:** A library that lowers thread precision can still change normalization or
+>    sizing output despite the context fix.
+> 
+>    **Fix:** Use a named fixed context, or require explicit precision at each arithmetic
+>    boundary. Test several caller precisions and exponent settings.
+> 
+> 8. **MEDIUM** — [paper/engine.py:403](/home/cms/project/BTC_Futures_E2E/paper/engine.py:403),
+>    [paper/engine.py:503](/home/cms/project/BTC_Futures_E2E/paper/engine.py:503)
+> 
+>    **Wrong:** Wallet, funding, VWAP, PnL, post-fill distance, TP, and trail arithmetic still
+>    inherit the thread-global Decimal context.
+> 
+>    **Scenario:** ccxt’s HALF_UP context can change a post-fill gate, minimum-R TP decision,
+>    or trail boundary at a rounding edge. That is material in LIVE.
+> 
+>    **Fix:** Pin the entire engine transaction/event calculation to one explicit context.
+>    Compare complete event, snapshot, and DB bytes under default, ccxt-mutated, and
+>    low-precision caller contexts.
+> 
+> 9. **LOW** — [strategies/trial01/features.py:48](/home/cms/project/BTC_Futures_E2E/strategies/trial01/features.py:48),
+>    [strategies/trial01/features.py:200](/home/cms/project/BTC_Futures_E2E/strategies/trial01/features.py:200)
+> 
+>    **Wrong:** Quote volume is converted to an integer at fixed `1e-5` resolution. This
+>    numerical convention is not recorded in registry row #20.
+> 
+>    **Scenario:** Truncation changes a very close VP-bin tie, hence POC or value-area selection.
+> 
+>    **Fix:** Preserve exact Decimal units or preregister the scale explicitly before P&L.
+> 
+> 10. **LOW** — [strategies/trial01/feature_store.py:34](/home/cms/project/BTC_Futures_E2E/strategies/trial01/feature_store.py:34)
+> 
+>    **Wrong:** Feature metadata cites registry rows 18 and 19 but omits row 20, which defines
+>    the feature conventions.
+> 
+>    **Scenario:** An artifact lacks complete provenance for POC, warm-up, VP-window, and late
+>    emission rules.
+> 
+>    **Fix:** Include row 20 in artifact metadata.
+> 
+> ## Q1 — Frequency versus “hours”
+> 
+> No code branch clearly fires more often than the anchored mechanical rules permit.
+> 
+> The main frequency amplifiers are themselves recorded in row #21:
+> 
+> - VP levels and their prices can change every minute.
+> - Cooldown identity for VP is exact price, so a moved POC/VAH/VAL is a new identity.
+> - A later touch replaces and refreshes the pending setup.
+> - Confirmation may occur on the touch bar.
+> - Three levels per side are considered.
+> 
+> Conversely, the extreme-inside-band rule is restrictive, and one-position filtering binds
+> heavily. The confirmation formula, conflict handling, candidate selection, one-position
+> rule, SL, TP, and trailing exits match the recorded interpretation.
+> 
+> Thus the observed intent count exceeds the narrative expectation, but does not establish
+> an implementation bug. The VP price identity is an interpretation of ambiguous
+> “same level,” not a silent rule change. Trial #1 must not be changed now.
+> 
+> ## Q2 — Decimal change and running paper bot
+> 
+> **(a)** ccxt changes rounding and the Underflow trap, not precision. The fix restores the
+> intended default-context outputs for sizing, normalization, and fill estimates.
+> 
+> It is not byte-identical to the old bot under ccxt’s mutated context—that erroneous
+> behavior is what changes. Deployment risk to D2 is low while it has no active strategy,
+> but the shared-engine persistence findings should be fixed before enabling entries.
+> 
+> **(b)** Caller precision should not remain implicit. It is sufficient for the observed ccxt
+> mutation, but not for general determinism. Fix or explicitly pass precision.
+> 
+> **(c)** Yes, shared-engine arithmetic should also be pinned. Most wallet differences are tiny,
+> but post-fill gates, TP eligibility, and trail thresholds can change execution behavior.
+> That matters for LIVE.
+> 
+> ## Q3 — Trailing stop and `TpFromFill`
+> 
+> With both new options left `None`, the prior path remains unchanged:
+> 
+> - No `StopTrailed` event is emitted.
+> - Conditional trail snapshot keys are absent.
+> - Existing event and DB payload shapes are unchanged.
+> - `EntryIntent` additions are not persisted by `db/record.py`.
+> 
+> The bar approximation is correct: existing exits are checked first; arming and ratcheting
+> use that bar’s favorable extreme; the new stop applies from the next bar.
+> `ExitReason.TRAIL` is used only after an actual ratchet.
+> 
+> Trail state is present in snapshot/restore. `_tp_from_fill` correctly chooses the fallback
+> when the fill has passed the level. LIVE replaces entry with exchange average price before
+> TP resolution. The post-fill gate runs after resolution and exits immediately when needed.
+> 
+> The enabled path is nevertheless unsafe because resolved TP and ratcheted SL are not
+> persisted consistently.
+> 
+> ## Q4 — Carried questions
+> 
+> - `open_at_end`: matches row #19. It is an explicit censoring convention, not silent.
+> - Returns: gross mark-to-mark via `ref_mark`; net wallet delta divided by entry notional.
+> - DSR: implements `SR̂ − SR* > 0` with `N = 2`.
+> - Warm-up: feature-only and 35 days for IS; future OOS loading is defective as noted.
+> - POC midpoint: disclosed interpretation of otherwise unspecified level price.
+> - VP: 1,440 observed bars, as registered; missing minutes make it longer than wall-clock 24h.
+> - Late buckets: emitted without future data and do not create look-ahead.
+> - P1: endpoint conventions match, but sparse interior minutes can crash execution.
+> - P1 execution uses restore/manual entry rather than the normal entry path. This is disclosed
+>   in row #19, but increases future divergence risk.
+> - P2/P3 flags match row #21, including delayed-state gating and post-gate inversion.
+> - Equity 1,000 is implemented.
+> - Skip-rate denominator reconciliation correctly accounts for confirmation sides,
+>   conflict rows, filters, cooldown, one-position, and candidate outcomes.
+> - P4 is not wired into the executable strategy chain.
+> 
+> ## Q5 — Look-ahead
+> 
+> No base-strategy look-ahead was found:
+> 
+> - Touch uses ATR and levels available at bar open.
+> - VP excludes the decision bar.
+> - Swing confirmation becomes available only after its confirming 15-minute close.
+> - Invalidation occurs at close and affects subsequent availability.
+> - TP selection uses levels valid at decision close.
+> - Funding is applied before `on_bar`.
+> 
+> The full-window price bounds used to allocate VP bins affect storage geometry, not bin
+> mapping or signal values. P4 look-ahead cannot be verified end-to-end because P4 is not
+> integrated.
+> 
+> ## Q6 — Other issues and verification
+> 
+> The additional risks are the missing P4 execution path, sparse-minute P1 crash, incomplete
+> trail/TP persistence, future OOS warm-up discontinuity, and remaining Decimal-context
+> dependence.
+> 
+> Read-only targeted verification produced 80 passing tests. One `tmp_path` test and the
+> full suite could not run because the environment provides no writable temporary/cache
+> directory. The worktree remained clean, and no trade files or prohibited backtest output
+> were opened.
+> 
+> VERDICT: FIX-FIRST — blockers: P1 sparse-gap execution, P4 integration, trail/TP persistence and restore, and the future OOS continuous warm-up path.
+> 
+> Codex session ID: 01a0c3c2-4230-71f3-8bd7-68beb8a78a43
+> Resume in Codex: codex resume 01a0c3c2-4230-71f3-8bd7-68beb8a78a43
