@@ -46,6 +46,7 @@ def test_the_runner_refuses_when_the_strategy_module_is_already_imported(tmp_pat
 def test_gross_uses_the_mark_reference_not_the_slipped_fill(rules):
     """advisor 2026-09-21: gross는 mark 기준(슬리피지 전) — 체결가를 쓰면 G1이 P1보다 ~2 bps 과소평가된다."""
     from decimal import Decimal
+
     from backtest.engine_replay import replay
     from sizing.config import SizingLimits
     from tests.fixtures import dummy_replay_strategy as DS
