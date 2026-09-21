@@ -77,10 +77,16 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                               "qty": str(ev.post_fill.qty), "leverage": ev.leverage, "sl": str(ev.decision.sl),
                               "sl_dist": str(ev.post_fill.sl_dist_pct), "wallet_before": str(wallet_before)}
                 ctx.decisions.append({"ts_ms": t, "outcome": "entered", "trade_id": open_trade["trade_id"]})
+                liq_now = ev.post_fill.liq_price_est             # 같은 봉에서 바로 청산되는 경우의 gross 기준가
             elif isinstance(ev, EntrySkipped):
                 ctx.decisions.append({"ts_ms": t, "outcome": "skipped", "reason": str(ev.reason), "detail": ev.detail})
             elif isinstance(ev, PositionClosed) and open_trade is not None:
-                ref = ev.exit_price if ev.exit_price is not None else (liq_now if liq_now is not None else Decimal(open_trade["sl"]))
+                #  gross는 mark 기준(슬리피지 전 · returns.py 정의): 한 청산의 체결들은 같은 `ref_mark`(SL 기준가·TP·mark 종가)를 갖는다.
+                #  체결가(exit_price)는 레지스트리 #7 불리 모델이 들어간 값이라 쓰지 않는다. 청산(liquidation)은 체결이 없어 추정 청산가.
+                refs = {f.ref_mark for f in ev.fills if f.ref_mark is not None}
+                if len(refs) > 1:
+                    raise AssertionError(f"한 청산의 체결 ref_mark가 여럿: {refs}")
+                ref = refs.pop() if refs else (liq_now if liq_now is not None else Decimal(open_trade["sl"]))
                 r = trade_return(direction=ev.direction, entry_mark=Decimal(open_trade["entry_mark"]), exit_ref=ref,
                                  qty=Decimal(open_trade["qty"]), entry_fill=Decimal(open_trade["entry_fill"]),
                                  wallet_before=Decimal(open_trade["wallet_before"]), wallet_after=ev.wallet_after)
