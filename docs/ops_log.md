@@ -2053,3 +2053,73 @@ Resume in Codex: codex resume 01a0b747-8a87-7ec3-8509-a0b862cc3571
 **사용자 입장 기록 — P1 재표집(2026-09-19 · Codex 재검토 전)**: Arm A의 실현 `sl_dist`·보유시간을 재표집하는 것은 **기하(노출·트레이드당 위험·지속시간)를 맞추는 것**이고
 방향과 타이밍은 무작위이므로 **신호 정보는 넘어가지 않는다** — 노출 정합 대조군의 표준 구성이다. Codex가 이견을 낼 수 있다(프롬프트 (5)에 포함).
 **재전송 예약**: 2026-09-21 07:30 UTC(=16:30 KST) 세션 내 1회성 작업 `0cf017b6`. ⚠️ 세션이 끝나면 예약도 사라진다 — 그 경우 사용자가 수동 트리거.
+
+## 2026-09-21 — 트라이얼 #1 사전등록 Codex 재검토 (`task-mub0dymr-41d8zh` · 쿼터 오류 없음 확인 · read-only)
+재전송 경위: 09-21 07:30 UTC 예약 작업은 세션 종료로 사라졌고(스크래치패드도 비워짐) 실행된 적 없다 → 사용자 지시로 08:54 UTC 수동 전송. 프롬프트는 이전 전송분과 같은 내용으로 재작성.
+판정: **FIX FIRST**(남은 것 = 레지스트리 초안 문구 2건 + P1 명세 MAJOR 1건).
+| # | Codex | 동의 | 조치(사용자 확인 후) |
+|---|---|---|---|
+| 1·2·5·6·7·9 | CLOSED | — | — |
+| 3 벤치마크 | **CLOSED — P1을 프로토콜 §2 벤치마크 비교로 수용**(이견 기록 아님) · 매수보유 미달 라벨도 과학적 판정을 약화하지 않는다고 확인 | ✅ | — |
+| 4 | PARTIAL — 사전등록은 고쳐졌으나 **레지스트리 초안**이 여전히 `n_eff ≥ 30(1+4ρ̄)`·"암당 n ≥ 48" | ✅ | 초안 행을 `n_eff = n/(1+4ρ̂) ≥ 30`·계획 n ≥ 48·ρ̂ 재계산·Arm A 판정 주체로 |
+| 8 | PARTIAL — **레지스트리 초안**이 "앵커 전일"로 적혀 createdTime 규칙과 갈릴 수 있다 | ✅ | 초안 행을 `OOS_end` = createdTime 이전 완전 마감 UTC 일 규칙 문구로 |
+| 새 MAJOR | P1 명세 비결정: ① `sl_dist`·보유시간을 **따로** 재표집하면 위험×기간 노출이 달라진다 → **한 트레이드의 쌍으로 공동 재표집** ② 창 끝 근처 진입의 청산이 창 밖으로 나가는 경우 규칙 없음 → **보유시간 안에 창 안에서 청산되는 진입 시각에서만 추출, 겹치면 다시 뽑기** | ✅ | 사전등록 P1 행 두 줄 추가 |
+**P1 재표집에 대한 판단**: 사용자 입장에 **동의**. 단 "신호 정보가 전혀 넘어가지 않는다"는 약간 과한 표현 — **전략이 만든 기하(노출·위험·기간)는 의도적으로 넘어가고**, 넘어가지 않는 것은 *원 신호의 시각·방향과 이후 수익의 정렬*이다. 무조건부 ATR 분포 대안은 **권하지 않음**(다른 질문에 답하고 노출 정합을 약화한다).
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+Verdict: **FIX FIRST**. The scientific benchmark choice is acceptable, but two implementation/record inconsistencies remain before anchoring.
+
+## Prior findings
+
+1. **CLOSED — level binding / SL / TP.** Long/short eligibility, binding-level selection, tie-breaking, swing-only SL anchors, `no_sl_anchor`, profit-side TP selection, and `conflict_signal` are now deterministic. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:26)
+
+2. **CLOSED — volume profile.** Quote-volume allocation, the strictly prior 1,440-bar window, POC tie-breaking, VA expansion, and VA boundaries are fully specified. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:25)
+
+3. **CLOSED — benchmark comparison.** I accept P1 as the protocol §2 benchmark comparison. The protocol requires a benchmark but does not require buy-and-hold specifically; the hard P1 p95 gate is an exposure-matched null comparison, while buy-and-hold remains a reported deployment reference. [Protocol §2](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:24), [benchmark gate](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:93), [verdict rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:128)
+
+   This is acceptance, not a recorded disagreement. The passive-underperformance verdict suffix is also clearly non-scientific and does not weaken ACCEPT/REJECT.
+
+4. **PARTIAL — G0 and arm scope.** The canonical preregistration is corrected: `n_eff = n/(1+4ρ̂)`, planning `n ≥ 48`, Arm A is the verdict subject, and Arm B needs power only for the paired comparison. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:84)
+
+   However, the registry draft still says the mathematically wrong `n_eff ≥ 30(1+4ρ̄)` and “per-arm `n ≥ 48`.” [Registry draft](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_registry_row_draft.md:8)
+
+5. **CLOSED — paired A/B multiplicity.** The paired difference now uses a 97.5% block-bootstrap CI. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:94)
+
+6. **CLOSED — P4 leakage.** Random levels use only the preceding closed 24-hour 1m range at decision time. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:104)
+
+7. **CLOSED — placebo decision rules.** P2/P3 are deterministic comparisons; P1/P4 retain distributional p95 gates. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101)
+
+8. **PARTIAL — OOS endpoint.** The preregistration has the exact createdTime-derived rule. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:118)
+
+   The registry draft still says `앵커 전일`, rather than deriving `OOS_end` from the UTC date of Drive createdTime. That is often equivalent, but the draft can diverge if “anchor date” is entered independently, so the record should use the exact canonical rule. [Registry draft](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_registry_row_draft.md:8)
+
+9. **CLOSED — skip-rate denominator.** The denominator, arm/window breakdown, and separate `no_sl_anchor`/`conflict_signal` reporting are defined. [Preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:40)
+
+## P1 resampling judgment
+
+I agree with the user’s substantive position.
+
+Using realized Arm A `sl_dist` and holding-time distributions is legitimate for an offline conditional placebo. It is not a look-ahead trading rule: P1 is not meant to be executable prospectively. It conditions on observed risk and exposure geometry, while random direction and entry timing break the mapping from the original signal to subsequent returns.
+
+The statement that “no signal information transfers” is slightly too absolute: the empirical distributions were generated by the original strategy, so strategy-conditioned geometry transfers intentionally. What does not transfer is the original signal’s timestamp/direction-to-return alignment. That distinction does not invalidate P1.
+
+I do not recommend the unconditional ATR-based alternative; it would answer a different question and weaken exposure matching.
+
+## New P1 specification issue
+
+**MAJOR:** P1 is not yet fully deterministic at two points. [P1 specification](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101)
+
+- `sl_dist` and holding time are described as separate resamples. Separate marginal sampling versus joint sampling of `(sl_dist, holding_time)` can materially change risk-times-duration exposure and therefore the p95 gate. To support the stated geometry-matching rationale, resample the pair jointly from one original Arm A trade.
+- An entry drawn near the window end may have an exit beyond the window. The document must precommit whether such draws are rejected/redrawn; clipping, dropping, or reading beyond the window produce different nulls. The clean rule is: draw only from entry timestamps for which the sampled holding time exits inside the same evaluation window, then reject/redraw overlaps.
+
+These are specification fixes, not disagreement with realized-geometry resampling or with P1 serving as the benchmark.
+
+The interrupted second session was not treated as a verdict. No files were modified; no network or `.env` access was used.
+
+Codex session ID: 01a0c32c-5f8c-7a62-abd3-3c2a58c740e4
+Resume in Codex: codex resume 01a0c32c-5f8c-7a62-abd3-3c2a58c740e4
+```
+</details>
+
