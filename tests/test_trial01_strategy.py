@@ -14,8 +14,9 @@ from backtest.data import MINUTE_MS, Bar1m
 from backtest.engine_replay import ReplayContext, replay
 from exchange.gate import Mode
 from exchange.orders import Direction
-from paper.engine import Engine, EntryIntent, Trail
+from paper.engine import Engine, EntryIntent, TpFromFill, Trail
 from paper.sender import PaperSender
+from paper.types import MarkBar
 from sizing.config import SizingLimits
 from strategies.trial01.config import SR_V1_PARAMS
 from strategies.trial01.features import VP, SwingLevel
@@ -82,11 +83,11 @@ def test_touch_and_same_bar_confirmation_give_a_full_intent():
     ctx, (it,) = drive(strat(), [LONG_OK])
     assert it is not None and it.direction is Direction.LONG
     assert it.sl == D("59750")                                   # swing_low 59850 − 1.0 × ATR_15m 100
-    assert it.tp == D("60400")                                   # 반대편 swing_high(410 ≥ 1.5R = 360)
+    assert it.tp is None and it.tp_rule == TpFromFill(D("60400"), D("1.5"), D("2"))   # 반대편 swing_high · 판정은 체결 뒤
     assert it.decided_ms == T0 + MINUTE_MS - 1 and it.decision_mark == D("59990")
     assert it.trail == Trail(D(1), D(100))
     (d,) = ctx.decisions
-    assert d["outcome"] == "intent" and d["level_key"] == ["vp", "59900"] and d["tp_kind"] == "swing_high"
+    assert d["outcome"] == "intent" and d["level_key"] == ["vp", "59900"] and d["tp_level_kind"] == "swing_high"
     assert d["candidate"] is True and D(d["sl_dist"]) == D(240) / D(59990)
 
 
@@ -159,7 +160,7 @@ def test_short_side_mirrors():
     ctx, (it,) = drive(strat(), [(60300, 60395, 60290, 60305)])   # swing_high 60400 터치 · 60305 < 60390 · 하위 60%
     assert it is not None and it.direction is Direction.SHORT
     assert it.sl == D("60500")                                   # swing_high 60400 + 100
-    assert it.tp == D("59900") and ctx.decisions[0]["tp_kind"] == "poc"   # 아래 POC 거리 405 ≥ 1.5R(292.5)
+    assert it.tp_rule is not None and it.tp_rule.level == D("59900") and ctx.decisions[0]["tp_level_kind"] == "poc"
 
 
 def test_conflict_signal_skips_both_before_the_filter():
@@ -218,17 +219,36 @@ def test_sl_dist_out_of_range_is_skipped(atr15, expect):
 
 
 # ── TP ─────────────────────────────────────────────────────────────────────
-def test_tp_is_2r_when_the_opposite_level_is_under_1_5r():
+def filled(rules, it: EntryIntent):
+    e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=SizingLimits())
+    e.request_entry(it)
+    e.on_bar(MarkBar(it.decided_ms + 1, it.decided_ms + MINUTE_MS, it.decision_mark, it.decision_mark,
+                     it.decision_mark, it.decision_mark))
+    assert e.position is not None
+    return e.position
+
+
+def test_tp_is_2r_when_the_opposite_level_is_under_1_5r(rules):
     near = SwingLevel(3, "swing_high", D("60200"), SL1.bar_open_ms, SL1.confirmed_ms, SL1.expires_ms)
     snap = replace(SNAP, swings_close=(SL1, near, SH2))
     ctx, (it,) = drive(strat(feed=StubFeed(snap)), [LONG_OK])
-    assert it is not None and it.tp == D(59990) + 2 * D(240) and ctx.decisions[0]["tp_kind"] == "2R"
+    assert it is not None and it.tp_rule is not None and it.tp_rule.level == D("60200")
+    pos = filled(rules, it)
+    assert pos.tp == pos.entry_price + 2 * (pos.entry_price - it.sl)      # R = 체결가 기준(레지스트리 #21)
 
 
-def test_tp_is_2r_when_no_level_ahead():
+def test_tp_is_2r_when_no_level_ahead(rules):
     snap = replace(SNAP, vp=VP(D("59900"), D("59950"), D("59000")), swings_close=(SL1,))
     _, (it,) = drive(strat(feed=StubFeed(snap)), [LONG_OK])
-    assert it is not None and it.tp == D(59990) + 2 * D(240)
+    assert it is not None and it.tp_rule is not None and it.tp_rule.level is None
+    pos = filled(rules, it)
+    assert pos.tp == pos.entry_price + 2 * (pos.entry_price - it.sl)
+
+
+def test_level_tp_survives_fill_when_far_enough(rules):
+    _, (it,) = drive(strat(), [LONG_OK])
+    assert it is not None
+    assert filled(rules, it).tp == D("60400")                   # 60400 − 체결가(≈59992) ≥ 1.5 × R(≈242)
 
 
 # ── 쿨다운(엔진과 함께 · 실제 체결) ─────────────────────────────────────────────
@@ -274,7 +294,7 @@ def test_invert_mirrors_sl_and_tp_around_the_decision_mark():
     _, (it,) = drive(strat(invert=True), [LONG_OK])
     m = D(59990)
     assert it is not None and it.direction is Direction.SHORT
-    assert it.sl == 2 * m - D(59750) and it.tp == 2 * m - D(60400)
+    assert it.sl == 2 * m - D(59750) and it.tp_rule is not None and it.tp_rule.level == 2 * m - D(60400)
 
 
 def test_invert_intent_is_accepted_by_the_engine(rules):

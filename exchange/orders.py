@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
 from exchange.errors import OrderParamError
@@ -59,7 +59,7 @@ def side_for(direction: Direction, intent: Intent) -> Side:
 
 
 def _fmt_qty(q: Decimal, r: SymbolRules) -> str:
-    return format(q.quantize(r.market_step), "f")
+    return format(q.quantize(r.market_step, rounding=ROUND_DOWN), "f")      # 이미 step 배수 — 내림은 명시만
 
 
 def market_order_params(symbol: str, direction: Direction, intent: Intent, qty: Decimal,

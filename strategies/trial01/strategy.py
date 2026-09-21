@@ -19,7 +19,9 @@ touch → confirmation(도지 가드) → [conflict_signal] → filter(Arm A만)
 - ⓖ 쿨다운 레벨 신원: 스윙 = level_id · VP(POC·VAH·VAL) = 가격. 청산 시각(봉 마감)부터 60분 동안 그 레벨의 결정(봉 마감 시각)을 막는다.
 - ⓗ SL 앵커·TP 레벨·sl_dist는 **결정 봉 마감** 기준: 스윙 = 마감 시각에 유효 · 기준가 m = 결정 봉 `mark_close` ·
   sl_dist = |m − SL| / m. 엔진은 다음 봉 `mark_open`에서 다시 사이징한다(두 번째 게이트 — 거부는 엔진 사유로 따로 센다).
-- ⓘ TP 레벨 후보 = 그 시각 유효한 레벨 **전부**(가까운 3개 제한 없음) 중 이익 방향으로 m보다 **엄격히** 먼 것.
+- ⓘ TP 레벨 후보 = 그 시각 유효한 레벨 **전부**(가까운 3개 제한 없음) 중 이익 방향으로 m보다 **엄격히** 먼 것 중 가장 가까운 것.
+  **R은 체결가 기준 하나**(사용자 2026-09-21 · 레지스트리 #21): 레벨까지 거리 ≥ 1.5R 판정과 2R 폴백은 엔진이 체결 뒤
+  `TpFromFill`로 정한다(R = |체결 진입가 − SL| — 트레일링과 같은 R · P1의 실현 sl_dist와 같은 기준).
 - ⓙ 트레일링 거리 = 결정 시점 ATR_15m × 1.0으로 **진입 때 고정**(엔진은 ATR을 모른다) · 무장·조임은 `paper/engine.py`.
 - ⓚ P2 `--delay k`: 확인 신호를 k봉 뒤 봉 마감에서 처리(필터·쿨다운·단일 포지션·SL·TP를 **그 시각** 상태로 다시 판정 ·
   conflict 판정은 원래 확인 봉) · P3 `--invert`: 모든 판정은 원 방향으로 하고 마지막에 방향을 뒤집되 SL·TP를 m 기준으로
@@ -36,7 +38,7 @@ from typing import Any, Literal, Protocol
 from backtest.data import MINUTE_MS, Bar1m
 from backtest.engine_replay import ReplayContext
 from exchange.orders import Direction
-from paper.engine import EntryIntent, Trail
+from paper.engine import EntryIntent, TpFromFill, Trail
 from paper.types import EntryFilled, EntrySkipped, PositionClosed
 from sizing.config import RegimeSizing
 from strategies.trial01.config import SR_V1_PARAMS, Trial01Params
@@ -251,26 +253,27 @@ class Trial01:
             ctx.skip("sl_dist_out_of_range", candidate=True, sl_dist=str(sl_dist), sl=str(sl),
                      sl_anchor=list(swing_level(anchor).key), **base)
             return None
-        r = abs(m - sl)
         levels = [swing_level(lv) for lv in snap.swings_close] + vp_levels(snap.vp)
         ahead = [lv for lv in levels if (lv.price > m if long_ else lv.price < m)]
         lv = min(ahead, key=lambda x: (abs(x.price - m), x.price, x.key)) if ahead else None
-        if lv is None or abs(lv.price - m) < self.p.tp_min_r * r:
-            tp, tp_kind = (m + self.p.tp_fallback_r * r if long_ else m - self.p.tp_fallback_r * r), "2R"
-        else:
-            tp, tp_kind = lv.price, lv.kind
+        tp_level = None if lv is None else lv.price
         direction = d
         if self.invert:
-            direction, sl, tp = (SHORT if long_ else LONG), 2 * m - sl, 2 * m - tp
+            direction, sl = (SHORT if long_ else LONG), 2 * m - sl
+            tp_level = None if tp_level is None else 2 * m - tp_level
+        #  TP는 엔진이 체결 뒤 정한다 — R = |체결 진입가 − SL|(트레일링과 같은 R · 레지스트리 #21)
+        tp_rule = TpFromFill(tp_level, self.p.tp_min_r, self.p.tp_fallback_r)
         trail = Trail(self.p.trail_arm_r, self.p.trail_atr_mult * snap.atr15) if self.p.trailing else None
         ctx.decisions.append({"ts_ms": t, "outcome": "intent", "candidate": True, **base,
                               "entry_direction": direction.value, "decision_mark": str(m), "sl": str(sl),
-                              "sl_anchor": list(swing_level(anchor).key), "sl_dist": str(sl_dist), "tp": str(tp),
-                              "tp_kind": tp_kind, "atr15": str(snap.atr15), "tsmom": snap.tsmom,
-                              "trail_dist": None if trail is None else str(trail.dist)})
+                              "sl_anchor": list(swing_level(anchor).key), "sl_dist": str(sl_dist),
+                              "tp_level": None if tp_level is None else str(tp_level),
+                              "tp_level_kind": None if lv is None else lv.kind, "atr15": str(snap.atr15),
+                              "tsmom": snap.tsmom, "trail_dist": None if trail is None else str(trail.dist)})
         self.counts["intent"] += 1
         self.active_key = s.level.key
-        return EntryIntent(direction, sl, tp, self.regime, decided_ms=t, decision_mark=m, trail=trail)
+        return EntryIntent(direction, sl, None, self.regime, decided_ms=t, decision_mark=m, trail=trail,
+                           tp_rule=tp_rule)
 
     @staticmethod
     def _sl_anchor(d: Direction, level: Decimal, swings: tuple[SwingLevel, ...]) -> SwingLevel | None:

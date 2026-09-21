@@ -78,6 +78,7 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                 open_trade = {"trade_id": len(trades), "entry_ms": t, "direction": ev.decision.direction.value,
                               "entry_mark": str(b.d("mark_open")), "entry_fill": str(ev.post_fill.entry_price),
                               "qty": str(ev.post_fill.qty), "leverage": ev.leverage, "sl": str(ev.decision.sl),
+                              "tp": None if eng.last_entry_tp is None else str(eng.last_entry_tp),
                               "sl_dist": str(ev.post_fill.sl_dist_pct), "wallet_before": str(wallet_before)}
                 ctx.decisions.append({"ts_ms": t, "outcome": "entered", "trade_id": open_trade["trade_id"]})
                 liq_now = ev.post_fill.liq_price_est             # 같은 봉에서 바로 청산되는 경우의 gross 기준가

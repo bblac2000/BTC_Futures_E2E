@@ -28,6 +28,8 @@
   켜지면: R = 체결 진입가와 초기 SL의 거리 · 유리한 극값(틱 = mark, 봉 = 롱 고가/숏 저가)이 진입가 ± arm_r×R에 닿으면 무장 →
   SL = 극값 ∓ dist로 **조이기만** 한다. 판정(`_evaluate`) **뒤에** 갱신하므로 새 SL은 다음 봉/틱부터 쓴다(봉 안 순서 불명 · 보수적).
   옮겨진 SL에서 나가면 `ExitReason.TRAIL`(체결 기준은 SL과 같다).
+- **체결 뒤 TP(`EntryIntent.tp_rule` · 기본 None)**: R = |체결 진입가 − SL|로 레벨 TP와 폴백 TP(fallback_r × R)를 정한다 —
+  트레일링과 같은 R(레지스트리 #21). None이면 기존대로 `intent.tp`를 그대로 쓴다.
 """
 from __future__ import annotations
 
@@ -93,6 +95,16 @@ class Trail:
 
 
 @dataclass(frozen=True)
+class TpFromFill:
+    """TP를 **체결 뒤** 정한다 — R = |체결 진입가 − SL|(트레일링과 같은 R · 레지스트리 #21).
+    `level`이 이익 방향으로 체결가에서 `min_r × R` 이상 떨어져 있으면 TP = level, 아니면(없거나 가깝거나 이미 지남)
+    TP = 체결가 ± `fallback_r × R`."""
+    level: Decimal | None
+    min_r: Decimal
+    fallback_r: Decimal
+
+
+@dataclass(frozen=True)
 class EntryIntent:
     """전략 출력 — 무엇을 원하는가. 크기·레버리지는 실행 시점에 엔진이 정한다."""
     direction: Direction
@@ -102,6 +114,7 @@ class EntryIntent:
     decided_ms: int
     decision_mark: Decimal                 # 결정 시점 mark(기록·TP 방향 검사용 — 체결가 아님)
     trail: Trail | None = None             # 기본 꺼짐 — 트라이얼 전략 config가 켤 때만
+    tp_rule: TpFromFill | None = None      # 기본 꺼짐 — 있으면 `tp`는 None이어야 하고 TP는 체결 뒤 정해진다
 
 
 @dataclass
@@ -133,6 +146,16 @@ def _vwap(fills: list[Fill]) -> Decimal:
     return sum((f.qty * f.price for f in fills), Decimal()) / q
 
 
+def _tp_from_fill(rule: TpFromFill, direction: Direction, entry: Decimal, sl: Decimal) -> Decimal:
+    r = abs(entry - sl)
+    long_ = direction is Direction.LONG
+    if rule.level is not None:
+        ahead = rule.level - entry if long_ else entry - rule.level
+        if ahead >= rule.min_r * r:
+            return rule.level
+    return entry + rule.fallback_r * r if long_ else entry - rule.fallback_r * r
+
+
 class Engine:
     def __init__(self, rules: RuntimeRules, sender: OrderSender, *, mode: Mode, wallet: Decimal, limits: SizingLimits):
         if sender.mode is not mode:
@@ -146,6 +169,7 @@ class Engine:
         self.entries_blocked: list[str] = []
         self._last_tick: MarkTick | None = None
         self._restored_next_funding_ms: int | None = None     # 복원 뒤 첫 틱에서 내려가 있던 동안의 펀딩 경계를 본다
+        self.last_entry_tp: Decimal | None = None             # 마지막 체결의 TP(tp_rule이면 체결 뒤 값) — 재생 기록용 · 이벤트·스냅샷 아님
 
     # ── 입력 ────────────────────────────────────────────────────────────────
     def request_entry(self, intent: EntryIntent) -> None:
@@ -158,6 +182,11 @@ class Engine:
         long_ = intent.direction is Direction.LONG
         if intent.trail is not None and not (intent.trail.arm_r > 0 and intent.trail.dist > 0):
             raise ValueError(f"trail 값은 양수여야 한다: {intent.trail}")
+        if intent.tp_rule is not None:
+            if intent.tp is not None:
+                raise ValueError("tp와 tp_rule은 함께 줄 수 없다")
+            if not (0 < intent.tp_rule.min_r and 0 < intent.tp_rule.fallback_r):
+                raise ValueError(f"tp_rule 값은 양수여야 한다: {intent.tp_rule}")
         if intent.tp is not None and ((long_ and intent.tp <= intent.decision_mark)
                                       or (not long_ and intent.tp >= intent.decision_mark)):
             raise EntryRefused(f"TP {intent.tp}가 {intent.direction} 결정 mark {intent.decision_mark}의 잘못된 쪽")
@@ -396,7 +425,9 @@ class Engine:
 
         self.wallet -= commission
         post = self._post_fill(d, entry, qty)
-        self.position = OpenPosition(d.direction, qty, entry, d.leverage, d.sl, pe.tp, post.liq_price_est, commission,
+        tp = pe.tp if pe.tp_rule is None else _tp_from_fill(pe.tp_rule, d.direction, entry, d.sl)
+        self.last_entry_tp = tp
+        self.position = OpenPosition(d.direction, qty, entry, d.leverage, d.sl, tp, post.liq_price_est, commission,
                                      ts_ms, d, Decimal())
         if pe.trail is not None:
             self.position.trail, self.position.trail_r = pe.trail, abs(entry - d.sl)

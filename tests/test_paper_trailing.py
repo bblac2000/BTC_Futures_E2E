@@ -188,3 +188,49 @@ def test_intent_trail_validation(rules):
         with pytest.raises(ValueError):
             e.request_entry(EntryIntent(LONG, D("59700"), None, REGIME, T0 - 1, D("60000"), trail=bad))
     assert replace(Trail(D(1), D(2)), dist=D(3)).dist == D(3)
+
+
+# ── 체결 뒤 TP(tp_rule · 레지스트리 #21: R = |체결 진입가 − SL| 하나) ─────────────────────
+def _fill_tp(rules, direction, rule):
+    from paper.engine import TpFromFill  # noqa: F401
+    e = eng(rules)
+    sl = D("59700") if direction is LONG else D("60300")
+    e.request_entry(EntryIntent(direction, sl, None, REGIME, T0 - 1, D("60000"), tp_rule=rule))
+    e.on_bar(bar(0, "60000", "60000", "60000", "60000"))
+    assert e.position is not None
+    return e.position
+
+
+def test_tp_rule_uses_the_level_when_at_least_min_r_from_the_fill(rules):
+    from paper.engine import TpFromFill
+    pos = _fill_tp(rules, LONG, TpFromFill(D("61000"), D("1.5"), D("2")))
+    assert pos.entry_price > D("60000") and pos.tp == D("61000")          # 체결가(슬리피지 포함) 기준 거리 ≥ 1.5R
+
+
+def test_tp_rule_falls_back_to_2r_from_the_fill(rules):
+    from paper.engine import TpFromFill
+    for level in (D("60400"), None, D("59990")):                          # 가까움 · 없음 · 이미 체결가 뒤
+        pos = _fill_tp(rules, LONG, TpFromFill(level, D("1.5"), D("2")))
+        r = pos.entry_price - D("59700")
+        assert pos.tp == pos.entry_price + 2 * r, level
+
+
+def test_tp_rule_short_mirrors(rules):
+    from paper.engine import TpFromFill
+    pos = _fill_tp(rules, SHORT, TpFromFill(D("59800"), D("1.5"), D("2")))
+    r = D("60300") - pos.entry_price
+    assert pos.entry_price < D("60000") and pos.tp == pos.entry_price - 2 * r
+    pos = _fill_tp(rules, SHORT, TpFromFill(D("59000"), D("1.5"), D("2")))
+    assert pos.tp == D("59000")
+
+
+def test_tp_rule_validation(rules):
+    import pytest
+
+    from paper.engine import TpFromFill
+    with pytest.raises(ValueError):
+        eng(rules).request_entry(EntryIntent(LONG, D("59700"), D("61000"), REGIME, T0 - 1, D("60000"),
+                                             tp_rule=TpFromFill(None, D("1.5"), D("2"))))
+    with pytest.raises(ValueError):
+        eng(rules).request_entry(EntryIntent(LONG, D("59700"), None, REGIME, T0 - 1, D("60000"),
+                                             tp_rule=TpFromFill(None, D(0), D("2"))))

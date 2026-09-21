@@ -2303,3 +2303,26 @@ B: cooldown 66 · one_position 3,401 · 후보 832(no_sl_anchor 84 · sl_dist_ou
 **단계 d 질문(레지스트리 #21 후보)**: `strategy.py` 머리말 ⓐ~ⓚ(터치·확인 = mark 봉 · 봉 시작 기준 레벨 집합 · 밴드 "안" 문언 · 최근 터치가 대체 · conflict는 필터 전 ·
 쿨다운 레벨 신원 · 결정 봉 마감 기준 SL/TP · TP 후보 = 전체 유효 레벨 · 트레일 거리 진입 때 고정 · 지연/반전 정의) + 트레일 무장·극값 봉 근사 · equity 1,000.
   + R 기준 두 가지: 트레일 R = |체결 진입가(2 bps 슬리피지 포함) − SL| · TP 2R·1.5R = |결정 mark − SL| · conflict를 필터 뒤로 두면 Arm A 분모가 커진다(조각 32봉).
+
+
+## 2026-09-21 — 단계 2c 보완(사용자 "2c accepted with three actions before step d") · 손익 계산 없음
+1. **skip_rate 분모**: 보고서의 "대사 불일치"는 **내 산수 오류**였다(확인 롱+숏 − conflict = 4,299를 2,299로 적음). 확인된 셋업 하나가
+   신호 하나 → 결정 행 하나이므로 셈은 이미 셋업 단위였고 항등식이 성립했다(A 4,299 − 2,186 − 18 − 1,393 = 702 · B 4,299 − 66 − 3,401 = 832).
+   코드 셈법은 바꾸지 않았고 대사 테스트를 추가: `test_skip_rate_denominator_reconciles_per_setup`(30일 조각 · 두 암) —
+   셋업마다 전략 결정 행 정확히 하나 · 후보 = 필터 통과 확인 − cooldown − one_position = no_sl_anchor + sl_dist_out_of_range + intent.
+2. **10진 rounding 고정(라이브 엔진 경로 · Codex 단계 d 묶음 · 검토 전 호스트 배포 안 함)**: `exchange/decimal_context.py`(`pinned` · `pinned_rounding` —
+   산술 rounding HALF_EVEN·기본 트랩 고정 · 정밀도는 호출자/인자). 적용: `sizing/position.py` 세 곳(34자리) · `exchange/normalize.py`
+   floor/ceil_to_step·normalize_price·normalize_entry_qty·split_market_qty · `paper/sender.adverse_fill_estimate`.
+   양자화 rounding 명시: 가격 `quantize(tick, ROUND_HALF_UP)`(헌법 exchange-rules §정규화) · 수량 문자열 `quantize(step, ROUND_DOWN)`.
+   테스트 `tests/test_decimal_context.py`: 전역 문맥 HALF_UP+Underflow 트랩(ccxt와 같은 변형) 및 **실제 ccxt `decimal_to_precision` 호출 뒤**
+   사이징·청산가·정규화·분할·체결가 추정·주문 파라미터·진입 후 검사 3,994개 출력이 기본 문맥과 바이트 동일(수정 전 19개 불일치) ·
+   exchange/sizing/paper의 quantize·to_integral 호출은 전부 rounding 명시(정적 검사).
+   **기본 문맥에서의 결과는 수정 전과 같다**: 수정 전 커밋(fc9dde0)과 수정 후 코드의 같은 3,994개 출력 SHA256 `a0c4bf2c…` 동일.
+   → 돌고 있는 봇에 미치는 영향은 ccxt가 전역 문맥을 바꾼 **뒤**의 호출에서만(마지막 자리 차이 제거). 엔진의 일반 산술(지갑·손익·VWAP)은 고정 대상 밖 — Codex 질문.
+3. **레지스트리 #21**(사용자 결정 · 기록 시각 2026-09-21T11:36:37Z · 손익 계산 전): 2c 규약 전부 + **R = |체결 진입가 − SL| 하나** —
+   트레일 무장과 **레벨 TP 1.5R 판정·2R 폴백도 체결가 기준**. 구현: `paper/engine.py` `EntryIntent.tp_rule: TpFromFill | None = None`(기본 꺼짐 ·
+   `tp`와 동시 금지) → 체결 뒤 TP 결정 · `Engine.last_entry_tp`(재생 기록용 속성 — 이벤트·스냅샷 형태 불변) · 전략은 TP 레벨 후보만 넘긴다.
+**검증**: 825 passed · ruff·pyright 0 · stream-tiers 0. 30일 조각(별도 프로세스 두 번 · 두 암) 해시 동일:
+A decisions `789bf4d5…` · trades `13ca3691…` · summary `2fe670b5…` / B decisions `f9155ad6…` · trades `c55d018d…` · summary `2c58064b…`.
+**조각 개수(성과 아님)**: A 후보 703(no_sl_anchor 40 · sl_dist_out_of_range 526 · 의도 137 → 체결 136 · 엔진 사이징 거부 1) · filter 2,186 · cooldown 18 · one_position 1,392 ·
+B 후보 838(84 · 569 · 의도·체결 185) · cooldown 66 · one_position 3,395. (TP가 체결 기준으로 바뀌어 청산 시각이 달라지면 one_position이 조금 움직인다.)

@@ -73,20 +73,57 @@ def test_strategy_features_match_the_2b_store_on_sampled_minutes():
     assert seen == len(want)
 
 
-@needs_data
-def test_30_day_slice_is_deterministic_across_processes(tmp_path, monkeypatch):
-    """같은 조각을 별도 프로세스 두 번 → 출력 파일 SHA256이 모두 같다(Arm A)."""
+SLICE_OUTPUTS = {"decisions.jsonl", "trades.jsonl", "open_at_end.jsonl", "summary.json"}
+STRATEGY_REASONS = {"conflict_signal", "filter", "cooldown", "one_position", "no_sl_anchor", "sl_dist_out_of_range"}
+
+
+@pytest.fixture(scope="module")
+def slice_runs(tmp_path_factory):
+    """30일 조각 × 두 암 × 별도 프로세스 두 번(병렬). 수익 필드는 읽지 않는다."""
     import sys
-    monkeypatch.delitem(sys.modules, "tests.fixtures.trial01_slice", raising=False)   # 대조 테스트가 import했을 수 있다
-    recs = [run_isolated("tests.fixtures.trial01_slice", ["--arm", "A", "--days", "30"], tmp_path / f"r{i}",
-                         timeout_s=900) for i in (1, 2)]
+    from concurrent.futures import ThreadPoolExecutor
+    sys.modules.pop("tests.fixtures.trial01_slice", None)        # 대조 테스트가 import했을 수 있다(격리 검사)
+    root = tmp_path_factory.mktemp("slice")
+    jobs = [(arm, i) for arm in ("A", "B") for i in (1, 2)]
+    with ThreadPoolExecutor(4) as ex:
+        recs = list(ex.map(lambda j: run_isolated("tests.fixtures.trial01_slice", ["--arm", j[0], "--days", "30"],
+                                                  root / f"{j[0]}{j[1]}", timeout_s=900), jobs))
     for r in recs:
         assert r.returncode == 0, r.stderr[-2000:]
-    assert set(recs[0].outputs) == {"decisions.jsonl", "trades.jsonl", "open_at_end.jsonl", "summary.json"}
-    assert recs[0].outputs == recs[1].outputs
-    summ = json.loads((tmp_path / "r1" / "summary.json").read_text())
+    return {f"{a}{i}": (r, root / f"{a}{i}") for (a, i), r in zip(jobs, recs, strict=True)}
+
+
+@needs_data
+@pytest.mark.parametrize("arm", ["A", "B"])
+def test_30_day_slice_is_deterministic_across_processes(slice_runs, arm):
+    """같은 조각을 별도 프로세스 두 번 → 출력 파일 SHA256이 모두 같다."""
+    r1, r2 = slice_runs[f"{arm}1"][0], slice_runs[f"{arm}2"][0]
+    assert set(r1.outputs) == SLICE_OUTPUTS and r1.outputs == r2.outputs
+    summ = json.loads((slice_runs[f"{arm}1"][1] / "summary.json").read_text())
     assert summ["window_minutes"] == 30 * 1440 and summ["decision_counts"]
-    (tmp_path / "hashes.json").write_text(json.dumps(recs[0].outputs, sort_keys=True))
+
+
+@needs_data
+@pytest.mark.parametrize("arm", ["A", "B"])
+def test_skip_rate_denominator_reconciles_per_setup(slice_runs, arm):
+    """셋업(확인된 신호) 하나 = 전략 결정 행 하나 · 후보 = 필터 통과 확인 − cooldown − one_position(사전등록 분모)."""
+    out = slice_runs[f"{arm}1"][1]
+    summ = json.loads((out / "summary.json").read_text())
+    dec = [json.loads(ln) for ln in (out / "decisions.jsonl").read_text().splitlines()]
+    c, n = summ["strategy_counts"], summ["decision_counts"]
+    setups = c["confirm_LONG"] + c["confirm_SHORT"]
+    strat_rows = [d for d in dec if d.get("reason") in STRATEGY_REASONS or d["outcome"] == "intent"]
+    assert len(strat_rows) == setups                                     # 셋업마다 결정 행 정확히 하나
+    signals = setups - n.get("conflict_signal", 0)
+    passed_filter = signals - n.get("filter", 0)
+    assert arm == "A" or n.get("filter", 0) == 0
+    cands = passed_filter - n.get("cooldown", 0) - n.get("one_position", 0)
+    assert cands == summ["candidates"] == c["candidate"]
+    assert cands == n.get("no_sl_anchor", 0) + n.get("sl_dist_out_of_range", 0) + n["intent"]
+    assert all(d["candidate"] is (d.get("reason") not in {"conflict_signal", "filter", "cooldown", "one_position"})
+               for d in strat_rows)
+    engine_rows = [d for d in dec if d["outcome"] == "skipped" and d.get("reason") not in STRATEGY_REASONS]
+    assert n["intent"] - n.get("entered", 0) - len(engine_rows) in (0, 1)   # 1 = 창 끝에 대기 중인 의도
 
 
 def test_windows_constant_has_no_oos_bars_here():
