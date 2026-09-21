@@ -7,6 +7,9 @@ dependencies = [
     "pyarrow>=17",
     # 🔒 exact pin — ccxt/ccxt.pro is part of the exchange-rules surface (registry). Upgrades = new registry row + re-run tier test.
     "ccxt==4.5.78",
+    # 🔒 exact pin — trial #1 P1 placebo uses numpy Generator(PCG64)+SeedSequence(20260921); NumPy does not promise
+    #    Generator streams across versions, so the pre-registered null is only reproducible on this exact version.
+    "numpy==2.5.3",
 ]
 
 [dependency-groups]

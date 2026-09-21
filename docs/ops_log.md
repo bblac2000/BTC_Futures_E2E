@@ -2236,3 +2236,19 @@ Resume in Codex: codex resume 01a0c354-b904-70c1-9eac-6731a0bc9fc2
 - `sr_v1` = §1 표(17~45행) SHA256 `b02d1a16…fbce6` · 시드 20260921 · N = 2 → 레지스트리 #18 append.
 - 다음: 단계 2a(하네스) — 전략 코드 금지 해제는 **앵커 이후 구현 단계**로만(IS 실행은 Codex 검토 뒤).
 
+
+## 2026-09-21 — 단계 2a 하네스(전략 무관) · 테스트만 · 실데이터 통계 없음
+**구성**: `strategies/trial01/anchor.py`(앵커·창·시드 — 날짜를 손으로 쓰는 유일한 곳 · 문서 SHA256·sr_v1·레지스트리 #18을 테스트가 대조) ·
+`backtest/data.py`(아카이브 로더·REST 보충·확정 펀딩·무결성·UTC 정렬 검사·봇 DB 대조) · `backtest/resample.py`(15m/4h · 마감 봉만) ·
+`backtest/stats.py`(일 블록 부트스트랩 10k·양측 97.5% CI·짝지음 · PSR · DSR(N=2) · MDE · ρ̂) · `backtest/placebo.py`(P1 규약 a~f · P4 · P2/P3 변형 인자 · 기각 규칙) ·
+`backtest/placebo_exec.py`(P1 시간 청산 = 정본 엔진 `restore_position` 경로 · 정상 엔진 트레이드와 손익 동일 테스트) · `backtest/returns.py` ·
+`backtest/engine_replay.py`(전략 프로세스 안 봉 재생) · `backtest/replay.py`(격리 러너 + verbatim 기록기) · `backtest/prepare.py`(창 데이터 CLI · **OOS 준비 거부**).
+numpy **2.5.3 정확 고정**(Generator 스트림이 버전 간 보장되지 않는다 → P1 귀무분포 재현성).
+
+**데이터 사실(2a 설계 입력)**
+- 아카이브 타임스탬프 = **UTC 봉 시작**(REST klines·markPriceKlines와 OHLCV·mark 정확 일치) · 파일은 **KST 연도**로 나뉜다.
+- 아카이브 끝 **2026-06-18 14:59 UTC** → IS 끝 12.4일(17,820분)은 REST로 보충(`source=rest`) · OOS는 전부 REST(아직 준비 안 함).
+- 아카이브 `funding_rate` 열은 분마다 앞값 채움 → 펀딩은 REST `/fapi/v1/fundingRate`(확정율·정산 mark)만.
+- **IS 무결성(실데이터 · 개수만)**: 예상 1,313,280분 · 실제 1,313,278 · 중복 0 · 단조 · mark 결손 0 · 아카이브 1,295,458 + REST 17,820 · 확정 펀딩 2,736건(912일×3) ·
+  UTC 표본 5개 일치 · bars SHA256 `70ef8a73…e120b3` · 🔴 **결손 2분 = 2024-08-12 10:02·10:03 UTC — 거래소 markPriceKlines 자체에 없다**(kline은 있음 · 아카이브 mark 열도 비어 있음).
+  메우지 않았다(데이터를 만들지 않는다) → 처리 규칙은 사용자 결정 대기.
