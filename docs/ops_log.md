@@ -2209,3 +2209,21 @@ Resume in Codex: codex resume 01a0c34d-7502-70c3-8a03-35757d16c99e
 
 **사용자 결정(2026-09-21) — P1 결정론 최종 규약 적용**: 청산 = 분 t+h−1 종가 · 점유 `[t, t+h)` · 다음 진입 t+h · 슬롯 전부 먼저 추출(쌍→방향, 0=LONG) · h 내림차순 배치(동률 슬롯 번호) ·
 **쌍 재추출 없음**(슬롯이 1,000회 실패하면 추출 실패) · p95는 성공 추출만 · 실패 10회 초과 → 폐기 · 시드 20260921 · 정렬·NumPy 호출 명시.
+
+### ✅ 트라이얼 #1 사전등록 Codex **MERGE** (`cdd4ebf..657cc7b` · `task-mub1ynbk-ojmkau` · 쿼터 오류 없음)
+P1 **CLOSED** — 시드 20260921·같은 입력·정본 B2 경로면 두 구현자가 **같은 귀무분포**를 낸다(남은 모호함 없음) · 행 안 모순 없음 · **MERGE — 앵커 준비 완료**.
+앵커 전 상태: 사전등록 문서 `docs/trials/trial_01_preregistration.md` · 레지스트리 초안 행(미추가) · 코드 없음. 다음 = **사용자의 앵커 날짜 확인 → Drive 업로드(createdTime) → 레지스트리 행 append**.
+Codex 검토 이력(트라이얼 #1): 1차 FIX FIRST(B3·M4·m1) → 재검토 FIX FIRST(레지스트리 문구 2·P1 명세) → 좁힌 재검토 FIX FIRST(P1 결정론) → 최종 FIX FIRST(off-by-one·RNG 순서·실패 추출·보유 선택 편향) → **MERGE**.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+- **P1: CLOSED.** All four prior issues are resolved by conventions (a)–(f). Evidence: [trial_01_preregistration.md:101](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101).
+- **Reproducibility:** Yes—two conforming implementers using seed `20260921`, identical inputs, and the canonical B2 path will produce the identical null distribution; no remaining ambiguity.
+- **Contradictions:** None; the preceding summary does not contradict conventions (a)–(f).
+- **Verdict: MERGE — ready to anchor.**
+
+Codex session ID: 01a0c354-b904-70c1-9eac-6731a0bc9fc2
+Resume in Codex: codex resume 01a0c354-b904-70c1-9eac-6731a0bc9fc2
+```
+</details>
