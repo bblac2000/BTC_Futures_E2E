@@ -79,7 +79,8 @@ def test_swing_invalidation_needs_a_close_beyond_the_level_by_more_than_quarter_
     st.on_bucket(_b15(7, 115, 100, 112), D(8))                   # 110 + 2 = 112 → 초과 아님
     assert lv.invalidated_ms is None
     st.on_bucket(_b15(8, 115, 100, 113), D(8))                   # 113 > 112 → 무효
-    assert lv.invalidated_ms == T0 + 9 * 15 * M - 1 and not lv.active(lv.invalidated_ms)
+    inv = lv.invalidated_ms
+    assert inv == T0 + 9 * 15 * M - 1 and not lv.active(inv)
 
 
 # ── 볼륨 프로파일 ─────────────────────────────────────────────────────────────
