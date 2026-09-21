@@ -1,4 +1,4 @@
-# 레지스트리 초안 행 — 트라이얼 #1 (앵커 전 · **아직 `docs/trial_registry.md`에 넣지 않았다**)
+# 레지스트리 초안 행 — 트라이얼 #1 (**대체됨 · 2026-09-21 앵커 후 `docs/trial_registry.md` #18로 append**)
 
 > 넣는 시점: Codex MERGE → 사용자 날짜 확인 → Drive 업로드(createdTime 확보) **뒤**에 그 createdTime을 채워 한 줄로 append 한다.
 > append-only 규칙상 **앵커 전에는 넣지 않는다** — 넣고 나서 고치는 것은 정정 행을 강요한다.

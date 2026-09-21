@@ -2227,3 +2227,12 @@ Codex session ID: 01a0c354-b904-70c1-9eac-6731a0bc9fc2
 Resume in Codex: codex resume 01a0c354-b904-70c1-9eac-6731a0bc9fc2
 ```
 </details>
+
+## 2026-09-21 09:51 UTC — 🔒 **트라이얼 #1 앵커**
+- 앵커 직전 문구 수정 2줄(사이징 행 B2 · §9 분위수 행) → Codex 1문항 확인 **YES/MERGE**(`01a0c35e…`, 텍스트만) → 새 SHA256 `e4442ff4…cdd7ef`.
+- 업로드 경로: 로컬 `gdrive_ro`는 `drive.readonly`라 쓰기 불가 · 호스트는 read-only 유지 → **Google Drive 커넥터**로 업로드(`text/markdown`, 변환 없음).
+- **createdTime `2026-09-21T09:51:14.150Z`** — 커넥터 응답과 rclone `lsjson --metadata`(btime) **일치** · Drive MD5 `77d4cf7d…` = 로컬 · 내려받은 사본 SHA256 = 로컬 → **바이트 동일**.
+- **OOS_end = 2026-09-20T23:59:59.999Z**(createdTime의 UTC 날짜 시작 − 1 ms, 코드로 계산 · 손입력 없음).
+- `sr_v1` = §1 표(17~45행) SHA256 `b02d1a16…fbce6` · 시드 20260921 · N = 2 → 레지스트리 #18 append.
+- 다음: 단계 2a(하네스) — 전략 코드 금지 해제는 **앵커 이후 구현 단계**로만(IS 실행은 Codex 검토 뒤).
+
