@@ -2597,3 +2597,220 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
   정지 알림 `stop` · 정지 후 DB 열린 root 0 · 해시 고정 checkout · 기동 알림 복원 없음). `status.json`에 `pending` 필드 추가(상태 파일만 · DB·이벤트 불변 · 테스트).
 - 사용자 단계 e 계획(Codex MERGE 뒤): 전체 IS Arm A·B → P1(1,000) · P2(+1/+5) · P3 · P4(200 · **로컬 병렬, VPS 금지**) · 사전등록 200회 유지 ·
   **모든 게이트를 한 보고서에서 함께 계산·개봉** · IS 통과 전 OOS 미개봉.
+
+
+## 2026-09-21 — 단계 d 후속 Codex 검토(ce1cd2c) · task-mubcqczj-a0n4md · 판정 FIX-FIRST
+프롬프트: 손익 금지·OOS 금지·읽기 전용(Codex는 tmp 쓰기 불가로 테스트 미실행 — 로컬에서는 847/848 통과). 아래 원문 그대로.
+
+> ## Findings
+> 
+> 1. **HIGH** — [ops/runtime.py:353](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:353),
+>    [ops/runtime.py:370](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:370)
+> 
+>    Event recording and snapshot recording are separate transactions.
+> 
+>    A crash after `StopTrailed` commits but before its snapshot leaves DB at the new SL
+>    and the latest snapshot at the old SL. Restore declares a mismatch and abandons
+>    the otherwise reconstructable position.
+> 
+>    Fix: atomically commit events plus engine snapshot, or replay durable events newer
+>    than the snapshot. Add a crash-injection test between `_record()` and `snapshot()`.
+> 
+> 2. **HIGH** — [ops/runtime.py:375](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:375),
+>    [ops/runtime.py:398](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:398)
+> 
+>    `_record()` does not preserve FIFO while `unrecorded` already contains work.
+> 
+>    If entry recording fails, a later trail or close batch can succeed before the
+>    queued entry. A close becomes orphaned; retrying the entry then creates a phantom
+>    open root.
+> 
+>    Fix: when `unrecorded` is non-empty, append without attempting a direct write.
+>    Test entry-write failure followed by trail, partial close, and full close.
+> 
+> 3. **HIGH** — [exchange/decimal_context.py:18](/home/cms/project/BTC_Futures_E2E/exchange/decimal_context.py:18),
+>    [ops/restore.py:67](/home/cms/project/BTC_Futures_E2E/ops/restore.py:67),
+>    [ops/restore.py:143](/home/cms/project/BTC_Futures_E2E/ops/restore.py:143)
+> 
+>    The precision upgrade has no persisted context version or transition guard.
+> 
+>    Restore reconstructs accumulated DB decimals under the caller’s context, then
+>    compares them exactly with snapshot aggregates. A position spanning the 28→34
+>    upgrade can mismatch after new events, even when both histories are legitimate.
+> 
+>    Fix: deploy only while flat, or persist an arithmetic-version/checkpoint and
+>    reconstruct under the matching context. Add a mixed-version restart test.
+> 
+> 4. **MEDIUM** — [ops/restore.py:61](/home/cms/project/BTC_Futures_E2E/ops/restore.py:61),
+>    [ops/restore.py:82](/home/cms/project/BTC_Futures_E2E/ops/restore.py:82)
+> 
+>    Trail and funding ownership is inferred only from `ts_ms >= root_ts`.
+> 
+>    If a trailed position closes and a non-trailed position opens in the same
+>    millisecond, the old `TrailSet` can be attached to the new root. Funding has the
+>    same timestamp-boundary ambiguity.
+> 
+>    Fix: persist and query a root position ID or durable engine sequence number.
+> 
+> 5. **MEDIUM** — [ops/runtime.py:458](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:458),
+>    [tests/test_decimal_context.py:112](/home/cms/project/BTC_Futures_E2E/tests/test_decimal_context.py:112)
+> 
+>    Actual account-snapshot arithmetic is still caller-context dependent.
+> 
+>    Isolated margin, available balance, and margin balance are calculated outside
+>    `EXEC_CTX`. The “snapshot” byte test exercises `Engine.position_state()`, not
+>    `BotRuntime.snapshot()` and its persisted account row.
+> 
+>    Fix: wrap snapshot arithmetic in `EXEC_CTX` and compare real account-snapshot rows.
+> 
+> 6. **LOW** — [strategies/trial01/p4.py:56](/home/cms/project/BTC_Futures_E2E/strategies/trial01/p4.py:56),
+>    [strategies/trial01/p4.py:108](/home/cms/project/BTC_Futures_E2E/strategies/trial01/p4.py:108)
+> 
+>    P4 retains only one extra hour for late confirmation-time range lookups.
+> 
+>    A sufficiently long data gap can emit a complete-enough past bucket whose
+>    confirmation window has already been pruned, causing the assertion at line 109.
+>    The known two-minute IS gap is safe.
+> 
+>    Fix: retain history based on the oldest emitted bucket, or defer pruning until all
+>    late buckets have been processed.
+> 
+> 7. **LOW** — [tests/test_ops_restore.py:370](/home/cms/project/BTC_Futures_E2E/tests/test_ops_restore.py:370)
+> 
+>    `test_armed_but_unmoved_trail_restores` never arms the trail; it asserts
+>    `armed=False`.
+> 
+>    Fix: create a bar that reaches the arm threshold while producing no SL improvement,
+>    then assert `armed=True, moved=False` before and after restart.
+> 
+> ## Q1 — Six prior HIGH findings
+> 
+> 1. **RESOLVED** — Interior mark gaps are skipped while funding is still processed:
+>    [placebo_exec.py:80](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:80).
+>    Test: `test_time_exit_executor_skips_interior_minutes_without_a_mark_bar`.
+> 
+> 2. **RESOLVED** — `P4Feed` replaces swing and VP levels, `--p4-draw` reaches the
+>    canonical runner, and SL anchoring consumes replaced swings:
+>    [p4.py:77](/home/cms/project/BTC_Futures_E2E/strategies/trial01/p4.py:77),
+>    [run.py:55](/home/cms/project/BTC_Futures_E2E/strategies/trial01/run.py:55).
+>    Tests: `test_swings_are_replaced_one_to_one_with_same_kind_and_validity`,
+>    `test_strategy_runs_end_to_end_on_random_levels`.
+>    The long-gap robustness issue above remains LOW.
+> 
+> 3. **PARTIAL** — Trail events are now recorded:
+>    [record.py:304](/home/cms/project/BTC_Futures_E2E/db/record.py:304).
+>    Test: `test_trailed_sl_and_resolved_tp_survive_a_restart`.
+>    Crash atomicity and FIFO ordering remain unresolved.
+> 
+> 4. **PARTIAL** — Restore derives effective SL and trail state:
+>    [restore.py:82](/home/cms/project/BTC_Futures_E2E/ops/restore.py:82).
+>    Tests: `test_trailed_sl_and_resolved_tp_survive_a_restart`,
+>    `test_missing_trail_rows_are_a_mismatch`.
+>    Same-millisecond ownership and record/snapshot crash boundaries remain unresolved.
+> 
+> 5. **RESOLVED** — Runtime records the engine-resolved TP and queues that captured
+>    value:
+>    [runtime.py:358](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:358),
+>    [runtime.py:381](/home/cms/project/BTC_Futures_E2E/ops/runtime.py:381).
+>    Test: `test_post_fill_gate_exit_records_resolved_tp`.
+> 
+> 6. **RESOLVED** — Warm-up merges archive-first with preceding prepared windows:
+>    [feature_build.py:39](/home/cms/project/BTC_Futures_E2E/strategies/trial01/feature_build.py:39),
+>    [feature_build.py:52](/home/cms/project/BTC_Futures_E2E/strategies/trial01/feature_build.py:52).
+>    Tests: `test_merge_warmup_prefers_archive_fills_gaps_from_prior_window_and_never_crosses_start`,
+>    `test_oos_warmup_continues_from_the_prior_is_bars_on_a_synthetic_var_dir`.
+> 
+> Therefore, four are resolved and two are only partial.
+> 
+> ## Q2 — P4
+> 
+> Adding `d` to `[20260921, 4, d, minute_index]` is the right reading.
+> 
+> Without it, all 200 draws share their VP levels; only swings vary. Row #22 records
+> this interpretation before measurement, so it is transparent and reproducible.
+> 
+> The implementation otherwise matches the registered rule:
+> 
+> - Swings are created one-for-one at the same confirmation times with the same IDs,
+>   kinds, nominal expiry, and invalidation rule.
+> - VP produces three draws for every VP-ready minute.
+> - Swing and VP prices use kline-last high/low ranges.
+> - Replaced swings feed SL anchoring.
+> - The SL-distance floor and cap remain in canonical strategy code.
+> - VP excludes the decision bar by querying before `range.push(bar)`.
+> - Late bucket lookup uses its historical confirmation time and filters out later bars.
+> 
+> There is no look-ahead. The only late-emission issue is the one-hour retention limit.
+> 
+> “Same density” is satisfied as creation count: identical swing confirmations and
+> three VP records per minute. Effective active swing count may differ because random
+> prices invalidate at different times; that is inherent in “same invalidation rule,”
+> not a deviation.
+> 
+> Sorting and labelling the draws as `VAL ≤ POC ≤ VAH` is acceptable because row #22
+> explicitly fixes that mapping. It makes POC the median draw rather than a true volume
+> mode, which is appropriate for this registered placebo.
+> 
+> ## Q3 — `EXEC_CTX` and deployment
+> 
+> Compared with the old default precision, the new context can change:
+> 
+> - Boundary decisions in post-fill gating, TP fallback selection, trail arming, and
+>   liquidation ordering.
+> - Decimal contents and occasionally timing/reason of emitted events.
+> - Stored decision, order, position, funding, and engine-event strings.
+> - Engine position snapshots and future sizing through accumulated balance changes.
+> - Exact restore comparisons across mixed-version histories.
+> 
+> Sizing itself was already largely computed at precision 34. The material new surface
+> is the remainder of engine transaction arithmetic.
+> 
+> An old snapshot and entirely old DB history should normally compare as before.
+> Once an open position continues under the new arithmetic, exact mixed-history
+> reconstruction is not guaranteed.
+> 
+> Deployment is safe only with a confirmed flat engine and a fresh post-upgrade
+> snapshot. Unconditional deployment over an open position is not safe.
+> 
+> Yes, restore needs either an explicit arithmetic-version guard or a documented,
+> enforced flat-only upgrade boundary.
+> 
+> ## Q4 — Restore failure modes
+> 
+> - Effective SL: the latest ordered `StopTrailed` after the root timestamp is used.
+>   This works for the normal single-root case.
+> - Crash after events, before snapshot: unresolved; it causes a false mismatch and
+>   abandonment.
+> - Partial closes: ordinary `PositionReduced` rows are reflected in remaining
+>   quantity and trigger snapshots. No new test combines partial close, trail state,
+>   and restart.
+> - Same millisecond positions: unresolved timestamp ownership ambiguity.
+> - DB retry TP: the resolved TP is captured at the correct time in `(events, tp)`.
+> - DB retry ordering: unresolved; later batches may bypass the queued batch.
+> 
+> ## Q5 — Other observations
+> 
+> Rows #21 and #22 generally match the code. QV scale and feature provenance are
+> recorded correctly, including metadata rows `[18, 19, 20, 22]`.
+> 
+> The default no-trail/no-TP-rule path emits none of the new trail events and retains
+> the old snapshot shape. It is not numerically byte-identical to the prior bot because
+> the 28→34 engine arithmetic change is intentional.
+> 
+> Tests could not be executed. `uv run pytest` could not create its cache lock, and the
+> existing virtualenv could not find any writable temporary directory. The unrun
+> files were:
+> 
+> - `tests/test_backtest_placebo.py`
+> - `tests/test_trial01_p4.py`
+> - `tests/test_trial01_features.py`
+> - `tests/test_decimal_context.py`
+> - `tests/test_ops_restore.py`
+> - `tests/test_paper_engine.py`
+> 
+> No files were edited; the worktree remained clean.
+> 
+> VERDICT: FIX-FIRST (atomic event/snapshot persistence, FIFO DB retry, Decimal upgrade guard)
+> 
+> Codex session ID: 01a0c468-be98-7a32-b5e2-2fa11bd43972
+> Resume in Codex: codex resume 01a0c468-be98-7a32-b5e2-2fa11bd43972
