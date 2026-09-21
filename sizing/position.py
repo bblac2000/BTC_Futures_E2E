@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Literal
 
-from exchange.decimal_context import pinned
+from exchange.decimal_context import EXEC_PREC, exec_context
 from exchange.errors import RulesError
 from exchange.normalize import RejectReason, normalize_entry_qty, split_market_qty
 from exchange.orders import Direction
@@ -32,7 +32,7 @@ from exchange.rules import Bracket, RuntimeRules
 from sizing.config import SL_TRIGGER_BASIS, RegimeSizing, SizingLimits
 
 #  나눗셈이 많은 안전 검사 — 호출자의 전역 Decimal 문맥(정밀도)에 판정이 흔들리지 않게 고정한다(Codex L2 권고 4)
-DECIMAL_PREC = 34
+DECIMAL_PREC = EXEC_PREC                # = exchange.decimal_context.EXEC_CTX 정밀도(레지스트리 #22)
 
 
 @dataclass(frozen=True)
@@ -113,7 +113,7 @@ def liquidation_estimate(direction: Direction, entry: Decimal, notional: Decimal
     🔴 이미 거친 티어로 되돌아가면(진동 · 고정점 없음) **추정하지 않고** `RulesError` — cum 연속성을 파서가
        강제하므로 실제 브라켓에서는 나오지 않는다(Codex L2 전체검토 Q2). 모든 브라켓 밖이어도 `RulesError`.
     """
-    with pinned(DECIMAL_PREC):                      # 정밀도·rounding·트랩 고정(exchange.decimal_context — ccxt 전역 문맥 무관)
+    with exec_context():                            # EXEC_CTX(정밀도 34 · rounding·트랩 고정) — ccxt 전역 문맥 무관
         side = 1 if direction is Direction.LONG else -1
         t = rules.commission.taker if taker is None else taker
         b: Bracket = rules.bracket_for_notional(notional)
@@ -142,7 +142,7 @@ _gate = sl_gate_passes
 
 def size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decimal, regime: RegimeSizing,
                rules: RuntimeRules, limits: SizingLimits) -> SizingDecision:
-    with pinned(DECIMAL_PREC):                      # 정밀도·rounding·트랩 고정(exchange.decimal_context — ccxt 전역 문맥 무관)
+    with exec_context():                            # EXEC_CTX(정밀도 34 · rounding·트랩 고정) — ccxt 전역 문맥 무관
         return _size_entry(entry, sl, direction, equity, regime, rules, limits)
 
 
@@ -269,7 +269,7 @@ def post_entry_liquidation_check(decision: SizingDecision, rules: RuntimeRules, 
     - CHECK ⇔ `exchange_dist × buffer_rel < estimate_dist`(수수료 차감 모델) — "추정보다 버퍼 이상 가깝다".
     - 🔎 #4의 수수료 가정 판정용: 수수료 미차감 모델도 계산해 두 모델과의 차이·더 가까운 모델을 남긴다.
     """
-    with pinned(DECIMAL_PREC):                      # 정밀도·rounding·트랩 고정(exchange.decimal_context — ccxt 전역 문맥 무관)
+    with exec_context():                            # EXEC_CTX(정밀도 34 · rounding·트랩 고정) — ccxt 전역 문맥 무관
         entry_price, qty = _dec(entry_price, "entry_price"), _dec(qty, "qty")
         exchange_liq_price = _dec(exchange_liq_price, "exchange_liq_price")
         if not decision.ok or decision.leverage is None:

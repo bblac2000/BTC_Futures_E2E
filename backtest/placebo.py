@@ -177,16 +177,21 @@ def p4_rng(draw: int) -> np.random.Generator:
     return np.random.Generator(np.random.PCG64(np.random.SeedSequence(list(A.P4_SEED)).spawn(A.P4_DRAWS)[draw]))
 
 
+def tick_uniform(rng: np.random.Generator, lo: Decimal, hi: Decimal, tick: Decimal) -> Decimal:
+    """[lo, hi] 안 tick 격자(lo 기준)에서 균등추출 — 난수 1회."""
+    if hi < lo:
+        raise ValueError("범위 역전")
+    n_ticks = int((hi - lo) / tick)
+    return lo + tick * int(rng.integers(0, n_ticks + 1))
+
+
 def p4_levels(draw: int, levels: Sequence[Level], range_at: RangeAt, tick: Decimal) -> list[Level]:
     """원 레벨과 1:1 · 같은 종류·유효기간 · 가격만 결정 시점 범위에서 tick 격자 균등추출."""
     rng = p4_rng(draw)
     out = []
     for lv in sorted(levels, key=lambda x: (x.valid_from_ms, x.level_id)):
         lo, hi = range_at(lv.valid_from_ms)
-        if hi < lo:
-            raise ValueError("범위 역전")
-        n_ticks = int((hi - lo) / tick)
-        price = lo + tick * int(rng.integers(0, n_ticks + 1))
+        price = tick_uniform(rng, lo, hi, tick)
         out.append(Level(lv.level_id, lv.kind, lv.valid_from_ms, lv.valid_to_ms, price))
     return out
 
@@ -198,6 +203,11 @@ P2_DELAYS = (1, 5)                               # 확인 신호 +1봉 · +5봉 
 def variant_args() -> dict[str, list[str]]:
     """같은 정본 전략을 플래그만 바꿔 다시 돌린다(격리 러너 인자)."""
     return {"P2_delay1": ["--delay", "1"], "P2_delay5": ["--delay", "5"], "P3_invert": ["--invert"]}
+
+
+def p4_args() -> dict[str, list[str]]:
+    """P4 무작위 레벨 200회 — 같은 정본 전략·엔진에 `--p4-draw d`(레지스트리 #22 · `strategies/trial01/p4.py`)."""
+    return {f"P4_draw{d:03d}": ["--p4-draw", str(d)] for d in range(A.P4_DRAWS)}
 
 
 def p1_rejects(original: float, null: Sequence[float]) -> bool:

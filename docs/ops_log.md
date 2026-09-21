@@ -2552,3 +2552,33 @@ B 후보 838(84 · 569 · 의도·체결 185) · cooldown 66 · one_position 3,3
 > 
 > Codex session ID: 01a0c3c2-4230-71f3-8bd7-68beb8a78a43
 > Resume in Codex: codex resume 01a0c3c2-4230-71f3-8bd7-68beb8a78a43
+
+
+## 2026-09-21 — 단계 d 후속 수정(사용자 "Fix order approved … one follow-up Codex batch") · 손익 계산 없음
+1. **P1 내부 결손 분**(Codex #1): `backtest/placebo_exec.run_time_exit` — mark 봉이 없는 내부 분은 판정 없이 넘기고 그 분의 펀딩은 정산.
+   테스트: 내부 2분 결손(그 안의 펀딩 포함) = 결손 없는 같은 가격 경로와 결과 동일. P1 골든 해시 불변.
+2. **워밍업 로더**(Codex #6): `feature_build.load_warmup` = 아카이브 우선 + 빈 분만 **앞선 창의 준비된 봉**(OOS ← IS parquet) ·
+   창 시작 이후 봉은 넣지 않음 · 채울 수 없는 분은 결손으로 남김. IS는 앞선 창이 없어 아카이브만(기존과 같음). `run.load_inputs`·`feature_build.build`·조각 픽스처가 사용.
+   테스트는 합성 경계만(합성 IS parquet → OOS 워밍업 35일 연속 · OOS 디렉터리 생성·읽기 없음). **OOS 미개봉 유지.**
+3. **트레일·체결 뒤 TP 영속화·복원**(Codex #3·#4·#5): 엔진이 `TrailSet`(체결 직후)·`TrailArmed`(무장)·`StopTrailed`(조임)을 내고
+   `db.record`가 `engine_events`에 기록(스키마 변경 없음) · 런타임은 체결 시 `engine.last_entry_tp`(tp_rule이면 체결 뒤 값 · 아니면 intent.tp와 같음)를
+   open 행 TP로 기록 · `StopTrailed`·`TrailArmed`는 스냅샷 트리거 · `ops.restore`는 유효 SL = 마지막 `StopTrailed.new_sl`(없으면 open 행)과
+   트레일 상태(arm_r·dist·R·armed·moved)를 DB에서 다시 만들어 스냅샷과 대조. 테스트: 런타임 → DB → 재기동(조인 SL·체결 뒤 TP 복원) ·
+   무장만 된 상태 복원 · StopTrailed 행 삭제 → 불일치 · 트레일 없는 포지션은 트레일 행 0·기존대로 복원 · POST_FILL_GATE 즉시 청산에도 open 행 TP 기록.
+   트레일/TP 규칙이 없는 현 봇 경로: 이벤트·DB 행·스냅샷 형태 불변(TP는 intent.tp와 같은 값).
+4. **이름 붙은 고정 10진 문맥 `EXEC_CTX`**(Codex #7·#8): 정밀도 34 · HALF_EVEN · 기본 트랩 · 기본 지수 범위 — 호출자 값을 하나도 쓰지 않는다.
+   적용: 엔진 공개 메서드 전부(`request_entry`·`on_tick`·`on_bar`·`on_funding`·`close_now`·`vanish`·`position_state`·`restore_position`·
+   `sync_wallet`·`cancel_pending`·`unrealized_pnl`·`equity`) · 정규화 5함수 · 사이징(이미 34자리) · `adverse_fill_estimate` · `db.record.record_events`.
+   테스트: 호출자 문맥 기본 / ccxt 모양(HALF_UP+Underflow) / 낮은 정밀도(6자리·DOWN)에서 사이징·정규화 3,994개 출력 + **엔진 시나리오 전체
+   (트레일·체결 뒤 TP·펀딩·청산)의 이벤트·스냅샷·DB 행** 바이트 동일 · 실제 ccxt 호출 뒤에도 동일.
+   🔴 **돌고 있는 봇에 대한 영향**: 엔진 산술이 28자리(호출자 기본) → 34자리가 된다 — 지갑·손익·VWAP 등 긴 나눗셈 결과의 29~34번째 자리가
+   생긴다(DB 문자열이 길어질 수 있음). 결정(진입·청산·게이트)은 이 자릿수에서 바뀌지 않도록 설계돼 있으나 Codex 확인 대상. 엔진 테스트 기대값도 EXEC_CTX에서 계산.
+5. **피처 메타데이터** `registry_rows` = [18, 19, 20, 22](Codex #10) · QV_SCALE 주석에 #22.
+**P4**(사용자 승인 · 레지스트리 #22): `strategies/trial01/p4.py` `P4Feed`(정본 `EngineFeed`를 감싸 레벨만 교체 — 스윙 1:1·같은 무효화 규칙·확정 시각 기준
+직전 24h 범위 · VP 분마다 3개·시드 `[20260921, 4, d, minute_index]` · 추출 번호 d 포함은 구현이 더한 해석) · `run.py --p4-draw d` · `placebo.p4_args()`(200개) ·
+`FeatureEngine.b15_complete`(무효화 재현용 훅 — 피처 값 불변).
+테스트(합성 7일): 1:1·종류·유효기간·확정 시각 범위·tick 격자 · 무효화 = 무차별 재계산 · VP = 분 시드 재계산·직전 24h 범위·결정 봉 제외 · 정본 피처 불변 ·
+같은 추출 결정론·다른 추출은 다름 · 전략 끝까지 실행(SL 앵커 = 무작위 스윙).
+**검증**: 847 passed · ruff·pyright 0 · stream-tiers 0 · **IS 피처 재빌드 SHA256 `dec39c92…` 동일** · 30일 조각 별도 프로세스 두 번:
+A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리 엔진 산술로 값 문자열 변화) · P4 추출 0 decisions `cd81a95a…` · trades `49327350…` 동일.
+조각 1회: 정본 약 22초 · P4 약 30초 → 전체 IS P4 200회는 추출당 약 15분 × 200(병렬 필요 — 단계 e 계획 사항).

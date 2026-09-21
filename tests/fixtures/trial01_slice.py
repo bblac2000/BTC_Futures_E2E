@@ -24,7 +24,7 @@ def load_slice(days: int) -> tuple[list[BD.Bar1m], list[BD.Bar1m], list[BD.Fundi
     t = pq.read_table(IS_DIR / "bars_1m.parquet", filters=[("open_ms", "<=", end)]).to_pydict()
     bars = [BD.Bar1m(*(t[c][i] for c in PR.BAR_COLS)) for i in range(len(t["open_ms"]))]
     fundings = [BD.Funding(**f) for f in json.loads((IS_DIR / "funding.json").read_text()) if f["funding_ms"] <= end]
-    warm = BD.load_archive(BD.ARCHIVE_DIR, start - RUN.WARMUP_MS, start - 1)
+    warm = RUN.load_warmup("IS", IS_DIR.parent)
     return warm, bars, fundings
 
 
@@ -32,11 +32,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", choices=["A", "B"], required=True)
     ap.add_argument("--days", type=int, default=30)
+    ap.add_argument("--p4-draw", type=int, default=None)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     warm, bars, fundings = load_slice(a.days)
-    r, s = RUN.run(warm, bars, fundings, arm=a.arm)
-    RUN.write_outputs(Path(a.out), r, s, {"window": f"IS[:{a.days}d]", "arm": a.arm, "delay": 0, "invert": False,
+    r, s = RUN.run(warm, bars, fundings, arm=a.arm, p4_draw=a.p4_draw)
+    RUN.write_outputs(Path(a.out), r, s, {"window": f"IS[:{a.days}d]", "arm": a.arm, "delay": 0, "invert": False, "p4_draw": a.p4_draw,
                                           "window_minutes": len(bars), "warmup_minutes": len(warm)})
     return 0
 

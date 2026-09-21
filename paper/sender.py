@@ -20,7 +20,7 @@ from typing import Any, Protocol
 
 from exchange.client import ReadOnlyClient
 from exchange.client_types import RestClient
-from exchange.decimal_context import pinned_rounding
+from exchange.decimal_context import in_exec_context
 from exchange.errors import BinanceAPIError, TransportError
 from exchange.gate import Mode, set_leverage_confirmed
 from exchange.orders import Side, validate_order_params
@@ -74,7 +74,7 @@ class LiveChecklist:
         return [f.name for f in fields(self) if getattr(self, f.name) is not True]
 
 
-@pinned_rounding
+@in_exec_context
 def adverse_fill_estimate(side: Side, ref_mark: Decimal, tick: Decimal, rate: Decimal = PAPER_SLIPPAGE_RATE) -> Decimal:
     """레지스트리 #7 예상 체결가 — mark × (1 ± rate)를 **불리한 tick**으로(BUY 올림 · SELL 내림).
     PAPER 체결가이자 PAPER·LIVE 공통 사이징 가격이다. LIVE에서 달라지는 건 실제 체결뿐(체결 후 #5 재검증이 잡는다)."""

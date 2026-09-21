@@ -6,6 +6,7 @@
 2. 그 포지션을 `Engine.restore_position`으로 엔진에 넣는다 — **SL은 닿을 수 없는 값**(롱 0 · 숏 매우 큼), TP 없음 →
    엔진의 **청산(liquidation) 판정·펀딩 정산·청산 체결**만 작동한다. 추정 청산가는 엔진이 현재 규칙으로 다시 계산한다.
 3. 분마다: 그 분에 든 확정 펀딩(진입 뒤 · 청산 시각 이하)을 `on_funding`으로 정산 → `on_bar`(mark 봉)로 청산 판정.
+   **내부 결손 분**(mark 봉 없음 — 규약 b는 진입·청산 분만 요구)은 펀딩만 정산하고 판정 없이 넘긴다(Codex 단계 d #1).
 4. 마지막 분: `close_now(ref_mark = mark 종가)`.
 진입 수수료는 엔진 `_execute_entry`처럼 지갑에서 뺀다(복원 경로는 빼지 않으므로 여기서).
 **equity**: 플라시보 트레이드는 **초기 자본 고정**으로 각각 사이징한다(구현 규약 — 트레이드당 수익률은 명목 대비 bps라 규모와 무관).
@@ -77,10 +78,13 @@ def run_time_exit(bars: dict[int, Bar1m], fundings: Sequence[Funding], *, entry_
     exit_ref = Decimal(0)
     t = entry_ms
     while t <= exit_minute and closed is None:
-        b = bars[t]
         while pending and pending[0].funding_ms < t + MINUTE_MS:
             f = pending.pop(0)
             eng.on_funding(ts_ms=f.funding_ms, rate=Decimal(f.rate), mark=Decimal(f.mark))
+        b = bars.get(t)
+        if b is None:                                        # 내부 결손 분(규약 b는 양 끝 분의 mark만 요구) — 판정 없이 넘긴다
+            t += MINUTE_MS
+            continue
         assert eng.position is not None
         liq_now = eng.position.liq_price_est                 # 이 봉에서 청산되면 gross 기준가(펀딩으로 갱신된 값)
         for ev in eng.on_bar(mark_bar(b)):

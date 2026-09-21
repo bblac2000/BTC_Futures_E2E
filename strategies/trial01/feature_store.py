@@ -33,7 +33,7 @@ ALL_FEATURES = MINUTE_FEATURES + BUCKET_FEATURES
 
 def params_json(cfg: SrV1 = SR_V1) -> dict[str, Any]:
     return {"params_version": "sr_v1", "sr_v1_sha256": A.SR_V1_SHA256, "prereg_sha256": A.PREREG_SHA256,
-            "registry_rows": [18, 19], "cfg": {k: str(v) for k, v in dataclasses.asdict(cfg).items()}}
+            "registry_rows": [18, 19, 20, 22], "cfg": {k: str(v) for k, v in dataclasses.asdict(cfg).items()}}
 
 
 def open_store(path: Path) -> sqlite3.Connection:

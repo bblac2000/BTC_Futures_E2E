@@ -6,7 +6,8 @@
 - (LIVE 배선 때 출처 ③ positionRisk가 같은 자리에 붙는다 — 이 파일은 PAPER만 판단한다)
 
 일치 = 스냅샷이 root open 행 이후(`ts_ms ≥`)이고 방향·수량·진입가·레버리지·SL·TP·진입 시각·누적 펀딩·진입 수수료(open 행 합)가
-모두 같고 다음 펀딩 시각이 있다. 추정 청산가는 대조하지 않고 복원 때 **현재 규칙으로 다시 계산**한다(Codex L8b #2) —
+모두 같고 다음 펀딩 시각이 있다. 트레일링 포지션(기본 꺼짐)은 SL = 마지막 `StopTrailed`의 새 SL(없으면 open 행)이고
+트레일 설정·무장·이동 상태도 대조한다(`engine_events` TrailSet·TrailArmed·StopTrailed — Codex 단계 d #3·#4). 추정 청산가는 대조하지 않고 복원 때 **현재 규칙으로 다시 계산**한다(Codex L8b #2) —
 계산할 수 없으면 불일치로 처리한다. 그 밖(스냅샷 없음·옛 형식·더 오래됨·값 불일치·한쪽만 포지션)은 전부 불일치:
 - 엔진은 flat으로 시작 · `SafetyGate.pause(MISMATCH_PAUSE)`(safety_state에 남아 재기동이 풀지 않는다 · 해제는 사람의 /start)
 - DB에 열린 행이 있으면 그 root에 `restart_unrestored` close 행(손익 없음 — 추정하지 않는다). 닫지 않으면 대사 수량 불일치가
@@ -69,9 +70,43 @@ def _db_open_position(con: sqlite3.Connection, *, mode: str, symbol: str) -> dic
     funding = sum((Decimal(p) for (p,) in con.execute(
         "SELECT paid_usdt FROM funding_events WHERE mode=? AND symbol=? AND missed=0 AND ts_ms>=?",
         (mode, symbol, root_ts))), Decimal())
+    trail, sl = _db_trail(con, mode=mode, symbol=symbol, since_ms=int(root_ts), sl=sl)
     return {"root_id": root, "opened_ms": int(root_ts), "direction": direction, "qty": str(state.remaining_qty),
             "entry_price": entry_price, "leverage": leverage, "sl": sl, "tp": tp, "funding_paid": str(funding),
-            "entry_commission": str(commission)}
+            "entry_commission": str(commission), "trail": trail}
+
+
+TRAIL_KINDS = ("TrailSet", "TrailArmed", "StopTrailed")
+
+
+def _db_trail(con: sqlite3.Connection, *, mode: str, symbol: str, since_ms: int, sl: Any) -> tuple[dict[str, Any] | None, Any]:
+    """트레일링 행(`engine_events` TrailSet·TrailArmed·StopTrailed, root 진입 이후) → (트레일 상태, **유효 SL**).
+    트레일링이 없는 포지션(현 봇)은 (None, open 행의 SL) — 기존 대조와 같다(Codex 단계 d #3·#4)."""
+    trail: dict[str, Any] | None = None
+    for kind, payload in con.execute(
+            "SELECT kind, payload_json FROM engine_events WHERE mode=? AND symbol=? AND ts_ms>=? AND kind IN (?,?,?) "
+            "ORDER BY id", (mode, symbol, since_ms, *TRAIL_KINDS)):
+        p = json.loads(payload or "{}")
+        if kind == "TrailSet":
+            trail = {"arm_r": p["arm_r"], "dist": p["dist"], "r": p["r"], "armed": False, "moved": False}
+        elif trail is None:
+            continue                                     # 설정 행 없는 무장·이동 = 이 root의 것이 아니다
+        elif kind == "TrailArmed":
+            trail["armed"] = True
+        else:
+            trail["armed"] = trail["moved"] = True
+            sl = p["new_sl"]
+    return trail, sl
+
+
+def _trail_diffs(snap: Any, db: dict[str, Any] | None) -> list[str]:
+    if snap is None and db is None:
+        return []
+    if not isinstance(snap, dict) or db is None:
+        return [f"trail 스냅샷 {snap} ≠ DB {db}"]
+    out = [f"trail.{k} 스냅샷 {snap.get(k)} ≠ DB {db[k]}" for k in ("arm_r", "dist", "r") if _dec(snap.get(k)) != _dec(db[k])]
+    out += [f"trail.{k} 스냅샷 {snap.get(k)} ≠ DB {db[k]}" for k in ("armed", "moved") if snap.get(k) is not db[k]]
+    return out
 
 
 def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> RestoreDecision:
@@ -109,6 +144,7 @@ def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> 
         a, b = _dec(snap.get(k)), _dec(db[k])
         if a != b:
             diffs.append(f"{k} 스냅샷 {snap.get(k)} ≠ DB {db[k]}")
+    diffs += _trail_diffs(snap.get("trail"), db["trail"])
     if not isinstance(snap.get("next_funding_ms"), int):
         diffs.append("스냅샷 next_funding_ms 없음")
     if _dec(snap.get("liq_price_est")) is None:

@@ -137,6 +137,19 @@ def test_time_exit_executor_matches_a_normal_engine_trade_exactly(rules):
     assert res.ret.net_bps < 0 and res.ret.gross_bps == 0, "가격이 제자리면 gross 0 · net은 비용만큼 음수"
 
 
+def test_time_exit_executor_skips_interior_minutes_without_a_mark_bar(rules):
+    """규약 (b)는 진입·청산 분의 mark만 요구한다 — 내부 결손 분(IS 2024-08-12 10:02·10:03 같은)은 건너뛰고,
+    그 분에 든 펀딩은 그래도 정산한다. 결과 = 결손 분이 판정에 영향이 없는 봉(가격 제자리)과 같다."""
+    full = _bars(20)
+    gap = {t: b for t, b in full.items() if t not in (T0 + 4 * M, T0 + 5 * M)}
+    fund = [Funding(T0 + 5 * M + 15, "0.0001", "60000")]                      # 결손 분 안의 펀딩
+    kw = dict(entry_ms=T0, h=10, direction=0, sl_dist=D("0.005"), rules=rules, limits=SizingLimits(),
+              equity=D("1000"), regime=REGIME)
+    a = PX.run_time_exit(full, fund, **kw)                                       # type: ignore[arg-type]
+    b = PX.run_time_exit(gap, fund, **kw)                                        # type: ignore[arg-type]
+    assert b.ok and b.reason == "time_exit" and a == b
+
+
 def test_time_exit_executor_uses_the_engine_liquidation_path(rules):
     res = PX.run_time_exit(_bars(20, crash_at=3), [], entry_ms=T0, h=10, direction=0, sl_dist=D("0.003"), rules=rules,
                            limits=SizingLimits(), equity=D("1000"), regime=REGIME)

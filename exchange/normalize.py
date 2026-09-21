@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
-from exchange.decimal_context import pinned_rounding
+from exchange.decimal_context import in_exec_context
 from exchange.errors import RulesError
 from exchange.rules import SymbolRules
 
@@ -48,12 +48,12 @@ def _require_decimal(x: object, what: str) -> Decimal:
     return x
 
 
-@pinned_rounding
+@in_exec_context
 def floor_to_step(x: Decimal, step: Decimal) -> Decimal:
     return (x / step).to_integral_value(rounding=ROUND_FLOOR) * step
 
 
-@pinned_rounding
+@in_exec_context
 def ceil_to_step(x: Decimal, step: Decimal) -> Decimal:
     return (x / step).to_integral_value(rounding=ROUND_CEILING) * step
 
@@ -65,7 +65,7 @@ def _entry_step(r: SymbolRules) -> Decimal:
     return r.market_step
 
 
-@pinned_rounding
+@in_exec_context
 def normalize_price(price: Decimal, rules: SymbolRules) -> Decimal:
     price = _require_decimal(price, "price")
     q = (price / rules.tick_size).to_integral_value(rounding=ROUND_HALF_UP) * rules.tick_size
@@ -75,7 +75,7 @@ def normalize_price(price: Decimal, rules: SymbolRules) -> Decimal:
     return q
 
 
-@pinned_rounding
+@in_exec_context
 def normalize_entry_qty(raw_qty: Decimal, ref_price: Decimal, rules: SymbolRules, *,
                         max_notional: Decimal | None = None) -> QtyDecision:
     """신규 진입 수량. `ref_price`는 명목 확인용 기준가(보통 mark). 분할은 `split_market_qty`."""
@@ -100,7 +100,7 @@ def normalize_entry_qty(raw_qty: Decimal, ref_price: Decimal, rules: SymbolRules
                        f"floor 후 명목 {notional} < MIN_NOTIONAL {rules.min_notional}")
 
 
-@pinned_rounding
+@in_exec_context
 def split_market_qty(qty: Decimal, rules: SymbolRules, *, ref_price: Decimal | None,
                      reduce_only: bool) -> list[Decimal]:
     """MARKET_LOT_SIZE.maxQty 단위로 분할. 진입이면 **모든 조각**이 MIN_NOTIONAL을 넘도록 잔량을 보정한다."""

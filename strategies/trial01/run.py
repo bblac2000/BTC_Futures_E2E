@@ -29,9 +29,10 @@ from exchange.rules import RuntimeRules
 from sizing.config import SizingLimits
 from strategies.trial01 import anchor as A
 from strategies.trial01.config import SR_V1_PARAMS, Trial01Params
-from strategies.trial01.feature_build import RULES_DIR, WARMUP_MS
+from strategies.trial01.feature_build import RULES_DIR, load_warmup
 from strategies.trial01.features import DECIMAL_CTX, FeatureEngine
-from strategies.trial01.strategy import Arm, EngineFeed, Trial01
+from strategies.trial01.p4 import P4Feed
+from strategies.trial01.strategy import Arm, EngineFeed, FeatureFeed, Trial01
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 EQUITY = Decimal("1000")
@@ -44,29 +45,30 @@ def load_rules() -> RuntimeRules:
 
 def load_inputs(window: str, var_dir: Path, archive: Path = BD.ARCHIVE_DIR
                 ) -> tuple[list[BD.Bar1m], list[BD.Bar1m], list[BD.Funding]]:
-    start, _ = PR.WINDOWS[window]
     src = var_dir / window
     bars = PR.read_bars(src / "bars_1m.parquet")
     fundings = [BD.Funding(**f) for f in json.loads((src / "funding.json").read_text())]
-    warm = BD.load_archive(archive, start - WARMUP_MS, start - 1)
+    warm = load_warmup(window, var_dir, archive)                  # 아카이브 우선 + 앞 창 봉(OOS 경계 연속 · Codex 단계 d #6)
     return warm, bars, fundings
 
 
 def build_strategy(warm: list[BD.Bar1m], bars: list[BD.Bar1m], tick: Decimal, *, arm: Arm, delay: int = 0,
-                   invert: bool = False, params: Trial01Params = SR_V1_PARAMS) -> Trial01:
+                   invert: bool = False, params: Trial01Params = SR_V1_PARAMS, p4_draw: int | None = None) -> Trial01:
     closes = [b.d("close") for b in warm] + [b.d("close") for b in bars]
-    s = Trial01(EngineFeed(FeatureEngine(tick, min(closes), max(closes))), tick, arm=arm, delay=delay, invert=invert,
-                params=params)
+    feed: FeatureFeed = EngineFeed(FeatureEngine(tick, min(closes), max(closes)))
+    if p4_draw is not None:
+        feed = P4Feed(feed, p4_draw, tick)                        # P4: 레벨만 무작위(전략·엔진 사슬 그대로 · #22)
+    s = Trial01(feed, tick, arm=arm, delay=delay, invert=invert, params=params)
     for b in warm:
         s.warm(b)
     return s
 
 
 def run(warm: list[BD.Bar1m], bars: list[BD.Bar1m], fundings: list[BD.Funding], *, arm: Arm, delay: int = 0,
-        invert: bool = False, rules: RuntimeRules | None = None) -> tuple[ReplayResult, Trial01]:
+        invert: bool = False, rules: RuntimeRules | None = None, p4_draw: int | None = None) -> tuple[ReplayResult, Trial01]:
     rules = rules or load_rules()
-    with decimal.localcontext(DECIMAL_CTX):                       # 엔진 산술까지 정본 문맥(features.DECIMAL_CTX)
-        s = build_strategy(warm, bars, rules.symbol_rules.tick_size, arm=arm, delay=delay, invert=invert)
+    with decimal.localcontext(DECIMAL_CTX):                       # 피처·전략 = features.DECIMAL_CTX · 엔진은 스스로 EXEC_CTX
+        s = build_strategy(warm, bars, rules.symbol_rules.tick_size, arm=arm, delay=delay, invert=invert, p4_draw=p4_draw)
         r = replay(bars, fundings, s, rules=rules, limits=SizingLimits(), equity=EQUITY)
     return r, s
 
@@ -98,14 +100,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--arm", choices=["A", "B"], required=True)
     ap.add_argument("--delay", type=int, default=0)
     ap.add_argument("--invert", action="store_true")
+    ap.add_argument("--p4-draw", type=int, default=None)          # P4 무작위 레벨 추출 번호 0..199(#22)
     ap.add_argument("--var-dir", default=str(ROOT / "var" / "backtest"))
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     if a.delay < 0:
         ap.error("--delay ≥ 0")
+    if a.p4_draw is not None and not 0 <= a.p4_draw < A.P4_DRAWS:
+        ap.error(f"--p4-draw는 0..{A.P4_DRAWS - 1}")
     warm, bars, fundings = load_inputs(a.window, Path(a.var_dir))
-    r, s = run(warm, bars, fundings, arm=a.arm, delay=a.delay, invert=a.invert)
+    r, s = run(warm, bars, fundings, arm=a.arm, delay=a.delay, invert=a.invert, p4_draw=a.p4_draw)
     summ = write_outputs(Path(a.out), r, s, {"window": a.window, "arm": a.arm, "delay": a.delay, "invert": a.invert,
+                                             "p4_draw": a.p4_draw,
                                              "window_minutes": len(bars), "warmup_minutes": len(warm)})
     print(json.dumps({k: summ[k] for k in ("window", "arm", "delay", "invert", "n_trades", "candidates")}, sort_keys=True))
     return 0

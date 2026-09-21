@@ -45,7 +45,7 @@ class SrV1:
 
 
 SR_V1 = SrV1()
-QV_SCALE = Decimal(100_000)                    # quote volume → 정수(10⁻⁵ USDT)
+QV_SCALE = Decimal(100_000)                    # quote volume → 정수(10⁻⁵ USDT) · 레지스트리 #22(IS에서 정확 — 소수 5자리 초과 0행)
 
 
 # ── ATR ─────────────────────────────────────────────────────────────────────
@@ -280,6 +280,7 @@ class FeatureEngine:
         self.vp = RollingVP(self.tick, self.lo_price, self.hi_price, self.cfg)
         self.tsmom = TSMOM(self.cfg)
         self.swing_events: list[SwingLevel] = []
+        self.b15_complete: list[tuple[Bucket, Decimal | None]] = []   # 이번 봉에 낸 완전 15m 버킷과 그때 ATR_15m(P4 무효화 재현용 · 값 불변)
 
     def step(self, b: Bar1m) -> FeatureRow:
         """봉 b가 마감된 직후의 피처(결정 시각 = b 마감). VP는 b를 넣기 **전** 값(결정 봉 제외)."""
@@ -287,6 +288,7 @@ class FeatureEngine:
             return self._step(b)
 
     def _step(self, b: Bar1m) -> FeatureRow:
+        self.b15_complete = []
         vp = self.vp.value()
         a1 = self.atr1.update(b.d("high"), b.d("low"), b.d("close"))
         row: dict[str, Decimal | None] = {"atr_1m": a1, "vp_poc": vp.poc if vp else None,
@@ -296,6 +298,7 @@ class FeatureEngine:
             if bk.complete_enough:
                 a15 = self.atr15.update(bk.high, bk.low, bk.close)
                 row["atr_15m"] = a15
+                self.b15_complete.append((bk, a15))
                 self.swing_events += self.swings.on_bucket(bk, a15)
             else:
                 row["atr_15m"] = self.atr15.value                 # 이어 쓰기(#19 ⑨)

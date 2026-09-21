@@ -46,6 +46,14 @@ from sizing.position import size_entry
 
 D = Decimal
 LONG, SHORT = Direction.LONG, Direction.SHORT
+
+
+@pytest.fixture(autouse=True)
+def _exec_context():
+    """기대값도 엔진과 같은 이름 붙은 문맥(EXEC_CTX · 정밀도 34)으로 계산한다(레지스트리 #22)."""
+    from exchange.decimal_context import exec_context
+    with exec_context():
+        yield
 H = 3_600_000
 DAY0 = 1_789_430_400_000                  # 2026-09-15 00:00:00 UTC
 RATE = D("0.0001")

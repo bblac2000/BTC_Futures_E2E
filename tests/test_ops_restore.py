@@ -327,3 +327,87 @@ def test_a_failed_ack_write_followed_by_a_durable_save_keeps_the_breadcrumb_base
     crumb = json.loads(crumb_path.read_text())
     assert crumb["base_state_id"] == rt.saved_state_id, "뒤따른 저장이 성공했으면 breadcrumb 기준 id도 갱신"
     assert [o["kind"] for o in crumb["ops"]] == ["NoticeAcknowledged", "Resumed"], "순서 보존 — 앞선 실패 뒤에 붙는다"
+
+
+# ── 트레일링·체결 뒤 TP(기본 꺼짐) — 런타임 → DB → 재기동(Codex 단계 d #3·#4·#5) ─────────────────
+def open_trail_then_crash(rules, db: Path, *, t0: int = DAY0, ratchet: bool = True) -> tuple[int, dict]:
+    from dataclasses import replace
+
+    from paper.engine import TpFromFill, Trail
+    rt, counter, clock = build_file(rules, db, t0=t0)
+    feed(rt, counter, clock, t0, t0 + 61_000)
+    it = replace(intent(sl="59700", decided_ms=t0 + 60_000), trail=Trail(D(1), D(100)),
+                 tp_rule=TpFromFill(D("61000"), D("1.5"), D("2")))
+    rt.submit_entry(it)
+    feed(rt, counter, clock, t0 + 61_000, t0 + 121_000)
+    if ratchet:
+        feed(rt, counter, clock, t0 + 121_000, t0 + 181_000, mark="60500")      # +1R(≈312) 넘김 → 무장·SL 60400
+    pos = rt.engine.position
+    assert pos is not None
+    state = rt.engine.position_state()
+    assert state is not None
+    rt.con.close()
+    return t0 + 181_000, state
+
+
+def test_trailed_sl_and_resolved_tp_survive_a_restart(rules, tmp_path):
+    db = tmp_path / "bot.sqlite"
+    t, before = open_trail_then_crash(rules, db)
+    assert before["sl"] == "60400" and before["tp"] == "61000" and before["trail"]["moved"] is True
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT tp FROM positions WHERE event='open'").fetchone()[0] == "61000"      # 체결 뒤 TP가 DB에
+    kinds = [k for (k,) in con.execute("SELECT kind FROM engine_events WHERE kind IN ('TrailSet','TrailArmed','StopTrailed') "
+                                        "ORDER BY id")]
+    assert kinds[:3] == ["TrailSet", "TrailArmed", "StopTrailed"]
+    con.close()
+    rt, counter, clock, decision, msgs = restart(rules, db, t0=t + 5000)
+    assert decision.action == "restore", decision.detail
+    p = rt.engine.position
+    assert p is not None and p.sl == D("60400") and p.tp == D("61000") and p.trail_armed and p.trail_moved
+    assert rt.engine.position_state() == before | {"next_funding_ms": rt.engine.position_state()["next_funding_ms"]}  # type: ignore[index]
+
+
+def test_armed_but_unmoved_trail_restores(rules, tmp_path):
+    db = tmp_path / "bot.sqlite"
+    t, before = open_trail_then_crash(rules, db, ratchet=False)
+    assert before["trail"] == {"arm_r": "1", "dist": "100", "r": before["trail"]["r"], "armed": False, "moved": False}
+    _, _, _, decision, _ = restart(rules, db, t0=t + 5000)
+    assert decision.action == "restore", decision.detail
+
+
+def test_missing_trail_rows_are_a_mismatch(rules, tmp_path):
+    db = tmp_path / "bot.sqlite"
+    t, _ = open_trail_then_crash(rules, db)
+    con = sqlite3.connect(db)
+    con.execute("DELETE FROM engine_events WHERE kind='StopTrailed'")
+    con.commit()
+    con.close()
+    _, _, _, decision, _ = restart(rules, db, t0=t + 5000)
+    assert decision.action == "mismatch" and "sl" in decision.detail
+
+
+def test_untrailed_position_has_no_trail_rows_and_restores_as_before(rules, tmp_path):
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT COUNT(*) FROM engine_events WHERE kind IN ('TrailSet','TrailArmed','StopTrailed')").fetchone()[0] == 0
+    con.close()
+    _, _, _, decision, _ = restart(rules, db, t0=t + 5000)
+    assert decision.action == "restore" and decision.db is not None and decision.db["trail"] is None
+
+
+def test_post_fill_gate_exit_records_resolved_tp(rules, tmp_path, monkeypatch):
+    """체결 직후 #5 게이트 청산(POST_FILL_GATE)이어도 open 행에는 엔진이 정한 TP가 남는다."""
+    from dataclasses import replace
+
+    from paper.engine import TpFromFill
+    rt, counter, clock = build_file(rules, tmp_path / "bot.sqlite", t0=DAY0)
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    rt.submit_entry(replace(intent(sl="59700", decided_ms=DAY0 + 60_000), tp_rule=TpFromFill(None, D("1.5"), D("2"))))
+    real = rt.engine._post_fill
+    monkeypatch.setattr(rt.engine, "_post_fill", lambda *a: replace(real(*a), gate_ok=False))   # 실제 체결 재검증 실패를 강제
+    feed(rt, counter, clock, DAY0 + 61_000, DAY0 + 63_000)
+    assert rt.engine.position is None
+    tp, entry = rt.con.execute("SELECT tp, entry_price FROM positions WHERE event='open'").fetchone()
+    (reason,) = rt.con.execute("SELECT reason FROM positions WHERE event='close'").fetchone()
+    assert reason == "post_fill_gate" and D(tp) == D(entry) + 2 * (D(entry) - D("59700"))

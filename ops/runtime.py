@@ -66,6 +66,8 @@ from paper.types import (
     PositionReduced,
     PositionRisk,
     PositionVanished,
+    StopTrailed,
+    TrailArmed,
     WalletResynced,
 )
 from safety.gate import SafetyGate
@@ -75,7 +77,8 @@ from safety.reconcile import reconcile
 
 logger = logging.getLogger(__name__)
 
-SNAPSHOT_EVENTS = (EntryFilled, PositionClosed, PositionReduced, PositionVanished, WalletResynced, FundingSettled)
+SNAPSHOT_EVENTS = (EntryFilled, PositionClosed, PositionReduced, PositionVanished, WalletResynced, FundingSettled,
+                   StopTrailed, TrailArmed)   # 트레일링(기본 꺼짐)이 SL·무장 상태를 바꾸면 스냅샷도 같은 순간에(복원 대조)
 
 
 @dataclass(frozen=True)
@@ -352,7 +355,13 @@ class BotRuntime:
         if not events:
             return
         self._on_trips(self.gate.kill_switch.observe(events, ts_ms), ts_ms)   # 기록 실패와 무관하게 먼저
-        tp = self._intent_tp if any(isinstance(e, EntryFilled | EntrySkipped) for e in events) else None
+        #  체결이면 엔진이 정한 TP(tp_rule이면 체결 뒤 값 · 아니면 intent.tp와 같다 — Codex 단계 d #5) · 건너뜀이면 의도의 TP
+        if any(isinstance(e, EntryFilled) for e in events):
+            tp = self.engine.last_entry_tp
+        elif any(isinstance(e, EntrySkipped) for e in events):
+            tp = self._intent_tp
+        else:
+            tp = None
         self._record(events, tp, ts_ms)
         for e in events:
             self._alert_event(e, alert_exits=alert_exits)

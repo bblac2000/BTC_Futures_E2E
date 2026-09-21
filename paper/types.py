@@ -160,6 +160,22 @@ class EntrySkipped:
 
 
 @dataclass(frozen=True)
+class TrailSet:
+    """체결 직후 트레일링 설정(`EntryIntent.trail`이 있을 때만) — DB가 복원 대조용으로 남긴다(Codex 단계 d #3·#4)."""
+    ts_ms: int
+    arm_r: Decimal
+    dist: Decimal
+    r: Decimal                               # |체결 진입가 − 초기 SL|
+
+
+@dataclass(frozen=True)
+class TrailArmed:
+    """+arm_r × R에 닿아 트레일링이 무장됐다(이후 SL을 조일 수 있다)."""
+    ts_ms: int
+    best: Decimal                            # 무장시킨 유리한 극값
+
+
+@dataclass(frozen=True)
 class StopTrailed:
     """트레일링이 SL을 조였다(`EntryIntent.trail`이 있을 때만 나온다). 새 SL은 **다음 봉/틱부터** 판정한다."""
     ts_ms: int

@@ -220,3 +220,67 @@ def test_features_do_not_depend_on_the_callers_decimal_context():
         c.rounding, c.prec = decimal.ROUND_HALF_UP, 12
         other, _ = frun(bs, Decimal("0.1"))
     assert [r.values for r in base] == [r.values for r in other]
+
+
+# ── 워밍업 로더(Codex 단계 d #6) — 합성 경계만 · OOS 데이터는 읽지도 만들지도 않는다 ─────────────────
+def _wbar(t: int, px: str = "100", src: str = "archive"):
+    from backtest.data import Bar1m
+    return Bar1m(t, px, px, px, px, "1", "1", 1, "0", "0", px, px, px, px, src)
+
+
+def test_merge_warmup_prefers_archive_fills_gaps_from_prior_window_and_never_crosses_start():
+    from backtest.data import MINUTE_MS
+    from strategies.trial01.feature_build import WARMUP_MS, merge_warmup
+    start = 1_000 * WARMUP_MS                                   # 임의의 분 경계
+    lo = start - WARMUP_MS
+    arch = [_wbar(lo + i * MINUTE_MS, "1") for i in range(100)]                 # 아카이브는 앞 100분만
+    prior = [_wbar(t, "2", "rest") for t in range(lo - 5 * MINUTE_MS, start + 5 * MINUTE_MS, MINUTE_MS)]
+    w = merge_warmup(start, arch, prior)
+    assert len(w) == WARMUP_MS // MINUTE_MS and w[0].open_ms == lo and w[-1].open_ms == start - MINUTE_MS
+    assert all(b.close == "1" for b in w[:100]) and all(b.close == "2" for b in w[100:])   # 겹치면 아카이브
+    assert [b.open_ms for b in w] == sorted({b.open_ms for b in w})
+
+
+def test_merge_warmup_leaves_unfillable_minutes_missing():
+    from backtest.data import MINUTE_MS
+    from strategies.trial01.feature_build import WARMUP_MS, merge_warmup
+    start = 1_000 * WARMUP_MS
+    lo = start - WARMUP_MS
+    prior = [_wbar(t) for t in range(lo, start, MINUTE_MS) if t != lo + 7 * MINUTE_MS]
+    w = merge_warmup(start, [], prior)
+    assert len(w) == WARMUP_MS // MINUTE_MS - 1 and lo + 7 * MINUTE_MS not in {b.open_ms for b in w}
+
+
+def test_prior_windows_order():
+    from strategies.trial01.feature_build import prior_windows
+    assert prior_windows("IS") == [] and prior_windows("OOS") == ["IS"]
+
+
+def test_oos_warmup_continues_from_the_prior_is_bars_on_a_synthetic_var_dir(tmp_path):
+    """OOS 워밍업 = 아카이브(여기선 없음) + IS 준비 봉. 합성 IS parquet만 쓴다 — OOS 창의 봉은 없고 읽지 않는다."""
+    from backtest import prepare as PR
+    from backtest.data import MINUTE_MS
+    from strategies.trial01.feature_build import WARMUP_MS, load_warmup
+    start = PR.WINDOWS["OOS"][0]
+    n = WARMUP_MS // MINUTE_MS
+    synth = [_wbar(start - (n + 3 - i) * MINUTE_MS, src="rest") for i in range(n + 3)]   # 창 직전까지 35일 + 3분 여유
+    (tmp_path / "IS").mkdir()
+    PR.write_bars(tmp_path / "IS" / "bars_1m.parquet", synth)
+    w = load_warmup("OOS", tmp_path, archive=tmp_path / "no_archive")
+    assert len(w) == n and w[0].open_ms == start - WARMUP_MS and w[-1].open_ms == start - MINUTE_MS
+    assert not (tmp_path / "OOS").exists()
+
+
+def test_is_warmup_is_archive_only(tmp_path):
+    from backtest import prepare as PR
+    from backtest.data import MINUTE_MS
+    from strategies.trial01.feature_build import load_warmup
+    start = PR.WINDOWS["IS"][0]
+    (tmp_path / "IS").mkdir()
+    PR.write_bars(tmp_path / "IS" / "bars_1m.parquet", [_wbar(start - MINUTE_MS)])    # 자기 창 봉은 쓰지 않는다
+    assert load_warmup("IS", tmp_path, archive=tmp_path / "no_archive") == []
+
+
+def test_feature_metadata_cites_the_convention_rows():
+    from strategies.trial01.feature_store import params_json
+    assert params_json()["registry_rows"] == [18, 19, 20, 22]      # #20 피처 규약 · #22 거래대금 정수 스케일(Codex 단계 d #10)

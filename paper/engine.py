@@ -37,6 +37,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
 
+from exchange.decimal_context import in_exec_context
 from exchange.errors import BinanceAPIError, LeverageNotConfirmed, OrderParamError, RulesError, TransportError
 from exchange.gate import Mode
 from exchange.normalize import RejectReason
@@ -64,6 +65,8 @@ from paper.types import (
     PostFillCheck,
     SkipReason,
     StopTrailed,
+    TrailArmed,
+    TrailSet,
     WalletResynced,
 )
 from sizing.config import RegimeSizing, SizingLimits
@@ -172,6 +175,7 @@ class Engine:
         self.last_entry_tp: Decimal | None = None             # 마지막 체결의 TP(tp_rule이면 체결 뒤 값) — 재생 기록용 · 이벤트·스냅샷 아님
 
     # ── 입력 ────────────────────────────────────────────────────────────────
+    @in_exec_context
     def request_entry(self, intent: EntryIntent) -> None:
         if type(intent.direction) is not Direction:
             raise EntryRefused(f"direction은 Direction: {intent.direction!r}")
@@ -192,6 +196,7 @@ class Engine:
             raise EntryRefused(f"TP {intent.tp}가 {intent.direction} 결정 mark {intent.decision_mark}의 잘못된 쪽")
         self.pending = intent
 
+    @in_exec_context
     def on_tick(self, t: MarkTick) -> list[object]:
         self._check_funding_grid(t)
         ev: list[object] = []
@@ -219,6 +224,7 @@ class Engine:
             ev += self._trail(t.ts_ms, t.mark, t.mark)
         return ev
 
+    @in_exec_context
     def on_bar(self, b: MarkBar) -> list[object]:
         ev: list[object] = []
         if self.pending is not None and b.open_ms > self.pending.decided_ms:
@@ -234,13 +240,16 @@ class Engine:
         ev += self._trail(b.close_ms, b.low, b.high)
         return ev
 
+    @in_exec_context
     def on_funding(self, *, ts_ms: int, rate: Decimal, mark: Decimal) -> list[object]:
         """봉 단위 재생용 — 실제 펀딩 이력(정산 시각·율·mark)을 넣는다."""
         return [self._settle_funding(ts_ms, rate, mark)] if self.position is not None else []
 
+    @in_exec_context
     def close_now(self, *, ref_mark: Decimal, ts_ms: int, reason: ExitReason = ExitReason.MANUAL) -> list[object]:
         return self._exit(reason, ref_mark, ts_ms) if self.position is not None else []
 
+    @in_exec_context
     def vanish(self, ts_ms: int, detail: str) -> list[object]:
         """LIVE 봉 대사가 거래소 flat · 내부 보유를 봤다 → **주문 없이** 내부 포지션을 닫는다(사용자 2026-09-16).
         손익은 모른다 — 지갑은 호출자가 거래소 지갑으로 `sync_wallet`한다."""
@@ -251,6 +260,7 @@ class Engine:
         return [PositionVanished(ts_ms, pos.direction, pos.qty, pos.entry_price, detail),
                 self._block(ts_ms, f"거래소 포지션 소실 — 내부 강제 close: {detail}")]
 
+    @in_exec_context
     def position_state(self) -> dict[str, Any] | None:
         """엔진 스냅샷(`account_snapshots.raw_json`)에 넣는 포지션 상태 — 재기동 복원의 대조 원천(문자열·정수만)."""
         pos = self.position
@@ -267,6 +277,7 @@ class Engine:
                            "armed": pos.trail_armed, "moved": pos.trail_moved}
         return st
 
+    @in_exec_context
     def restore_position(self, state: dict[str, Any], *, ts_ms: int, detail: str) -> list[object]:
         """PAPER 재기동 복원 — 호출자(`ops.restore`)가 DB와 스냅샷이 일치함을 확인한 뒤에만 부른다."""
         if self.position is not None or self.pending is not None:
@@ -294,6 +305,7 @@ class Engine:
         return [PositionRestored(ts_ms, pos.direction, pos.qty, pos.entry_price, detail,
                                  dict(state) | {"liq_price_est_recomputed": str(pos.liq_price_est)})]
 
+    @in_exec_context
     def sync_wallet(self, ts_ms: int, wallet: Decimal, *, source: str, detail: str) -> WalletResynced:
         if not isinstance(wallet, Decimal):
             raise TypeError("wallet은 Decimal")
@@ -305,6 +317,7 @@ class Engine:
         cleared, self.entries_blocked = self.entries_blocked, []
         return cleared
 
+    @in_exec_context
     def cancel_pending(self, ts_ms: int, reason: str) -> list[EntrySkipped]:
         """결정 뒤 체결 전에 진입 게이트가 닫혔다 → 대기 진입을 버리고 기록한다."""
         if self.pending is None:
@@ -312,12 +325,14 @@ class Engine:
         self.pending = None
         return [EntrySkipped(ts_ms, None, SkipReason.ENTRIES_BLOCKED, reason)]
 
+    @in_exec_context
     def unrealized_pnl(self, mark: Decimal) -> Decimal:
         pos = self.position
         if pos is None:
             return Decimal()
         return (mark - pos.entry_price) * pos.qty if pos.direction is Direction.LONG else (pos.entry_price - mark) * pos.qty
 
+    @in_exec_context
     def equity(self, mark: Decimal) -> Decimal:
         """지갑 + mark 기준 미실현 손익 — 킬스위치 일일 손실의 equity(두 모드 같은 정의)."""
         return self.wallet + self.unrealized_pnl(mark)
@@ -435,6 +450,10 @@ class Engine:
         if self.mode is Mode.LIVE:
             post, live_ev = self._live_after_entry(ts_ms, d, post)
         ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post, adopted=adopted, entry_commission=commission))
+        pos = self.position
+        assert pos is not None
+        if pos.trail is not None and pos.trail_r is not None:
+            ev.insert(1, TrailSet(ts_ms, pos.trail.arm_r, pos.trail.dist, pos.trail_r))
         ev += live_ev
         if not post.gate_ok:
             #  #5는 사전확약 게이트 — 실제 체결 기준으로 깨지면 즉시 청산(Codex L3 검토 4 · 기록만 하는 완화 없음)
@@ -507,16 +526,18 @@ class Engine:
             return []
         long_ = pos.direction is Direction.LONG
         best = high if long_ else low
+        ev: list[object] = []
         if not pos.trail_armed:
             gain = best - pos.entry_price if long_ else pos.entry_price - best
             if gain < pos.trail.arm_r * pos.trail_r:
                 return []
             pos.trail_armed = True
+            ev.append(TrailArmed(ts_ms, best))
         cand = best - pos.trail.dist if long_ else best + pos.trail.dist
         if (long_ and cand <= pos.sl) or (not long_ and cand >= pos.sl):
-            return []
+            return ev
         old, pos.sl, pos.trail_moved = pos.sl, cand, True
-        return [StopTrailed(ts_ms, old, cand)]
+        return ev + [StopTrailed(ts_ms, old, cand)]
 
     def _liquidate(self, ts_ms: int) -> list[object]:
         """PAPER — 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩) 전부 + N × liquidationFee."""

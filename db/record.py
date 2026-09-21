@@ -25,6 +25,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from exchange.decimal_context import in_exec_context
 from exchange.orders import Direction, Side
 from paper.types import (
     EntriesBlocked,
@@ -41,6 +42,9 @@ from paper.types import (
     PositionRestored,
     PositionSynced,
     PositionVanished,
+    StopTrailed,
+    TrailArmed,
+    TrailSet,
     WalletResynced,
 )
 from sizing.position import SizingDecision
@@ -297,6 +301,15 @@ def _position_reduced(con: sqlite3.Connection, ev: PositionReduced, mode: str, s
     })
 
 
+def _trail_detail(ev: TrailSet | TrailArmed | StopTrailed) -> str:
+    if isinstance(ev, TrailSet):
+        return f"arm {ev.arm_r}R · dist {ev.dist} · R {ev.r}"
+    if isinstance(ev, TrailArmed):
+        return f"armed at {ev.best}"
+    return f"SL {ev.old_sl} → {ev.new_sl}"
+
+
+@in_exec_context                                       # 슬리피지 bps 등 기록 산술도 EXEC_CTX(레지스트리 #22 · 호출자 문맥 무관)
 def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: str, symbol: str,
                   tp: Decimal | None = None) -> None:
     mode = _mode(mode)
@@ -330,6 +343,11 @@ def record_events(con: sqlite3.Connection, events: Iterable[object], *, mode: st
                 _insert(con, "funding_events", {
                     "mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms, "signed_qty": _v(ev.signed_qty), "missed": 1,
                     "boundaries_json": json.dumps(list(ev.boundaries_ms))})
+            elif isinstance(ev, TrailSet | TrailArmed | StopTrailed):
+                #  트레일링(기본 꺼짐 — 켠 포지션만 나온다) · 복원이 유효 SL·트레일 상태를 여기서 다시 만든다(ops.restore)
+                _insert(con, "engine_events", {"mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms,
+                                               "kind": type(ev).__name__, "detail": _trail_detail(ev),
+                                               "payload_json": _json(dataclasses.asdict(ev))})
             elif isinstance(ev, EntriesBlocked | ExitFailed | LiquidationThresholdCrossed | WalletResynced | PositionRestored):
                 detail = getattr(ev, "detail", None) or str(_v(getattr(ev, "reason", "")))
                 _insert(con, "engine_events", {"mode": mode, "symbol": symbol, "ts_ms": ev.ts_ms,
