@@ -2160,3 +2160,49 @@ Resume in Codex: codex resume 01a0c333-a67b-7ed3-81dd-0586899056f6
 
 **사용자 결정(2026-09-21) — P1 결정론 규약 적용**: 제안한 규약 그대로 + 2건 변경 — ① 안전장치 결과 = **폐기(설계 결함)**, REJECT 아님(평가 불가 귀무분포는 하네스 결함 · 재등록은 N+1이라 보수성 유지 · 1% 임계 유지)
 ② 시드 = **고정 공개 시드 20260921**(사전확약) · `sr_v1` SHA256은 별도 필드 · `SeedSequence(master).spawn(1000)[d]` · 시도마다 쌍 → 방향 → 진입 분.
+
+### 최종 좁힌 재검토 (`c8a53f9..ee1a786` · `task-mub1ofwm-lmig9j` · 쿼터 오류 없음)
+판정: **FIX FIRST** — DISCARD 일관성 **CLOSED**(프로토콜 §4 3분류와 일치) · P1 결정론 **PARTIAL**:
+① **청산 시각 off-by-one(작성자 오류)**: 분 t 시가 진입 + 분 t+h **종가** 청산 = 약 h+1분 노출인데 구간은 `[t, t+h)`로 적어 겹침·노출이 어긋난다
+② 재추출과 RNG 호출 순서 모순((e) 진입 분만 재추출 vs (g) 시도마다 쌍→방향→진입) · 카운터 초기화·정렬·방향 매핑·NumPy 호출 미정
+③ 실패한 추출을 p95 계산에서 어떻게 다루는지 미정
+④ **편향**: 겹침 실패 1,000회 뒤 쌍을 다시 뽑으면 **긴 보유시간 쌍이 선택적으로 빠져** 노출이 짧아진다 — 1% 안전장치로는 안 잡힌다.
+동의 — 사용자 확인 후 반영.
+
+<details><summary>Codex 원문 (verbatim)</summary>
+
+```
+Verdict: **FIX FIRST**
+
+**P1 determinism: PARTIAL.** Two conforming implementers can still produce different seeded null samples.
+
+1. **Exit timing is internally inconsistent.**  
+   Entry at minute `t`’s open and exit at minute `t+h`’s close produces approximately `h+1` minutes of exposure, while `[entry, exit)` treats the exit as `t+h` and permits another trade to enter at `t+h`. That creates both an off-by-one exposure increase and an apparent overlap during the exit minute. [trial_01_preregistration.md:101](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101)
+
+   Exact fix: choose either:
+
+   - exit at the close of minute `t+h-1`, occupancy `[t,t+h)`, next entry allowed at `t+h`; or
+   - retain close of `t+h`, use occupancy `[t,t+h+1)`, next entry at `t+h+1`.
+
+2. **Retry and RNG call order remain ambiguous.**  
+   Rule (e) says retries draw only a new entry minute, but (g) says every attempt calls `pair → direction → entry`. It is also unclear whether a pair redraw redraws direction, when counters reset, and whether “100 pair redraws” includes the initial pair. These choices consume different RNG values. [trial_01_preregistration.md:101](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101)
+
+   Canonical ordering/mapping is also missing: Arm A trade ordering, eligible-minute ordering, `0/1 → LONG/SHORT`, and exact NumPy sampling calls.
+
+3. **Failed-draw handling is incomplete.**  
+   If 1–10 of 1,000 draws fail, (f) does not say whether p95 uses successful draws only or how failed draws are represented/replaced. [trial_01_preregistration.md:101](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:101)
+
+**Look-ahead/bias**
+
+- Ceiling `h` is not look-ahead; it is an ex-post exposure-matching convention. Correctly indexed, it adds less than one minute. As currently written, the exit-bar mismatch adds an additional full minute systematically.
+- Entry-only redraw after B2 refusal does not introduce future-price look-ahead. It conditions entry times on contemporaneous executability, which is defensible.
+- However, redrawing the pair after 1,000 overlap failures can preferentially replace long-duration pairs, shortening exposure even when the overall draw eventually succeeds. The >1% draw-failure guard does not detect that within-draw duration-selection bias.
+
+**DISCARD consistency: CLOSED.** The research protocol explicitly defines `ACCEPT / REJECT / 폐기` as its three classes, and does not restrict discard to pre-measurement events. [research-protocol.md:36](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:36) The added §7 sentence clearly classifies a measurement-time harness defect as non-evidentiary discard with re-registration as N+1. [trial_01_preregistration.md:135](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:135)
+
+No files were modified; no network was used; `.env` was not read.
+
+Codex session ID: 01a0c34d-7502-70c3-8a03-35757d16c99e
+Resume in Codex: codex resume 01a0c34d-7502-70c3-8a03-35757d16c99e
+```
+</details>
