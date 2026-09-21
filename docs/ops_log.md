@@ -2996,3 +2996,9 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
   타이머 3개 waiting.
 - E2E 기준선: e2e-l2collector active(2026-09-17 00:13:23 UTC) · NRestarts 0 · depthdiff·markprice running · e2e-sync activating(정상 주기) · 메모리 available 896 MB · 디스크 47%.
 - 배포 커밋 = `2a47d94`(Codex MERGE 97a89a9 + 문서만). 창 시작 예약(세션 작업) 00:36 UTC.
+
+
+## 실패 패턴 목록(near-miss 포함 · 2026-09-21 신설 · 새 항목은 이 절에 이어 붙인다)
+| # | 날짜(UTC) | 패턴 | 무슨 일이 있었나 | 막은 것 · 재발 방지 |
+|---|---|---|---|---|
+| F1 | 2026-09-21 20:37 | **이름이 모호한 SSH 별칭이 다른 호스트를 가리킴** | 배포 창 밖 점검에서 `ssh tokyo`를 썼는데 `tokyo` = **54.95.163.55**(VCB 호스트)였다 — 봇 VPS는 35.79.38.63. `/home/btcfut` 없음 출력으로 알아챘다. 실행된 것은 읽기 명령(hostname·uptime·which·ls)뿐 | **첫 출력의 hostname을 기대값(`ip-172-31-38-160`)과 대조**해 멈췄다. 로컬 `~/.ssh/config`에 명시 이름 `e2e-vps`(35.79.38.63 · e2e-bot-key.pem · IdentitiesOnly)·`vcb-tokyo`(54.95.163.55) 추가(원본 `config.bak-20260921` 보존 · `tokyo`는 그대로) · 둘 다 hostname으로 확인. 런북 명령은 **명시 IP 그대로** 둔다(사용자 2026-09-21). 규칙: 호스트에 닿는 모든 세션의 첫 명령은 `hostname` 대조 |
