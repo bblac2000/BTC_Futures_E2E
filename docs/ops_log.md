@@ -2986,3 +2986,13 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
 > 
 > Codex session ID: 01a0c594-ed57-74f2-b004-72ec53ce8cb5
 > Resume in Codex: codex resume 01a0c594-ed57-74f2-b004-72ec53ce8cb5
+
+
+## 2026-09-21 20:37 UTC — §9.7 배포(2026-09-22 00:35–02:30 UTC 승인) 창 밖 사전 점검(읽기만)
+- ⚠️ **접속 주의**: `~/.ssh/config`의 `tokyo` 별칭은 **54.95.163.55**(다른 호스트 · `/home/btcfut` 없음)다 — 이 봇 VPS가 아니다.
+  봇 VPS = `ssh -i ~/.ssh/e2e-bot-key.pem ubuntu@35.79.38.63`(호스트 `ip-172-31-38-160`). 잘못된 호스트에는 읽기 명령(hostname·uptime·which·ls)만 실행됨.
+- VPS: `sqlite3` CLI 있음(`/usr/bin/sqlite3` · 파이썬 sqlite 3.46.1) · 봇 HEAD `05d6031` · 작업트리 깨끗 · status.json 나이 0.8초 ·
+  `position None` · 차단 [] · db_errors 0 · unrecorded 0(옛 코드라 `pending` 필드 없음) · btcfut-bot active(2026-09-19 00:40:20 UTC) · NRestarts 0 · MemoryPeak 229.5 MB ·
+  타이머 3개 waiting.
+- E2E 기준선: e2e-l2collector active(2026-09-17 00:13:23 UTC) · NRestarts 0 · depthdiff·markprice running · e2e-sync activating(정상 주기) · 메모리 available 896 MB · 디스크 47%.
+- 배포 커밋 = `2a47d94`(Codex MERGE 97a89a9 + 문서만). 창 시작 예약(세션 작업) 00:36 UTC.
