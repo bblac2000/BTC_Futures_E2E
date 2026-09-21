@@ -23,6 +23,7 @@ from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, Literal
 
 from db import record as R
+from exchange.decimal_context import ARITH_VERSION, in_exec_context
 from exchange.errors import RulesError
 from exchange.orders import Direction
 from paper.engine import EntryRefused
@@ -67,10 +68,11 @@ def _db_open_position(con: sqlite3.Connection, *, mode: str, symbol: str) -> dic
     commission = sum((Decimal(c) for (c,) in con.execute(
         "SELECT entry_commission_usdt FROM positions WHERE position_id=? AND event='open' AND entry_commission_usdt IS NOT NULL",
         (root,))), Decimal())
+    #  소유 = position_id(v3) · 옛 행(NULL)만 시각 경계로(Codex 단계 d 후속 #4)
     funding = sum((Decimal(p) for (p,) in con.execute(
-        "SELECT paid_usdt FROM funding_events WHERE mode=? AND symbol=? AND missed=0 AND ts_ms>=?",
-        (mode, symbol, root_ts))), Decimal())
-    trail, sl = _db_trail(con, mode=mode, symbol=symbol, since_ms=int(root_ts), sl=sl)
+        "SELECT paid_usdt FROM funding_events WHERE mode=? AND symbol=? AND missed=0 AND "
+        "(position_id=? OR (position_id IS NULL AND ts_ms>=?))", (mode, symbol, root, root_ts))), Decimal())
+    trail, sl = _db_trail(con, mode=mode, symbol=symbol, root_id=int(root), sl=sl)
     return {"root_id": root, "opened_ms": int(root_ts), "direction": direction, "qty": str(state.remaining_qty),
             "entry_price": entry_price, "leverage": leverage, "sl": sl, "tp": tp, "funding_paid": str(funding),
             "entry_commission": str(commission), "trail": trail}
@@ -79,13 +81,13 @@ def _db_open_position(con: sqlite3.Connection, *, mode: str, symbol: str) -> dic
 TRAIL_KINDS = ("TrailSet", "TrailArmed", "StopTrailed")
 
 
-def _db_trail(con: sqlite3.Connection, *, mode: str, symbol: str, since_ms: int, sl: Any) -> tuple[dict[str, Any] | None, Any]:
-    """트레일링 행(`engine_events` TrailSet·TrailArmed·StopTrailed, root 진입 이후) → (트레일 상태, **유효 SL**).
+def _db_trail(con: sqlite3.Connection, *, mode: str, symbol: str, root_id: int, sl: Any) -> tuple[dict[str, Any] | None, Any]:
+    """트레일링 행(`engine_events` TrailSet·TrailArmed·StopTrailed, **position_id = root**) → (트레일 상태, **유효 SL**).
     트레일링이 없는 포지션(현 봇)은 (None, open 행의 SL) — 기존 대조와 같다(Codex 단계 d #3·#4)."""
     trail: dict[str, Any] | None = None
     for kind, payload in con.execute(
-            "SELECT kind, payload_json FROM engine_events WHERE mode=? AND symbol=? AND ts_ms>=? AND kind IN (?,?,?) "
-            "ORDER BY id", (mode, symbol, since_ms, *TRAIL_KINDS)):
+            "SELECT kind, payload_json FROM engine_events WHERE mode=? AND symbol=? AND position_id=? AND kind IN (?,?,?) "
+            "ORDER BY id", (mode, symbol, root_id, *TRAIL_KINDS)):
         p = json.loads(payload or "{}")
         if kind == "TrailSet":
             trail = {"arm_r": p["arm_r"], "dist": p["dist"], "r": p["r"], "armed": False, "moved": False}
@@ -109,11 +111,13 @@ def _trail_diffs(snap: Any, db: dict[str, Any] | None) -> list[str]:
     return out
 
 
+@in_exec_context                        # DB 합계·대조도 엔진과 같은 EXEC_CTX(호출자 문맥 무관)
 def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> RestoreDecision:
     db = _db_open_position(con, mode=mode, symbol=symbol)
     row = con.execute("SELECT id, ts_ms, raw_json FROM account_snapshots WHERE mode=? AND symbol=? AND source='engine' "
                       "ORDER BY id DESC LIMIT 1", (mode, symbol)).fetchone()
     snap: dict[str, Any] | None = None
+    raw: Any = {}
     snap_id = snap_ts = None
     snap_note = "스냅샷 없음"
     if row is not None:
@@ -135,6 +139,10 @@ def decide_paper_restore(con: sqlite3.Connection, *, mode: str, symbol: str) -> 
     if snap is None or not isinstance(snap, dict):
         return RestoreDecision("mismatch", f"DB 열린 포지션 root {db['root_id']}인데 {snap_note}", db=db, snapshot_id=snap_id)
     diffs: list[str] = []
+    if raw.get("arith") != ARITH_VERSION:
+        #  산술 버전 가드(Codex 단계 d 후속 #3): 다른(또는 태그 없는 옛) 산술의 스냅샷은 지금 DB 합계와 정확 대조할 수 없다 —
+        #  업그레이드는 flat일 때만(런북 §9.7)이므로 정상 경로에서는 나오지 않는다. 나오면 불일치(flat + 차단 + 알림).
+        diffs.append(f"산술 버전 스냅샷 {raw.get('arith')} ≠ 현재 {ARITH_VERSION}")
     if snap_ts is None or snap_ts < db["opened_ms"]:
         diffs.append(f"스냅샷 ts {snap_ts} < 진입 {db['opened_ms']}")
     for k in ("direction", "leverage", "opened_ms"):

@@ -49,6 +49,7 @@ from typing import Any, Protocol
 
 from data.feed import KlineEvent
 from db import record as R
+from exchange.decimal_context import ARITH_VERSION, exec_context
 from exchange.gate import Mode
 from notify.bot import Answer, CommandBot, Send
 from paper.engine import Engine, EntryIntent, EntryRefused
@@ -129,7 +130,8 @@ class BotRuntime:
         self.last_mark: Decimal | None = None
         self.last_mark_ms: int | None = None
         self.last_bar_open_ms: int | None = None
-        self.unrecorded: list[tuple[list[object], Decimal | None]] = []
+        #  (이벤트, TP, 엔진 스냅샷 행) — **도착 순서 그대로**(FIFO) 한 트랜잭션씩 다시 쓴다(Codex 단계 d 후속 #1·#2)
+        self.unrecorded: list[tuple[list[object], Decimal | None, dict[str, Any] | None]] = []
         self.unrecorded_ops: list[tuple[str, str, int, dict[str, Any] | None, str]] = []   # (kind, detail, ts, payload, op_id)
         self.state_save_failed = False
         self.db_read_failed = False
@@ -362,23 +364,31 @@ class BotRuntime:
             tp = self._intent_tp
         else:
             tp = None
-        self._record(events, tp, ts_ms)
+        snap = None
+        if any(isinstance(e, SNAPSHOT_EVENTS) for e in events):
+            snap = self._snapshot_row(ts_ms, type(next(e for e in events if isinstance(e, SNAPSHOT_EVENTS))).__name__)
+        self._record(events, tp, ts_ms, snap)                      # 이벤트 + 스냅샷 = 한 트랜잭션(사이에서 죽으면 둘 다 없다)
         for e in events:
             self._alert_event(e, alert_exits=alert_exits)
         if any(isinstance(e, EntriesBlocked) for e in events):
             self.save_state(ts_ms)                                 # 엔진 차단도 재기동을 넘어 남긴다(Codex L8b #1)
-        if any(isinstance(e, SNAPSHOT_EVENTS) for e in events):
-            self.snapshot(ts_ms, type(next(e for e in events if isinstance(e, SNAPSHOT_EVENTS))).__name__)
+        if snap is not None:
             if self.mode is Mode.LIVE and any(isinstance(e, EntryFilled | PositionClosed | PositionReduced) for e in events):
                 self._exchange_snapshot(ts_ms, None, "fill")
 
-    def _record(self, events: list[object], tp: Decimal | None, ts_ms: int) -> None:
+    def _record(self, events: list[object], tp: Decimal | None, ts_ms: int,
+                snapshot: dict[str, Any] | None = None) -> None:
+        if self.unrecorded:
+            #  FIFO(Codex 단계 d 후속 #2): 앞선 묶음이 아직 미기록이면 뒤 묶음은 **직접 쓰지 않고** 줄 뒤에 선다 —
+            #  진입 기록 실패 뒤 청산이 먼저 들어가 고아 close·유령 open root가 생기던 결함(05d6031부터 · 봇 결함 수정)
+            self.unrecorded.append((events, tp, snapshot))
+            return
         try:
-            R.record_events(self.con, events, mode=self.mode.value, symbol=self.symbol, tp=tp)
+            R.record_events(self.con, events, mode=self.mode.value, symbol=self.symbol, tp=tp, snapshot=snapshot)
         except (sqlite3.Error, R.TransactionOpen) as e:
             self.db_errors += 1
             first = not self.unrecorded
-            self.unrecorded.append((events, tp))
+            self.unrecorded.append((events, tp, snapshot))
             if first:
                 self.alert(f"🔴 DB 기록 실패 — 진입 금지 · 틱마다 재시도: {type(e).__name__}: {e}", important=True)
 
@@ -396,9 +406,9 @@ class BotRuntime:
                 self._write_breadcrumb(now_ms)                                # 진행 상황을 파일에도
         self._clear_breadcrumb_if_durable()
         while self.unrecorded:
-            events, tp = self.unrecorded[0]
+            events, tp, snap = self.unrecorded[0]
             try:
-                R.record_events(self.con, events, mode=self.mode.value, symbol=self.symbol, tp=tp)
+                R.record_events(self.con, events, mode=self.mode.value, symbol=self.symbol, tp=tp, snapshot=snap)
             except (sqlite3.Error, R.TransactionOpen):
                 self.db_errors += 1
                 return
@@ -455,20 +465,22 @@ class BotRuntime:
             logger.error("운영 이벤트 기록 실패(보관·재시도) %s: %s", kind, e)
 
     # ── 스냅샷·상태 ─────────────────────────────────────────────────────────
-    def snapshot(self, ts_ms: int, reason: str) -> None:
+    def _snapshot_row(self, ts_ms: int, reason: str) -> dict[str, Any]:
+        """엔진 스냅샷 행(키워드 인자) — 산술은 EXEC_CTX(Codex 단계 d 후속 #5) · 산술 버전 태그(#3)를 남긴다."""
         e, pos = self.engine, self.engine.position
-        upnl = e.unrealized_pnl(self.last_mark) if self.last_mark is not None else (None if pos else Decimal(0))
-        iso = pos.qty * pos.entry_price / Decimal(pos.leverage) if pos is not None else Decimal(0)
-        try:
-            R.record_account_snapshot(self.con, mode=self.mode.value, symbol=self.symbol, ts_ms=ts_ms, source="engine",
-                                      wallet_balance=e.wallet,
-                                      margin_balance=None if upnl is None else e.wallet + upnl,
-                                      available_balance=e.wallet - iso, isolated_margin=iso, unrealized_pnl=upnl,
-                                      raw={"reason": reason, "mark": None if self.last_mark is None else str(self.last_mark),
-                                           "position": e.position_state()})       # 재기동 복원의 대조 원천(ops.restore)
-        except (sqlite3.Error, R.TransactionOpen) as ex:
-            self.db_errors += 1
-            logger.error("스냅샷 기록 실패: %s", ex)
+        with exec_context():
+            upnl = e.unrealized_pnl(self.last_mark) if self.last_mark is not None else (None if pos else Decimal(0))
+            iso = pos.qty * pos.entry_price / Decimal(pos.leverage) if pos is not None else Decimal(0)
+            return {"ts_ms": ts_ms, "source": "engine", "wallet_balance": e.wallet,
+                    "margin_balance": None if upnl is None else e.wallet + upnl,
+                    "available_balance": e.wallet - iso, "isolated_margin": iso, "unrealized_pnl": upnl,
+                    "raw": {"reason": reason, "mark": None if self.last_mark is None else str(self.last_mark),
+                            "arith": ARITH_VERSION,                         # 복원은 같은 산술 버전의 스냅샷만 믿는다
+                            "position": e.position_state()}}                 # 재기동 복원의 대조 원천(ops.restore)
+
+    def snapshot(self, ts_ms: int, reason: str) -> None:
+        """봉마다 엔진 스냅샷 — 이벤트와 같은 FIFO 줄로(앞선 미기록 묶음보다 먼저 쓰지 않는다)."""
+        self._record([], None, ts_ms, self._snapshot_row(ts_ms, reason))
 
     def _exchange_snapshot(self, ts_ms: int, acct: ExchangeAccount | None, reason: str) -> None:
         assert self.exchange is not None

@@ -56,8 +56,6 @@ class _Range24h:
     def as_of_open(self, open_ms: int) -> tuple[Decimal, Decimal] | None:
         """분 `open_ms` 시작 시점: 마감 시각이 (open_ms − 24h, open_ms) 안인 봉 = open ∈ [open_ms − 24h, open_ms − 1분]."""
         lo_open = open_ms - DAY_MS
-        while self.bars and self.bars[0][0] < lo_open - 3_600_000:     # 1시간 여유: 늦은 버킷 방출의 과거 시각 조회용
-            self.bars.popleft()
         while self.mx and self.mx[0][0] < lo_open:
             self.mx.popleft()
         while self.mn and self.mn[0][0] < lo_open:
@@ -65,6 +63,11 @@ class _Range24h:
         if not self.mx:
             return None
         return self.mn[0][1], self.mx[0][1]
+
+    def prune_before(self, keep_open_ms: int) -> None:
+        """시각 조회(`as_of_close`)용 봉 이력 — `keep_open_ms` 이전 봉만 버린다(단조 덱과 별개)."""
+        while self.bars and self.bars[0][0] < keep_open_ms:
+            self.bars.popleft()
 
     def as_of_close(self, t_ms: int) -> tuple[Decimal, Decimal] | None:
         """시각 t(봉 마감 = open + 59,999): 마감 시각이 (t − 24h, t]인 봉. 늦은 버킷 방출 때 t가 현재 봉보다 앞설 수 있다."""
@@ -113,7 +116,11 @@ class P4Feed:
                 self.by_real[real.level_id] = rnd
             cutoff = bk.close_ms - self.fe.cfg.swing_valid_ms
             self.randoms = [lv for lv in self.randoms if lv.expires_ms > cutoff]
-        if len(self.by_real) != sum(1 for _ in self.fe.swing_events):
+        #  이력 보존(Codex 단계 d 후속 #6): 아직 내지 않은 15m 버킷(늦은 방출 가능)의 확정 시각 t까지 조회할 수 있게,
+        #  그 버킷 마감 − 24h − 1분 이전 봉만 버린다(긴 결손 뒤 늦게 나오는 버킷도 창이 남아 있다).
+        pending = self.fe.b15.cur_start if self.fe.b15.cur_start is not None else bar.open_ms + MINUTE_MS
+        self.range.prune_before(pending + self.fe.b15.span - 1 - DAY_MS - MINUTE_MS)
+        if len(self.by_real) != len(self.fe.swing_events):
             raise AssertionError("정본 스윙과 무작위 스윙이 1:1이 아니다")
         vp = None
         if snap.vp is not None and vp_range is not None:

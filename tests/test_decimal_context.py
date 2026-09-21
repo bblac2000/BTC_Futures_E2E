@@ -173,3 +173,47 @@ def test_exec_context_is_fully_fixed():
     assert (EXEC_CTX.prec, EXEC_CTX.rounding, EXEC_CTX.Emin, EXEC_CTX.Emax, EXEC_CTX.capitals, EXEC_CTX.clamp) == \
         (34, decimal.ROUND_HALF_EVEN, decimal.MIN_EMIN, decimal.MAX_EMAX, 1, 0)
     assert {k for k, v in EXEC_CTX.traps.items() if v} == {decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow}
+
+
+# ── 런타임 전체: 실제 account_snapshots 행까지(Codex 단계 d 후속 #5) ─────────────────────
+def _runtime_run(rules, kind: str) -> str:
+    import re
+    from dataclasses import replace
+
+    from paper.engine import TpFromFill, Trail
+    from tests.test_ops_runtime import DAY0, build, feed
+    from tests.test_paper_engine import intent
+    with decimal.localcontext(decimal.Context()):
+        it = replace(intent(sl="59701.7", decided_ms=DAY0 + 61_000), trail=Trail(D(1), D("97.3")),
+                     tp_rule=TpFromFill(D("61111.1"), D("1.5"), D("2")))
+    import tests.test_ops_runtime as TR
+    orig_kline = TR.kline
+
+    def kline_default(*a, **k):                                   # 입력(테스트가 만드는 kline)은 기본 문맥에서
+        with decimal.localcontext(decimal.Context()):
+            return orig_kline(*a, **k)
+
+    TR.kline = kline_default
+    try:
+        with _ctx(kind):
+            rt, counter, clock = build(rules)
+            feed(rt, counter, clock, DAY0, DAY0 + 61_000, mark="60000.37")
+            rt.submit_entry(it)
+            feed(rt, counter, clock, DAY0 + 61_000, DAY0 + 181_000, mark="60000.37")
+            feed(rt, counter, clock, DAY0 + 181_000, DAY0 + 241_000, mark="60444.44")   # 무장·조임
+            feed(rt, counter, clock, DAY0 + 241_000, DAY0 + 301_000, mark="60123.45")
+    finally:
+        TR.kline = orig_kline
+    tables = [t for (t,) in rt.con.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+    dump = json.dumps({t: rt.con.execute(f"SELECT * FROM {t} ORDER BY 1").fetchall() for t in tables}, default=str)
+    return re.sub(r"\d{4}-\d\d-\d\d[T ][\d:.]+Z?", "T", dump)                        # 벽시계 열만 지운다
+
+
+def test_runtime_db_including_account_snapshots_is_byte_identical_under_any_caller_context(rules):
+    base = _runtime_run(rules, "default")
+    assert "account_snapshots" in base and "StopTrailed" in base and '"arith"' in base.replace('\\"', '"')
+    for kind in CONTEXTS[1:]:
+        other = _runtime_run(rules, kind)
+        if other != base:
+            k = next((i for i, (x, y) in enumerate(zip(base, other, strict=False)) if x != y), min(len(base), len(other)))
+            raise AssertionError(f"{kind}: {base[max(0, k - 200):k + 80]!r} ≠ {other[max(0, k - 200):k + 80]!r}")

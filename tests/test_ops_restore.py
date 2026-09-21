@@ -330,13 +330,14 @@ def test_a_failed_ack_write_followed_by_a_durable_save_keeps_the_breadcrumb_base
 
 
 # ── 트레일링·체결 뒤 TP(기본 꺼짐) — 런타임 → DB → 재기동(Codex 단계 d #3·#4·#5) ─────────────────
-def open_trail_then_crash(rules, db: Path, *, t0: int = DAY0, ratchet: bool = True) -> tuple[int, dict]:
+def open_trail_then_crash(rules, db: Path, *, t0: int = DAY0, ratchet: bool = True,
+                          dist: str = "100") -> tuple[int, dict]:
     from dataclasses import replace
 
     from paper.engine import TpFromFill, Trail
     rt, counter, clock = build_file(rules, db, t0=t0)
     feed(rt, counter, clock, t0, t0 + 61_000)
-    it = replace(intent(sl="59700", decided_ms=t0 + 60_000), trail=Trail(D(1), D(100)),
+    it = replace(intent(sl="59700", decided_ms=t0 + 60_000), trail=Trail(D(1), D(dist)),
                  tp_rule=TpFromFill(D("61000"), D("1.5"), D("2")))
     rt.submit_entry(it)
     feed(rt, counter, clock, t0 + 61_000, t0 + 121_000)
@@ -368,11 +369,14 @@ def test_trailed_sl_and_resolved_tp_survive_a_restart(rules, tmp_path):
 
 
 def test_armed_but_unmoved_trail_restores(rules, tmp_path):
+    """+1R에 닿아 무장됐지만 dist ≥ 2R이라 SL이 좋아지지 않는 경우 — armed=True · moved=False가 재기동을 넘어 유지된다(Codex 후속 #7)."""
     db = tmp_path / "bot.sqlite"
-    t, before = open_trail_then_crash(rules, db, ratchet=False)
-    assert before["trail"] == {"arm_r": "1", "dist": "100", "r": before["trail"]["r"], "armed": False, "moved": False}
-    _, _, _, decision, _ = restart(rules, db, t0=t + 5000)
+    t, before = open_trail_then_crash(rules, db, dist="900")                 # 60500 − 900 = 59600 < 초기 SL 59700
+    assert before["trail"]["armed"] is True and before["trail"]["moved"] is False and before["sl"] == "59700"
+    rt, _, _, decision, _ = restart(rules, db, t0=t + 5000)
     assert decision.action == "restore", decision.detail
+    p = rt.engine.position
+    assert p is not None and p.trail_armed and not p.trail_moved and p.sl == D("59700")
 
 
 def test_missing_trail_rows_are_a_mismatch(rules, tmp_path):
@@ -411,3 +415,83 @@ def test_post_fill_gate_exit_records_resolved_tp(rules, tmp_path, monkeypatch):
     tp, entry = rt.con.execute("SELECT tp, entry_price FROM positions WHERE event='open'").fetchone()
     (reason,) = rt.con.execute("SELECT reason FROM positions WHERE event='close'").fetchone()
     assert reason == "post_fill_gate" and D(tp) == D(entry) + 2 * (D(entry) - D("59700"))
+
+
+# ── 원자성(Codex 단계 d 후속 #1) — 이벤트 쓰기와 스냅샷 쓰기 사이의 **실제 프로세스 종료** ─────────────────
+def test_kill_between_event_rows_and_snapshot_rolls_back_both_and_restore_stays_consistent(rules, tmp_path):
+    import subprocess
+    import sys
+    db, marker = tmp_path / "bot.sqlite", tmp_path / "marker"
+    root = Path(__file__).resolve().parent.parent
+    p = subprocess.run([sys.executable, "-m", "tests.fixtures.crash_between_event_and_snapshot", str(db), str(marker)],
+                       cwd=root, capture_output=True, text=True, timeout=300)
+    assert p.returncode == 137, p.stderr[-2000:]                       # 그 지점에서 실제로 죽었다
+    assert marker.read_text() == "stoptrailed_rows_inserted"
+    con = sqlite3.connect(db)
+    assert con.execute("SELECT COUNT(*) FROM engine_events WHERE kind='StopTrailed'").fetchone()[0] == 0   # 되돌려짐
+    assert con.execute("SELECT COUNT(*) FROM engine_events WHERE kind='TrailSet'").fetchone()[0] == 1
+    _, raw = last_snapshot_raw(con)
+    assert raw["position"]["sl"] == "59700" and raw["arith"]
+    con.close()
+    rt, counter, clock, decision, msgs = restart(rules, db, t0=DAY0 + 200_000)
+    assert decision.action == "restore", decision.detail                # DB·스냅샷이 같은 (이동 전) 상태 — 버리지 않는다
+    assert rt.engine.position is not None and rt.engine.position.sl == D("59700")
+
+
+# ── 산술 버전 가드(Codex 단계 d 후속 #3) ─────────────────────────────────────────
+def test_snapshot_from_another_arithmetic_version_is_a_mismatch(rules, tmp_path):
+    """업그레이드는 flat일 때만(런북 §9.7) — 그래도 열린 포지션이 옛 산술(태그 없음·다른 태그) 스냅샷과 만나면 복원하지 않는다."""
+    db = tmp_path / "bot.sqlite"
+    t = open_then_crash(rules, db)
+    con = sqlite3.connect(db)
+    sid, raw = last_snapshot_raw(con)
+    raw.pop("arith")                                                           # 28자리 시절(태그 없음) 스냅샷
+    con.execute("UPDATE account_snapshots SET raw_json=? WHERE id=?", (json.dumps(raw), sid))
+    con.commit()
+    con.close()
+    _, _, _, decision, _ = restart(rules, db, t0=t + 5000)
+    assert decision.action == "mismatch" and "산술 버전" in decision.detail
+
+
+def test_flat_upgrade_needs_no_tag(rules, tmp_path):
+    """flat이면 대조할 것이 없다 — 옛 스냅샷(태그 없음)이어도 그대로 기동(§9.7의 정상 경로)."""
+    db = tmp_path / "bot.sqlite"
+    rt, counter, clock = build_file(rules, db, t0=DAY0)
+    feed(rt, counter, clock, DAY0, DAY0 + 121_000)
+    con = rt.con
+    for sid, raw_s in con.execute("SELECT id, raw_json FROM account_snapshots").fetchall():
+        raw = json.loads(raw_s)
+        raw.pop("arith", None)
+        con.execute("UPDATE account_snapshots SET raw_json=? WHERE id=?", (json.dumps(raw), sid))
+    con.commit()
+    con.close()
+    _, _, _, decision, _ = restart(rules, db, t0=DAY0 + 200_000)
+    assert decision.action == "none"
+
+
+# ── 소유 = position_id(Codex 단계 d 후속 #4) ─────────────────────────────────────
+def test_rows_of_a_position_closed_in_the_same_ms_do_not_attach_to_the_new_root(rules, tmp_path):
+    from dataclasses import replace
+
+    from db import record as R
+    from paper.engine import Trail
+    from paper.types import FundingSettled, MarkTick, StopTrailed
+    con = sqlite3.connect(tmp_path / "bot.sqlite")
+    M.migrate(con)
+    T = DAY0 + 1000
+    a = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=SizingLimits())
+    a.request_entry(replace(intent(sl="59700", decided_ms=DAY0), trail=Trail(D(1), D(100))))
+    R.record_events(con, a.on_tick(MarkTick(T, D("60000"), D("0.0001"), next_funding(T))), mode="paper", symbol="BTCUSDT")
+    t2 = T + 60_000
+    fund = FundingSettled(t2, D("0.0001"), D("60000"), D("0.01"), D("0.06"), D("999"))
+    moved = StopTrailed(t2, D("59700"), D("59800"))
+    close = a.close_now(ref_mark=D("60000"), ts_ms=t2)
+    R.record_events(con, [fund, moved, *close], mode="paper", symbol="BTCUSDT")
+    b = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=SizingLimits())
+    b.request_entry(intent(decided_ms=t2 - 1))
+    R.record_events(con, b.on_tick(MarkTick(t2, D("60000"), D("0.0001"), next_funding(t2))), mode="paper", symbol="BTCUSDT")
+    db = RS._db_open_position(con, mode="paper", symbol="BTCUSDT")
+    assert db is not None and db["opened_ms"] == t2                           # 같은 ms에 닫고 열린 새 root
+    assert db["trail"] is None and D(db["funding_paid"]) == 0                # 앞 포지션의 펀딩·트레일 행이 붙지 않는다
+    b_sl = con.execute("SELECT sl FROM positions WHERE id=?", (db["root_id"],)).fetchone()[0]
+    assert db["sl"] == b_sl

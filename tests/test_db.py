@@ -69,7 +69,7 @@ def columns(c, table) -> set[str]:
 
 # ── 마이그레이션 ─────────────────────────────────────────────────────────────
 def test_fresh_database_migrates_to_the_latest_version_with_every_section_5_table(con):
-    assert M.current_version(con) == MIGRATIONS[-1].version == 2
+    assert M.current_version(con) == MIGRATIONS[-1].version == 3
     assert tables(con) == V1_TABLES | V2_TABLES | {"schema_version"}
     rows = con.execute("SELECT version, sql_sha256 FROM schema_version ORDER BY version").fetchall()
     assert rows == [(m.version, m.sha256) for m in MIGRATIONS]
@@ -408,7 +408,19 @@ def test_v1_database_upgrades_to_v2_without_touching_v1_rows(monkeypatch):
     M.migrate(c, target=1)
     c.execute("INSERT INTO engine_events(mode, symbol, ts_ms, kind) VALUES ('paper','BTCUSDT',1,'x')")
     c.commit()
-    assert M.migrate(c) == [2] and c.execute("SELECT kind FROM engine_events").fetchall() == [("x",)]
+    assert M.migrate(c, target=2) == [2] and c.execute("SELECT kind FROM engine_events").fetchall() == [("x",)]
+
+
+def test_v2_database_upgrades_to_v3_adding_nullable_position_id_only():
+    """v3(추가 전용): funding_events·engine_events에 position_id(NULL 허용) — 기존 행은 그대로, 값은 NULL."""
+    c = sqlite3.connect(":memory:")
+    M.migrate(c, target=2)
+    c.execute("INSERT INTO engine_events(mode, symbol, ts_ms, kind) VALUES ('paper','BTCUSDT',1,'x')")
+    c.execute("INSERT INTO funding_events(mode, symbol, ts_ms, signed_qty, missed) VALUES ('paper','BTCUSDT',1,'0.01',0)")
+    c.commit()
+    assert M.migrate(c) == [3]
+    assert c.execute("SELECT kind, position_id FROM engine_events").fetchall() == [("x", None)]
+    assert c.execute("SELECT ts_ms, position_id FROM funding_events").fetchall() == [(1, None)]
 
 
 def test_feature_tables_have_the_bar_name_version_index(con):

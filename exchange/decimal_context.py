@@ -16,6 +16,9 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 
 EXEC_PREC = 34
+#  산술 버전 태그 — 엔진 스냅샷(`account_snapshots.raw_json.arith`)에 남고, 복원은 **같은 태그의 스냅샷만** 대조한다
+#  (Codex 단계 d 후속 #3 · 28자리 시절 스냅샷과 34자리 DB 값을 섞어 비교하지 않는다). 문맥을 바꾸면 이 값도 바꾼다.
+ARITH_VERSION = "exec_ctx/v1/prec34/half_even"
 EXEC_CTX = decimal.Context(prec=EXEC_PREC, rounding=decimal.ROUND_HALF_EVEN, Emin=decimal.MIN_EMIN, Emax=decimal.MAX_EMAX,
                            capitals=1, clamp=0, flags=[],
                            traps=[decimal.InvalidOperation, decimal.DivisionByZero, decimal.Overflow])

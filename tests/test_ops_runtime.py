@@ -139,7 +139,7 @@ def test_entry_gate_is_the_union_of_engine_safety_and_db_blockers(rules):
     feed(rt, counter, clock, DAY0, DAY0 + 5000)
     rt.engine._block(DAY0, "주문 결과 불명")
     rt.gate.pause("telegram:111")
-    rt.unrecorded.append(([], None))
+    rt.unrecorded.append(([], None, None))
     b = rt.entry_blockers()
     assert b[0] == "engine:주문 결과 불명" and "paused:telegram:111" in b and any(x.startswith("db:") for x in b)
     with pytest.raises(EntryRefused) as ei:
@@ -465,3 +465,53 @@ def test_status_reports_position_and_pending_for_the_deploy_flat_check(rules):
     feed(rt, counter, clock, DAY0 + 62_000, DAY0 + 63_000)
     st = rt.status(DAY0 + 63_000)
     assert st["position"] is not None and st["pending"] is False
+
+
+def test_db_retry_is_fifo_entry_failure_then_trail_partial_and_full_close(rules, monkeypatch):
+    """Codex 단계 d 후속 #2(05d6031부터의 봇 결함): 진입 기록이 실패하면 뒤 묶음(트레일·부분 청산·전량 청산)은 **직접 쓰지 않고**
+    줄 뒤에 선다 → 재시도 때 도착 순서대로 → 고아 close·유령 open root 없음."""
+    import sqlite3 as _sq
+    from dataclasses import replace
+
+    from db import record as R
+    from paper.engine import Trail
+    from paper.types import PositionClosed, PositionReduced
+    rt, counter, clock = build(rules)
+    feed(rt, counter, clock, DAY0, DAY0 + 61_000)
+    real = R.record_events
+    calls = {"n": 0}
+
+    def flaky(con, events, **k):
+        calls["n"] += 1
+        if any(type(e).__name__ == "EntryFilled" for e in events) and calls.get("failed") is None:
+            calls["failed"] = 1
+            raise _sq.OperationalError("disk I/O error (주입)")
+        return real(con, events, **k)
+
+    monkeypatch.setattr(R, "record_events", flaky)
+    monkeypatch.setattr(rt, "_retry_unrecorded", lambda now: None)          # 재시도는 아래에서 한 번에
+    rt.submit_entry(replace(intent(sl="59700", decided_ms=DAY0 + 61_000), trail=Trail(D(1), D(100))))
+    feed(rt, counter, clock, DAY0 + 62_000, DAY0 + 63_000)                  # 체결 → 기록 실패
+    pos = rt.engine.position
+    assert pos is not None and len(rt.unrecorded) >= 1
+    n0 = calls["n"]
+    feed(rt, counter, clock, DAY0 + 63_000, DAY0 + 64_000, mark="60500")    # StopTrailed(+스냅샷) — 줄 뒤로
+    half = D("0.001") if pos.qty > D("0.001") else pos.qty
+    reduced = PositionReduced(DAY0 + 64_500, pos.direction, ExitReason.MANUAL, half, pos.qty - half, pos.entry_price,
+                              D("60450"), (), D("0.4"), D("0.03"), rt.engine.wallet, "주입 부분 청산")
+    rt.handle_events([reduced], DAY0 + 64_500)
+    ev = rt.engine.close_now(ref_mark=D("60450"), ts_ms=DAY0 + 65_000)
+    rt.handle_events(ev, DAY0 + 65_000)
+    assert calls["n"] == n0, "앞 묶음이 미기록인 동안 뒤 묶음을 직접 쓰지 않는다"
+    assert rows(rt, "SELECT COUNT(*) FROM positions") == [(0,)]
+    kinds = [type(e).__name__ for batch, _, _ in rt.unrecorded for e in batch]
+    assert kinds.index("EntryFilled") < kinds.index("StopTrailed") < kinds.index("PositionReduced") < kinds.index("PositionClosed")
+    monkeypatch.undo()
+    rt._retry_unrecorded(DAY0 + 66_000)
+    assert not rt.unrecorded
+    (root,) = rows(rt, "SELECT id FROM positions WHERE event='open'")
+    closes = rows(rt, "SELECT position_id, reason, detail FROM positions WHERE event='close' ORDER BY id")
+    assert [c[0] for c in closes] == [root[0], root[0]] and all("open 행 없음" not in (c[2] or "") for c in closes)
+    assert rows(rt, "SELECT position_id FROM engine_events WHERE kind='StopTrailed'") == [(root[0],)]
+    assert rows(rt, "SELECT COUNT(*) FROM positions WHERE event='open'") == [(1,)]
+    assert isinstance(ev[-1], PositionClosed)

@@ -2814,3 +2814,21 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
 > 
 > Codex session ID: 01a0c468-be98-7a32-b5e2-2fa11bd43972
 > Resume in Codex: codex resume 01a0c468-be98-7a32-b5e2-2fa11bd43972
+
+
+## 2026-09-22(UTC 09-21 20:0x) — 단계 d 후속 2차 수정(사용자 "Batch approved as proposed — all seven items") · 손익 계산 없음
+1. **이벤트 + 스냅샷 한 트랜잭션**(봇 결함 · 05d6031부터 · 레지스트리 #23): `db.record.record_events(..., snapshot=…)` · 런타임은 SNAPSHOT_EVENTS가 있으면
+   스냅샷 행을 이벤트와 함께 넘긴다 · 봉 스냅샷도 같은 경로. **장애 주입 테스트**: 하위 프로세스가 `StopTrailed` 이벤트 행을 넣은 직후·스냅샷 행을 넣기 직전
+   `os._exit(137)`로 **실제 종료**(마커 파일로 지점 확인) → 부모: 종료 코드 137 · StopTrailed 행 0(롤백) · 마지막 스냅샷 SL = 이동 전 → 재기동 `restore`(버리지 않음).
+2. **DB 재시도 FIFO**(봇 결함 · 05d6031부터 · #23): `unrecorded`가 비어 있지 않으면 뒤 묶음(봉 스냅샷 포함)은 직접 쓰지 않고 줄 뒤로 · 항목 = (이벤트, TP, 스냅샷 행).
+   테스트: 진입 기록 실패(주입) → 트레일 이동 · 부분 청산 · 전량 청산이 모두 줄 뒤에 섬(직접 쓰기 0회) → 재시도 후 open 1 · close 2개 모두 같은 root · 고아 0 · StopTrailed position_id = root.
+3. **산술 버전 가드**(#23): 엔진 스냅샷 `raw_json.arith = exec_ctx/v1/prec34/half_even` · 복원은 태그가 다르거나 없으면 불일치(flat + 차단 + 알림) ·
+   flat이면 대조할 것이 없어 영향 없음(§9.7 정상 경로 테스트). 복원 판단 자체도 `EXEC_CTX`.
+4. **소유 = position_id**(스키마 v3 · 추가 전용 NULL 허용 열 `funding_events.position_id`·`engine_events.position_id` + 인덱스): 펀딩·트레일 행은 기록 시 열린 root id ·
+   복원은 id로 묶고 옛(NULL) 펀딩 행만 시각 경계로. 테스트: 같은 ms에 트레일 포지션이 닫히고 새 포지션이 열려도 앞 포지션의 펀딩·StopTrailed가 새 root에 붙지 않음 · v2→v3 마이그레이션(기존 행 보존·NULL).
+5. **계좌 스냅샷 산술 EXEC_CTX**: 테스트가 런타임 전체(틱·봉·진입·트레일·스냅샷)를 호출자 문맥 기본/ccxt 모양/6자리에서 돌려 **DB 전체 표(account_snapshots 포함)** 바이트 동일(벽시계 열만 제외).
+6. **P4 이력 보존**: 조회용 봉 이력은 아직 내지 않은 15m 버킷 마감 − 24h − 1분까지 유지(1시간 여유 규칙 폐기) · 30시간 결손 합성 테스트로 불변식 확인.
+7. **무장만 된 트레일 테스트 교정**: dist 900(> 2R)로 실제로 +1R에 무장하되 SL은 그대로 → armed=True · moved=False가 재기동을 넘어 유지.
+**문서**: 레지스트리 #23(1·2는 **봇 결함 수정**이지 트라이얼 변경이 아님) · TODO 5o에 두 결함을 "두 번째 저장소" 증거로 · 런북 §9.7에 v3 마이그레이션(사본 → `--status` → 적용 → `--status`)과 새 스냅샷의 arith 태그 확인.
+**검증**: 856 passed · ruff·pyright 0 · stream-tiers 0 · 백테스트 경로 불변: 30일 조각 A decisions `789bf4d5…`·trades `80991df7…` · P4 추출 0 decisions `cd81a95a…`·trades `49327350…`(이전과 동일).
+**메모리 판독**: 작업 a8905872는 살아 있고 09-22 00:07 UTC(00:10 겹침 창 직전)에 실행 예정 — 수동 실행은 그 창을 놓치므로 하지 않음.

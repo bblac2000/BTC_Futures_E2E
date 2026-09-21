@@ -226,7 +226,17 @@ CREATE TABLE IF NOT EXISTS safety_state(
 CREATE INDEX IF NOT EXISTS idx_safety_state_latest ON safety_state(mode, name, id);
 """
 
+#  v3 (사용자 결정 2026-09-21 · Codex 단계 d 후속 #4): 펀딩·엔진 이벤트 행의 **소유 포지션**(root open 행 id) —
+#  복원이 시각 경계(`ts_ms ≥ root 진입`)가 아니라 id로 묶는다(같은 ms에 닫고 여는 경우). 추가 전용 · NULL 허용(옛 행은 NULL).
+V3 = """
+ALTER TABLE funding_events ADD COLUMN position_id INTEGER;
+ALTER TABLE engine_events ADD COLUMN position_id INTEGER;
+CREATE INDEX IF NOT EXISTS idx_funding_events_position ON funding_events(position_id);
+CREATE INDEX IF NOT EXISTS idx_engine_events_position ON engine_events(position_id, kind);
+"""
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "section5_tables_and_runtime_rules", V1),
     Migration(2, "feature_index_and_safety_state", V2),
+    Migration(3, "event_position_id", V3),
 )

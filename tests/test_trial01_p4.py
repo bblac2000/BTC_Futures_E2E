@@ -151,3 +151,20 @@ def test_swing_level_objects_are_not_shared_with_the_real_tracker(run0):
     real_ids = {id(x) for x in feed.fe.swing_events}
     assert not any(id(x) in real_ids for x in feed.by_real.values())
     assert all(isinstance(x, SwingLevel) for x in feed.by_real.values())
+
+
+def test_history_is_kept_back_to_the_pending_bucket_even_across_a_long_gap():
+    """Codex 단계 d 후속 #6: 긴 결손 뒤 늦게 나오는 버킷의 확정 시각 조회가 가능해야 한다 — 보존 불변식을 매 봉 확인."""
+    bars = _bars()
+    gap_at = 2 * 1440 + 7                                        # 15m 버킷 중간에서 30시간 결손
+    bars = bars[:gap_at] + [b for b in bars[gap_at:] if b.open_ms >= bars[gap_at].open_ms + 30 * 60 * MINUTE_MS]
+    closes = [b.d("close") for b in bars]
+    feed = P4Feed(EngineFeed(FeatureEngine(TICK, min(closes), max(closes))), 0, TICK)
+    for b in bars:
+        feed.step(b)
+        pend = feed.fe.b15.cur_start
+        t = (pend if pend is not None else b.open_ms + MINUTE_MS) + feed.fe.b15.span - 1
+        need = [x for x in bars if t - DAY_MS < x.open_ms + MINUTE_MS - 1 <= b.open_ms + MINUTE_MS - 1]
+        if need:
+            assert feed.range.bars[0][0] <= need[0].open_ms
+    assert set(feed.by_real) == {lv.level_id for lv in feed.fe.swing_events}

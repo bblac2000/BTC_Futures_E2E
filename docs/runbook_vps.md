@@ -234,5 +234,10 @@ E2E에 닿는 명령은 롤백에도 없다. 봇 사용자·데이터 삭제는 
    CAST(qty AS REAL) > (SELECT COALESCE(SUM(CAST(qty AS REAL)),0) FROM positions c WHERE c.event='close' AND c.position_id=p.id)"` → `0`.
    (경로 = `btcfut-bot.service`의 `--db`.) 0이 아니면 기동하지 않고 보고.
 4. 코드: `sudo -u btcfut git -C $B fetch` → `git -C $B checkout <MERGE된 커밋>`(해시 고정) → `uv sync --frozen` → `git -C $B rev-parse HEAD` 기록.
+   **스키마 v3가 든 배포**(레지스트리 #23 · position_id 추가 열 — 추가 전용): 기동 전에 `sudo -u btcfut cp $B/var/bot.sqlite $B/var/bot.sqlite.pre-v3`(사본 ·
+   삭제하지 않는다) → `sudo -u btcfut $B/.venv/bin/python -m db.migrate $B/var/bot.sqlite --status`(2) → 인자 없이 한 번(3까지) → `--status`(3).
+   같은 배포에 **산술 버전 태그**(`exec_ctx/v1/prec34/half_even`)가 들어간다 — flat 기동이므로 옛(태그 없는) 스냅샷과 대조할 일이 없다.
 5. 기동: `bsc start btcfut-bot` → §5 기동 후 확인 · 기동 알림에 복원 없음(`DB flat · 스냅샷 …`) · `status.json`의 `position None` · `pending False`.
+   **새 스냅샷 확인**: 기동 뒤 첫 봉이 지난 다음 `sqlite3 -readonly $B/var/bot.sqlite "SELECT ts_ms, json_extract(raw_json,'$.arith') FROM account_snapshots
+   WHERE source='engine' ORDER BY id DESC LIMIT 1"` → 기동 뒤 시각 · `exec_ctx/v1/prec34/half_even`.
 6. `docs/ops_log.md`에 1·3의 출력, 커밋 해시, 기동 알림을 기록.
