@@ -3030,3 +3030,10 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
 - 첫 btcfut-sync(기동 뒤): 02:20:12 시작 → 02:21:44 Finished · Result success · exit 0 · 1분 32초 · peak 119 MB(직전 01:20 실행 1분 34초 · 121 MB와 같은 모양).
   같은 시점: 봇 active · NRestarts 0 · MemoryPeak 214.7 MB · status.json position None · pending False · 차단 [] · db_errors 0 · unrecorded 0 · delivered 1 = sent 1 ·
   e2e-l2collector ActiveEnter 2026-09-17 00:13:23 · NRestarts 0. **배포 완료 · 롤백 없음** · 백업 `var/bot.sqlite.pre-v3`는 남겨 둔다(삭제는 사람 확인 + Codex).
+
+
+## 2026-09-22 — 단계 e 준비: 판정기·P1 실행기·실행기 커밋(**어떤 실행보다 먼저**)
+- `backtest/evaluate.py`(게이트 순수 함수 + 모든 산출물이 있어야만 여는 main · 전략 모듈 import 금지) · `backtest/p1_run.py`(Arm A에서 P1 입력 4필드만 · 추출 범위 분할 · 병합은 0..999 정확히) ·
+  `backtest/step_e.py`(격리 실행 · verbatim 기록 · 이어 하기 · 최대 자식 RSS) · `placebo.EligibleIndex`(전체 IS에서 h별 적격 목록을 만들지 않는 게으른 색인 — 원래 목록과 같음을 테스트).
+- 해석 = 레지스트리 #24(기록 시각 2026-09-22T02:37:44Z). 테스트 874 passed · ruff·pyright 0.
+- 순서(사용자): 전체 IS Arm A(벽시계·RSS 실측) → B · P2(+1/+5) · P3 → P1 1,000(분할) → P4 200(로컬 병렬 · VPS 금지) → 판정기 한 번 → 보고 하나. OOS 닫힘.

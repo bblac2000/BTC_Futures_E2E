@@ -26,6 +26,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Protocol
 
 import numpy as np
 
@@ -109,8 +110,61 @@ class _Occupancy:
 SizingOk = Callable[[int, int, Decimal], bool]      # (entry_ms, direction, sl_dist) → B2 사이징 수락?
 
 
+class Indexable(Protocol):
+    def __len__(self) -> int: ...
+    def __getitem__(self, j: int, /) -> int: ...
+
+
+class EligibleIndex:
+    """`eligible_minutes(grid, h, start, end)`와 **같은 목록**(오름차순)을 만들지 않고 색인한다 — 전체 IS 격자(131만 분)에서
+    h마다 목록을 만들면 추출 1,000회 × 서로 다른 h 수천 개가 된다. 격자 결손 분이 적다는 점을 쓴다:
+    적격 = 격자 중 start ≤ t 이고 t + (h−1)분 ≤ end 인 앞부분에서, t + (h−1)분이 결손 분인 t를 뺀 것."""
+
+    def __init__(self, grid: Sequence[int], start_ms: int, end_ms: int):
+        self.g = np.asarray(sorted(set(grid)), dtype=np.int64)
+        have = {int(x) for x in self.g}
+        lo = max(start_ms, int(self.g[0])) if len(self.g) else start_ms
+        self.gaps = [t for t in range(lo, end_ms + 1, MINUTE_MS) if t not in have]
+        self.start, self.end = start_ms, end_ms
+        self._cache: dict[int, _EligView] = {}
+
+    def get(self, h: int) -> _EligView:
+        view = self._cache.get(h)
+        if view is None:
+            shift = (h - 1) * MINUTE_MS
+            first = int(np.searchsorted(self.g, self.start, "left"))
+            k = int(np.searchsorted(self.g, self.end - shift, "right"))
+            bad = set()
+            for m in self.gaps:
+                i = int(np.searchsorted(self.g, m - shift, "left"))
+                if first <= i < k and int(self.g[i]) == m - shift:
+                    bad.add(i)
+            view = self._cache[h] = _EligView(self.g, first, k, sorted(bad))
+        return view
+
+
+class _EligView:
+    def __init__(self, g: np.ndarray, first: int, k: int, bad: list[int]):
+        self.g, self.first, self.k, self.bad = g, first, k, bad
+
+    def __len__(self) -> int:
+        return max(0, self.k - self.first - len(self.bad))
+
+    def __getitem__(self, j: int) -> int:
+        i = self.first + j                                 # 빠진 위치(bad · 오름차순 · 몇 개뿐)를 건너뛴다
+        for b in self.bad:
+            if b <= i:
+                i += 1
+            else:
+                break
+        return int(self.g[i])
+
+    def tolist(self) -> list[int]:
+        return [self[j] for j in range(len(self))]
+
+
 def p1_draw(draw: int, source: Sequence[SourceTrade], grid: Sequence[int], start_ms: int, end_ms: int,
-            sizing_ok: SizingOk) -> P1Draw:
+            sizing_ok: SizingOk, *, index: EligibleIndex | None = None) -> P1Draw:
     src = sort_source(source)
     n = len(src)
     rng = p1_rng(draw)
@@ -124,9 +178,10 @@ def p1_draw(draw: int, source: Sequence[SourceTrade], grid: Sequence[int], start
     occ = _Occupancy()
     placed: list[PlacedSlot] = []
     for k, pair, direction, h, sl_dist in order:
-        elig = elig_cache.setdefault(h, eligible_minutes(grid, h, start_ms, end_ms))
+        elig: Indexable = index.get(h) if index is not None \
+            else elig_cache.setdefault(h, eligible_minutes(grid, h, start_ms, end_ms))     # 게으른 색인 = 같은 목록
         ok = False
-        if elig:
+        if len(elig):
             for _ in range(P1_SLOT_ATTEMPTS):
                 t = elig[int(rng.integers(0, len(elig)))]
                 if occ.free(t, t + h * MINUTE_MS) and sizing_ok(t, direction, sl_dist):
