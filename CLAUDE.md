@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 BTCUSDT USDⓈ-M perpetual bot. Paper first (Tokyo VPS, 1 month), live only after user approval **and** the live checklist.
 Binding rules, in precedence order: `.claude/skills/quant-bot-constitution/` (read SKILL.md + references first) → `docs/바이낸스문서API_2026_v6.md` (never edit; append dated corrections only) → `docs/design_v1.md`.
 Fixed decisions, build order, and the E2E reuse table live in `docs/design_v1.md` — do not re-open them.
+The canonical constitution is the versioned zip maintained outside this repo; `.claude/skills/quant-bot-constitution/` is a deployed copy. **Never edit skill files here** — propose changes in your report; they are applied to the master and redeployed to both repos.
 
 ## Commands
 ```bash
