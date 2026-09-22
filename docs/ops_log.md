@@ -3002,3 +3002,31 @@ A decisions `789bf4d5…`(수정 전과 같음) · trades `80991df7…`(34자리
 | # | 날짜(UTC) | 패턴 | 무슨 일이 있었나 | 막은 것 · 재발 방지 |
 |---|---|---|---|---|
 | F1 | 2026-09-21 20:37 | **이름이 모호한 SSH 별칭이 다른 호스트를 가리킴** | 배포 창 밖 점검에서 `ssh tokyo`를 썼는데 `tokyo` = **54.95.163.55**(VCB 호스트)였다 — 봇 VPS는 35.79.38.63. `/home/btcfut` 없음 출력으로 알아챘다. 실행된 것은 읽기 명령(hostname·uptime·which·ls)뿐 | **첫 출력의 hostname을 기대값(`ip-172-31-38-160`)과 대조**해 멈췄다. 로컬 `~/.ssh/config`에 명시 이름 `e2e-vps`(35.79.38.63 · e2e-bot-key.pem · IdentitiesOnly)·`vcb-tokyo`(54.95.163.55) 추가(원본 `config.bak-20260921` 보존 · `tokyo`는 그대로) · 둘 다 hostname으로 확인. 런북 명령은 **명시 IP 그대로** 둔다(사용자 2026-09-21). 규칙: 호스트에 닿는 모든 세션의 첫 명령은 `hostname` 대조 |
+
+
+## 2026-09-22 — 메모리 판독(09-22) + §9.7 배포(창 00:35–02:30 UTC · 커밋 2a47d94 · E2E 호스트 변경 없음)
+**세션 재생성**: 예약 작업 a8905872(00:07 판독)·9be71a2f(00:36 창 시작)는 세션 전용이라 이전 세션과 함께 사라졌다 → 01:51 UTC에 수동 진행.
+### 메모리 판독(읽기만 · 01:51 UTC — 실시간 00:08–00:15 표집은 **놓쳤다**)
+- 봇: active(2026-09-19 00:40:20부터 3일) · NRestarts 0 · MemoryCurrent 163 MB · **MemoryPeak 229.5 MB**(09-19 기동 이후 · 정지 로그 "218.8M memory peak") · 상한 400 MB 대비 여유.
+- cgroup `memory.events`: low 0 · high 0 · max 0 · oom 0 · oom_kill 0 · oom_group_kill 0(sock_throttled 2 — 메모리 압박 아님).
+- e2e-quality(09-22): 00:10:00 시작 · 00:11:32 종료 · Result success · **MemoryPeak 544.6 MB**(09-18 기준 595 MB보다 낮음) · `l2-2026-09-21.json` 00:11 생성.
+- e2e-l2collector: active · NRestarts 0 · ActiveEnter 2026-09-17 00:13:23 UTC(**기준선 그대로**) · 커널 OOM 로그(00:00–00:30) 없음.
+- sysstat(10분 간격): 00:10:00 kbavail 964,616(= 942 MB · quality 시작 시점) · 00:20:00 965,132. **00:10–00:12 최저 가용은 직접 관측되지 않음** —
+  추정 ≈ 942 − 545 ≈ **~400 MB**(quality 피크가 시작 뒤 전부 새로 쓴다고 보는 보수적 추정 · 측정값 아님) → ~300 MB 기준 **위로 추정**, swap 결정은 보류.
+  실측 확정은 다음 00:10(09-23)에 5초 표집을 다시 돌려서(세션 전용 예약의 한계 — 수동 또는 호스트 쪽 도구 필요).
+### §9.7 배포(모든 호스트 명령 전 `hostname` = ip-172-31-38-160 확인)
+- 정지 전: status.json 나이 0.7초 · position None · 옛 코드라 pending 필드 없음 · 차단 [] · db_errors 0 · unrecorded 0.
+- 01:52:19 `bsc stop` → 01:52:21 inactive · Result success · exit 0 · status.json `shutdown=stop`(stop_dirty 아님) · delivered 2 = sent 2.
+- DB 열린 root **0** · 스키마 2 · `sqlite3 .backup` → `var/bot.sqlite.pre-v3`(2,740,224 B) · `PRAGMA integrity_check` **ok** · 사본 스키마 2 · 엔진 스냅샷 4,393행.
+- `git fetch` → `checkout 2a47d944566edaf42398359b283402a6aca7825f`(rev-parse 확인) · `uv sync --frozen`(numpy 2.5.3 설치만) ·
+  `db.migrate --status` 2 → 적용 [3] → `--status` 3 · `funding_events.position_id` 열 확인 · 이후 `integrity_check` ok · 스키마 3.
+- 01:53:05 `bsc start` → active · NRestarts 0 · 01:53:09 기동 알림(🟢 기동 [paper] BTCUSDT · 지갑 1000 · 규칙 rest/rest:signed) **delivered 1 = sent 1** · poll_errors 0.
+- 복원 경로: 결정 `none`(DB flat · 스냅샷 flat) — 설계상 운영 이벤트·알림 없음 · 기동 뒤 엔진 이벤트는 `Backfill`(inserted 1 · failed 0)뿐.
+- status.json: position None · **pending False** · 차단 [] · db_errors 0 · unrecorded 0 · rules runtime:signed · mark 나이 1초.
+- 새 스냅샷: id 4394(01:54:00)·4395(01:55:00) `arith = exec_ctx/v1/prec34/half_even` · reason bar · position null.
+- bot.log 01:53 이후 ERROR/Traceback/WARNING 0 · 메모리 214 MB(기동·백필 직후).
+- E2E: e2e-l2collector ActiveEnter 2026-09-17 00:13:23 · NRestarts 0 그대로 · depthdiff·markprice running · failed 유닛 없음.
+- 롤백 불필요. 첫 btcfut-sync(02:20) 확인은 아래에 덧붙인다.
+- 첫 btcfut-sync(기동 뒤): 02:20:12 시작 → 02:21:44 Finished · Result success · exit 0 · 1분 32초 · peak 119 MB(직전 01:20 실행 1분 34초 · 121 MB와 같은 모양).
+  같은 시점: 봇 active · NRestarts 0 · MemoryPeak 214.7 MB · status.json position None · pending False · 차단 [] · db_errors 0 · unrecorded 0 · delivered 1 = sent 1 ·
+  e2e-l2collector ActiveEnter 2026-09-17 00:13:23 · NRestarts 0. **배포 완료 · 롤백 없음** · 백업 `var/bot.sqlite.pre-v3`는 남겨 둔다(삭제는 사람 확인 + Codex).
