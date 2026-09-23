@@ -3088,3 +3088,11 @@ IS 트레이드 표본은 사실상 **2024년 9~12개월**이다(트레이드당
   보수적 추정 946 − 544 ≈ **~400 MB**(측정 아님) → ~300 MB 기준 위 → **swap 변경 없음**(판정 보류: 실측 뒤 확정).
 - 재발 방지: `scripts/vps_memory_sampler.sh`(읽기 전용 5초 표집 · 호스트 변경 없음) + 로컬 백그라운드 예약(세션과 무관하게 09-24 00:07:50 UTC 시작 ·
   출력 `var/mem/sampler_2026-09-24.log`). 세션 전용 cron이 세션과 함께 죽는 문제(09-22)와 같은 실패를 F2로 기록.
+- **VPS 일회성 임시(transient) 표집 작업 등록**(사용자 승인 2026-09-23 · 읽기 전용): `systemd-run --user --collect --unit=btcfut-memsample
+  --on-calendar="2026-09-24 00:07:50 UTC"` (btcfut 사용자 · `XDG_RUNTIME_DIR=/run/user/1001`) → `var/mem/sampler.sh <로그> 90 5`.
+  스크립트는 **읽기만** 한다: `free -m` + cgroup `memory.current`(봇·e2e-quality·e2e-l2collector) 5초 간격 90회(00:07:50~00:15:20) ·
+  끝에 봇 ActiveState/NRestarts/MemoryPeak·`memory.events`·`free -m`. 출력 `/home/btcfut/BTC_Futures_E2E/var/mem/sampler_2026-09-24.log`(추가 기록).
+  **영구 유닛 파일 없음**(`Transient=yes` · `~/.config/systemd/user/`에 memsample 없음 · `--collect`로 실행 뒤 정리 · 재부팅하면 사라진다) ·
+  `list-timers` 확인: NEXT 2026-09-24 00:07:50 UTC. 스모크 테스트(2회·3초) 정상 — quality는 비활성이라 `-`, 00:10에 cgroup이 생기면 값이 찍힌다.
+  로컬 nohup 예약(내 기기)은 **백업으로 유지** — 둘 다 같은 로그 이름을 쓰지 않는다(VPS는 호스트 경로, 로컬은 저장소 `var/mem/`).
+  호스트 파일 추가는 `var/mem/sampler.sh`(gitignore 안 · 유닛 아님) 하나뿐이고 봇 설정·유닛·DB는 건드리지 않았다.
