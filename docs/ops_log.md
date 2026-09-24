@@ -4551,3 +4551,103 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 키 권한 실측 = 읽기 전용(읽기 외 플래그 꺼짐) · GET 4회(exchangeInfo · leverageBracket · commissionRate · fundingInfo).
 - taker 0.0005 = §2 5 bps · 파싱 값은 2026-09-02 fixture와 같다 · 파일에 키·서명 문자열 없음(grep 0).
 - SHA256 4개는 레지스트리 #36 · 정정 문서 01.
+
+## 2026-09-24 — 트라이얼 #2 단계 2 계획 r2 **Codex 좁은 재확인**(task-muffa66t-k348ve) **PROCEED**
+- r2 = before-pass 반영(차단 1~8) · 2h 완료(#36). Codex: 차단 1~8 전부 CLOSED · 새 모호성 없음.
+- 비차단 1건: 2i 목록은 예시일 뿐 — §11-8(산출물 스키마·격리 CLI 경로·커밋/푸시 증거)도 행에 기록 → ✅ 동의(2i에 포함).
+
+### 계획 r2 원문
+> # Trial #2 step 2 — revised plan r2 (after advisor + Codex before-pass FIX-PLAN-FIRST; ops_log 8bfbba8)
+> 
+> Unchanged: anchor #35; no real-data P&L and no real-data validity pass before the evaluator is committed + pushed (user checkpoint);
+> OOS closed (no OOS data fetched/prepared). All development tests synthetic.
+> DONE: 2h runtime rules = docs/trials/trial_02_rules_snapshot/ (registry #36, correction 01; captured 2026-09-24 post-anchor same day,
+> single source, no fallback, taker 0.0005 asserted; fundingInfo included as parser-required input from the same capture).
+> 
+> 2a Anchor module strategies/trial02/anchor.py (own constants; imports nothing from trial01): createdTime, Drive id, doc SHA256, bo_v1,
+>    OOS_END mechanical, N_TRIALS 4, ALPHA 0.0125, LEVEL 0.9875, SR_1A/SR_1B literals, seeds, rules snapshot dir + 4 SHA256.
+>    Tests: recompute doc SHA256 + bo_v1 from file; snapshot SHA256s; SR_1A/1B equal a COMMITTED fixture (values + report.json SHA256
+>    11c88452…) — no var/ dependency in the unit suite; a separate audit command checks the original report.json when present.
+> 2b Shared layer (defaults byte-identical; each change logged in ops_log; Codex review of the diff):
+>    - ExitReason.TIME_EXIT.
+>    - Trail: dist XOR dist_r; dist_r resolved at fill as dist_r × trail_r (trail_r = |fill − SL| already set, engine.py:448);
+>      position_state/restore_position serialize dist_r.
+>    - SlFromFill(anchor, mirror) — mutually exclusive with fixed sl; for P3: SL′ = 2F − O_d resolved at fill BEFORE sizing;
+>      R = |F − O_d|; TP = F ± 2R in the (inverted) profit direction via TpFromFill(level=None, fallback_r=2); trail dist 1R.
+>      Pre-fill sl_crossed check uses the resolved SL. Decision gate stays in the original direction (strategy side).
+>    - Fixed sizing capital: engine flag sizing_capital (None = current). When set: before every ACCEPTED entry the execution wallet is
+>      reset to E_ref; Δwallet = wallet_after_close − E_ref; failed/refused attempts do not reset; a separate cumulative report ledger
+>      sums trade PnL and never affects eligibility/size. Forward paper stays compounding (flag None).
+>    - Leverage: PERMITTED_LEVERAGE (50,100) unchanged; registered policy bands = {(50,100),(10,30)}; RegimeSizing accepts a range
+>      inside one registered band; SizingLimits.leverage_range default (50,100); size_entry requires regime range ⊆ limits range.
+>      Trial #2 passes (10,30) explicitly; bot + trial #1 use defaults.
+>    - Engine.liquidate_if_open_beyond(open_mark, ts=open_ms): long open ≤ liq, short open ≥ liq (inclusive) → LIQUIDATION.
+> 2c Replay loop: optional Strategy.exit_at_bar_open(bar). Hook-positive bar sequence:
+>    1 settle funding · 2 assert no pending entry · 3 gap liquidation at open (inclusive) · 4 else close_now(open, open_ms, TIME_EXIT)
+>    · 5 ctx.bar_events = those events · 6 do NOT call Engine.on_bar · 7 still call strategy.on_minute_closed (late crosses consumed/counted).
+>    Hook-absent branch byte-identical (golden synthetic replay equality test). Replay also supports fixed sizing capital
+>    (trade record wallet_before = E_ref).
+> 2d backtest/days.py (strategy-independent): V_A / V_B per §1 strict completeness; injected into strategy/evaluator as immutable sets;
+>    never computed inside the strategy. Real-data execution only after the evaluator push; if the enumeration disagrees with §5's
+>    stated invalid days → correction doc + registry row.
+> 2e strategies/trial02/: O_d = 00:00 mark_open captured before that bar's OHLC is evaluated; R_{d−1} from the 1,440 closed prior-day
+>    mark bars, frozen for d; Arm B median of R_{d−21}..R_{d−2} (R_{d−1} excluded); fixed bands; first cross per direction consumed;
+>    conflict_cross; decision gate at cross close; late_cross (fill ≥ 23:59); position_busy; invalid day; exclusive first-failure counts.
+>    P2 (registry convention row): consume + enqueue at the original cross regardless of position; decided at close of i+k;
+>    at that close resolve opposing due candidates as conflict_cross → position_busy → price gates; candidate tied to its original UTC day;
+>    fill ≥ original day 23:59:00 → dropped (never carried into next day). P3 via SlFromFill mirror. P4: R < tick → no_range before any
+>    RNG; q = rng.integers(1, floor(R/tick)+1) once per day; k* = q·tick/R.
+>    §9 ③: static check over strategies/trial02/ (no rolling max/min, .rolling(, deque-of-extremes, argmax/argmin over bar windows).
+> 2f Placebo helpers refactored to take an explicit config (seed, draws, eligibility predicate, valid-day set, sizing) with NO default
+>    from trial01's anchor on the trial #2 path; trial #1 wrapper keeps its current defaults (its tests unchanged). P1 = (a)–(f) +
+>    same-day / t+h−1 ≤ 23:58 / V_A; E_ref sizing L ∈ [10,30]; seed 20260924 spawn(1000).
+> 2g backtest/evaluate_t2.py (imports no strategy module): statistical ledger N_stat; V_A day blocks; CI 0.625/99.375; bootstrap
+>    SeedSequence((20260924,1)).spawn(8)[k] fixed table; G0/G1/G2/G-B (defined SR̂ subset, n_trials 4, <2 → fail), flat, P1 gate,
+>    P2/P3 (0 trades → 0 bps), P4 (<190 defined → 폐기), survival, B&H with kline close, A/B daily contrast on V_B, MDE, §7 staged
+>    precedence incl. degenerate rules. Synthetic tests for every §7 row.
+> 2i Implementation-convention registry rows before any real-data run (P2 queue, fixed-capital reset, SlFromFill, 23:59 sequence,
+>    leverage bands, P4 q draw, bootstrap table, placebo config, static-check scope).
+> Order: 2a → 2b+2c (Codex diff review) → 2d → 2e → 2f → 2g → after-pass (advisor + Codex) → push request (user) → real-data validity
+> pass → IS run with all outputs opened together (one evaluator call). Standing rule before/after on each step.
+> 
+> Default-path pinning tests: full suite; trial #1 replay/strategy tests; golden no-hook replay; two sequential default trades compound
+> as today; positional Trail(arm_r, dist) + snapshot round-trip; dist/dist_r XOR; default (50,100) sizing identical, (10,30) only with
+> explicit limits; liquidation priority/funding refresh/wallet conservation; 23:59 long/short gap liq incl. equality, time exit at open,
+> high/low ignored, callback invoked; Arm B contraction-day trades identical to A; invalid days excluded not zero-filled; §11-7 list;
+> P2 queue/day boundary; P3 mirror both directions; P4 R<tick + RNG reproduction; P1 eligibility.
+
+### Codex 원문(verbatim · task-muffa66t-k348ve)
+> ## Blockers 1–8
+> 
+> The inline r2 plan has no stable line numbers, so I cite its section and exact line lead.
+> 
+> | # | Status | r2 closure |
+> |---|---|---|
+> | 1 | **CLOSED** | **2b, “Fixed sizing capital”** defines the per-accepted-entry `E_ref` reset, `wallet_after_close − E_ref`, separate non-controlling report ledger, no reset for failed/refused attempts, and compounding default for forward paper. This matches the exact requested fix in [ops_log.md:4441](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4441) and the fixed-capital requirement in [trial_02_preregistration.md:52](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:52). |
+> | 2 | **CLOSED** | **2b, “Leverage”** keeps `(50,100)` as the default, registers `(10,30)`, permits `RegimeSizing` only within a registered band, enforces containment in `SizingLimits.leverage_range`, and makes Trial #2 explicit. This closes every item listed at [ops_log.md:4451](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4451). |
+> | 3 | **CLOSED** | **2b, “SlFromFill(anchor, mirror)”** supplies the missing fill-derived SL contract: mutual exclusion, `SL′ = 2F − O_d`, resolution before sizing, `R = |F − O_d|`, inverted-direction `2R` TP, `1R` trail, resolved-SL pre-fill check, and original-direction decision gate. Both directions are pinned in tests. This satisfies [ops_log.md:4460](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4460) and P3 at [trial_02_preregistration.md:121](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:121). |
+> | 4 | **CLOSED** | **2c, numbered hook-positive sequence 1–7** reproduces the required funding → pending assertion → inclusive gap liquidation → time exit → `ctx.bar_events` → no `on_bar` → still invoke `on_minute_closed` sequence. It also pins the hook-absent branch byte-identically. Compare [ops_log.md:4468](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4468) and [trial_02_preregistration.md:204](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:204). |
+> | 5 | **CLOSED** | **2e, “P2 (registry convention row)”** pins enqueue/consumption at the original cross, `i+k` decision time, `conflict_cross → position_busy → price gates`, original-day ownership, and `fill ≥ 23:59` drop without rollover. This matches [ops_log.md:4483](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4483). |
+> | 6 | **CLOSED** | **2f, “Placebo helpers refactored to take an explicit config”** removes Trial #1 defaults from the Trial #2 path while retaining a Trial #1 compatibility wrapper. Trial #2 explicitly supplies seed, draws, eligibility, `V_A`, sizing, and same-day/23:58 constraints, closing [ops_log.md:4492](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4492). |
+> | 7 | **CLOSED** | Registry #36 and correction 01 select one post-anchor same-day capture, prohibit fallback, pin all four hashes, and assert taker `0.0005`. Evidence: [trial_02_correction_01.md:10](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_correction_01.md:10) and [trial_registry.md:44](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:44). |
+> | 8 | **CLOSED** | **2g, “B&H with kline close”** removes the open choice and implements the binding kline-close rule from [trial_02_preregistration.md:96](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:96) and [trial_02_preregistration.md:110](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110). |
+> 
+> ## New ambiguity/default-path check
+> 
+> No new verdict-changing ambiguity or default-engine regression is authorized by r2:
+> 
+> - Fixed-capital behavior is opt-in; `None` remains compounding.
+> - `(50,100)` remains the default sizing policy.
+> - Existing positional `Trail(arm_r, dist)` is explicitly preserved and regression-tested.
+> - The replay hook-absent path must remain byte-identical.
+> - P2/P3/P4 timing, RNG, degeneracy, and evaluator precedence are pinned.
+> - Full-suite, Trial #1, golden replay, snapshot, liquidation, funding, and wallet-conservation tests are required.
+> 
+> One non-blocking completeness note: the **2i** parenthetical should not be treated as exhaustive. The binding text still requires the output schema, isolated CLI path, and commit/push evidence to be recorded under [trial_02_preregistration.md:212](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:212). The binding line resolves this; it does not permit divergent verdicts.
+> 
+> Read-only review only: no files changed, no tests or backtests run, and neither `var/` nor market data was read.
+> 
+> **VERDICT: PROCEED**
+> 
+> Codex session ID: 01a0d314-aa56-7871-9508-c44b389e570d
+> Resume in Codex: codex resume 01a0d314-aa56-7871-9508-c44b389e570d
