@@ -66,4 +66,4 @@
       Codex: 안전 상태를 휘발성 큐 뒤로 미루지 말고 **journal 설계(5o)로** 해결. ④ DB 장애 중 봉마다 스냅샷 묶음이 쌓여 큐가 무한 성장 · 복구 때 한 번에 동기 배출 →
       연속된 스냅샷 전용 항목 합치기 + 깊이 알림(별도 소규모 변경 · Codex 검토 대상).
 5p. [x] D2 전 유닛 템플릿 수정 + **Codex MERGE(2026-09-18 · 3라운드)** → D2 해시 `05d6031`
-5q. [ ] D2 뒤 3일: `bsc show btcfut-bot -p MemoryPeak` · `memory.events`(cgroup) 포함 — 봇 실측 peak RSS · 00:10 겹침 여유 < ~300 MB면 swap 파일을 별도 날 라이브 변경으로(사용자 2026-09-18)
+5q. [x] **완료 2026-09-24**(레지스트리 #29): 봇 MemoryPeak 214.7 MB(400 MB 상한) · memory.events 전부 0 · **00:10~00:12 실측 최저 가용 509 MB**(> ~300 MB) → **swap 파일 만들지 않는다**. 원래 항목: D2 뒤 3일: `bsc show btcfut-bot -p MemoryPeak` · `memory.events`(cgroup) 포함 — 봇 실측 peak RSS · 00:10 겹침 여유 < ~300 MB면 swap 파일을 별도 날 라이브 변경으로(사용자 2026-09-18)
