@@ -76,6 +76,13 @@ def test_size_entry_refuses_regime_outside_limits(rules):
         size_entry(D("60000"), D("59700"), LONG, D("1000"), RegimeSizing("t", D("0.01"), 50, 100), rules, L2)
 
 
+def test_request_entry_refuses_regime_outside_limits(rules):
+    from paper.engine import EntryRefused
+    e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=SizingLimits())
+    with pytest.raises(EntryRefused):
+        e.request_entry(EntryIntent(LONG, D("59400"), None, R2, T0 - 1, D("60000")))
+
+
 def test_size_entry_with_10_30(rules):
     d = size_entry(D("60000"), D("58800"), LONG, D("1000"), R2, rules, L2)    # sl_dist 2.00% → §1-1 29x
     assert d.ok and d.leverage is not None and 10 <= d.leverage <= 30
@@ -172,6 +179,26 @@ def test_fixed_capital_not_reset_on_refused_entry(rules):
     assert e.position is None and not [x for x in ev if isinstance(x, WalletResynced)] and e.wallet == D("700")
 
 
+def test_fixed_capital_not_reset_on_sizing_rejection_or_zero_fill(rules):
+    from paper.types import SkipReason
+    e = eng(rules, wallet="700")
+    e.request_entry(EntryIntent(LONG, D("30000"), None, R2, T0 - 1, D("60000")))     # sl_dist 50% → 명목 ~20 < MIN_NOTIONAL
+    ev = e.on_bar(bar(0, "60000", "60000", "60000", "60000"))
+    sk = [x for x in ev if isinstance(x, EntrySkipped)]
+    assert e.position is None and sk and e.wallet == D("700") and not [x for x in ev if isinstance(x, WalletResynced)]
+    assert sk[0].reason is SkipReason.SIZING_REJECTED
+
+    class NoFill(PaperSender):
+        def send_market(self, *a, **k):
+            from exchange.errors import TransportError
+            raise TransportError("down")
+
+    e2 = Engine(rules, NoFill(rules), mode=Mode.PAPER, wallet=D("700"), limits=L2, sizing_capital=E_REF)
+    e2.request_entry(EntryIntent(LONG, D("59400"), None, R2, T0 - 1, D("60000")))
+    ev = e2.on_bar(bar(0, "60000", "60000", "60000", "60000"))
+    assert e2.position is None and e2.wallet == D("700") and not [x for x in ev if isinstance(x, WalletResynced)]
+
+
 def test_default_engine_has_no_fixed_capital_and_compounds(rules):
     e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("700"), limits=SizingLimits())
     assert e.sizing_capital is None
@@ -216,6 +243,51 @@ def test_no_gap_liquidation_inside(rules, direction):
     tick = rules.symbol_rules.tick_size
     inside = pos.liq_price_est + tick if direction is LONG else pos.liq_price_est - tick
     assert e.liquidate_if_open_beyond(inside, ts_ms=T0 + 5 * M) == [] and e.position is not None
+
+
+@pytest.mark.parametrize("direction", [LONG, SHORT])
+@pytest.mark.parametrize("on_liq", [False, True])
+def test_liquidation_loss_fee_basis(rules, direction, on_liq):
+    """기본 = 진입 명목 × fee(봇·트라이얼 #1) · 옵션 = 수량 × 추정 청산가 × fee(트라이얼 #2 §1) · 펀딩 뒤에도."""
+    e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=L2, sizing_capital=E_REF,
+               liq_fee_on_liq_price=on_liq)
+    sl = D("58800") if direction is LONG else D("61200")
+    e.request_entry(EntryIntent(direction, sl, None, R2, T0 - 1, D("60000")))
+    e.on_bar(bar(0, "60000", "60000", "60000", "60000"))
+    e.on_funding(ts_ms=T0 + 2 * M, rate=D("0.001"), mark=D("60000"))
+    pos = e.position
+    assert pos is not None
+    w0, n, liq = e.wallet, pos.qty * pos.entry_price, pos.liq_price_est
+    from exchange.decimal_context import exec_context
+    with exec_context():                              # 엔진과 같은 10진 문맥(EXEC_CTX)
+        fee_n = pos.qty * liq if on_liq else n
+        expected = n / D(pos.leverage) - pos.entry_commission - pos.funding_paid + fee_n * rules.symbol_rules.liquidation_fee
+    ev = e.liquidate_if_open_beyond(liq, ts_ms=T0 + 3 * M)
+    c = [x for x in ev if isinstance(x, PositionClosed)][0]
+    with exec_context():
+        assert c.realized_pnl_usdt == -expected and e.wallet == w0 - expected
+
+
+def test_liq_fee_option_is_paper_only(rules):
+    with pytest.raises(ValueError):
+        Engine(rules, PaperSender(rules), mode=Mode.LIVE, wallet=D("1000"), limits=L2, liq_fee_on_liq_price=True)
+
+
+def test_new_events_record_in_db(rules):
+    import sqlite3
+
+    from db import migrate as MG
+    from db import record as RC
+    con = sqlite3.connect(":memory:")
+    MG.migrate(con)
+    e = eng(rules, wallet="700")
+    e.request_entry(EntryIntent(LONG, D("58800"), None, R2, T0 - 1, D("60000")))
+    ev = e.on_bar(bar(0, "60000", "60000", "60000", "60000"))
+    ev += e.close_now(ref_mark=D("60100"), ts_ms=T0 + 9 * M, reason=ExitReason.TIME_EXIT)
+    RC.record_events(con, ev, mode="paper", symbol="BTCUSDT")
+    assert con.execute("SELECT COUNT(*) FROM positions WHERE reason='time_exit'").fetchone()[0] == 1
+    assert con.execute("SELECT COUNT(*) FROM engine_events WHERE kind='WalletResynced' AND payload_json LIKE '%fixed_capital%'"
+                       ).fetchone()[0] == 1
 
 
 def test_time_exit_reason(rules):

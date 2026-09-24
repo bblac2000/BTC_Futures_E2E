@@ -13,7 +13,9 @@
 - 전략에 `exit_at_bar_open(bar) -> bool`이 있고 참이면 그 분은: 1 펀딩 → 2 대기 진입 없음 단언 → 3 시가 갭 청산(경계 포함) →
   4 살아 있으면 시가에 `TIME_EXIT` → 5 `ctx.bar_events` = 그 이벤트 → 6 `Engine.on_bar`를 부르지 않는다 → 7 `on_minute_closed`는 부른다.
 - `sizing_capital`(E_ref): 엔진이 체결된 진입마다 실행 지갑을 E_ref로 리셋 → 트레이드 기준 지갑 = E_ref ·
-  `report_ledger_pnl` = 트레이드 순손익의 누적(보고용 · 사이징·적격성에 쓰이지 않는다).
+  보고 원장 = `report_ledger(trades)`(트레이드 순손익 누적 · 사이징·적격성에 쓰이지 않는다 · `final_wallet`은 이 모드에서 의미 없음).
+- 훅 분에는 `on_minute_closed` 뒤에도 대기 진입이 없어야 한다(날을 넘는 진입 금지 — late_cross가 막아야 한다).
+- `liq_fee_on_liq_price`: 엔진 옵션 그대로 전달(트라이얼 #2 §1).
 """
 from __future__ import annotations
 
@@ -58,15 +60,14 @@ class ReplayResult:
     decisions: list[dict[str, Any]]
     final_wallet: Decimal
     open_at_end: dict[str, Any] | None = None     # 창 끝에 열린 포지션 — 트레이드로 세지 않고 따로 보고(사전등록에 규칙 없음 · Codex 검토)
-    report_ledger_pnl: Decimal | None = None      # sizing_capital일 때만 — 트레이드 순손익 누적(보고용)
 
 
 def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strategy, *, rules: RuntimeRules,
            limits: SizingLimits, equity: Decimal, on_event: Callable[[object], None] | None = None,
-           sizing_capital: Decimal | None = None) -> ReplayResult:
-    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital)
+           sizing_capital: Decimal | None = None, liq_fee_on_liq_price: bool = False) -> ReplayResult:
+    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital,
+                 liq_fee_on_liq_price=liq_fee_on_liq_price)
     exit_hook: Callable[[Bar1m], bool] | None = getattr(strategy, "exit_at_bar_open", None)
-    ledger = Decimal(0) if sizing_capital is not None else None
     ctx = ReplayContext(eng)
     trades: list[dict[str, Any]] = []
     open_trade: dict[str, Any] | None = None
@@ -80,7 +81,8 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
             fi += 1
         wallet_before = eng.wallet
         liq_now = eng.position.liq_price_est if eng.position is not None else None   # 이 봉에서 청산되면 gross 기준가
-        if exit_hook is not None and exit_hook(b):
+        hook_bar = exit_hook is not None and exit_hook(b)
+        if hook_bar:
             #  봉 시가 청산(트라이얼 #2 §1 23:59): 대기 진입이 있으면 규칙 위반(late_cross · P2 drop이 막아야 한다)
             assert eng.pending is None, f"봉 시가 청산 분 {t}에 대기 진입이 있다"
             o = b.d("mark_open")
@@ -116,8 +118,6 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                 trades.append(open_trade | {"exit_ms": ev.ts_ms, "exit_reason": str(ev.reason), "exit_ref": str(ref),
                                             "wallet_after": str(ev.wallet_after), "gross_bps": str(r.gross_bps),
                                             "net_bps": str(r.net_bps), "net_pnl": str(r.net_pnl)})
-                if ledger is not None:
-                    ledger += r.net_pnl
                 open_trade = None
         ctx.now_ms = t + MINUTE_MS - 1
         intent = strategy.on_minute_closed(b, ctx)
@@ -126,4 +126,11 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                 eng.request_entry(intent)
             except EntryRefused as e:
                 ctx.skip("entry_refused", detail=str(e))
-    return ReplayResult(trades, ctx.decisions, eng.wallet, open_trade, ledger)
+        if hook_bar:
+            assert eng.pending is None, f"봉 시가 청산 분 {t}의 전략 판단이 진입을 냈다(다음 날로 넘어가는 진입)"
+    return ReplayResult(trades, ctx.decisions, eng.wallet, open_trade)
+
+
+def report_ledger(trades: Sequence[dict[str, Any]]) -> Decimal:
+    """고정 사이징 자본 모드의 보고 원장 — 트레이드 순손익(`net_pnl`)의 누적 합(판정·사이징에 쓰이지 않는다)."""
+    return sum((Decimal(t["net_pnl"]) for t in trades), Decimal(0))

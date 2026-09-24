@@ -4660,3 +4660,52 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - `paper/engine.py`: `Trail.dist_r`(dist와 배타 · 체결 때 dist_r × R로 확정 — 스냅샷·TrailSet 형태 불변) · `SlFromFill(anchor, mirror)`(`sl == anchor` 요구 · mirror면 SL = 2 × 예상 체결가 − anchor · 사이징 전 확정 · 체결 전 검사도 해석된 SL) · `sizing_capital`(PAPER만 · 체결된 진입마다 지갑 → E_ref · `WalletResynced(source="fixed_capital")` · 거부 시도는 리셋 없음) · `liquidate_if_open_beyond`(PAPER만 · 경계 포함).
 - `backtest/engine_replay.py`: `exit_at_bar_open` 훅 7단계 · `sizing_capital` → 트레이드 기준 지갑 = E_ref · `report_ledger_pnl`.
 - 기본 경로 고정: 2b 이전 커밋(bdf0554) 트리로 만든 골든(`tests/fixtures/golden_replay_nohook.json` · 60 트레이드 · 120 이벤트)과 바이트 동일 · 전체 테스트·ruff·pyright 통과.
+
+## 2026-09-24 — 트라이얼 #2 단계 2b·2c **after-pass**(advisor + Codex task-muffu31k-j8wgyr **FIX-FIRST**) → 수정
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 | ✅ 동의(Codex #1과 같음) | #2는 "명목×fee"만 적어 기준이 모호 · 앵커된 §1은 "수량 × 추정 청산가"로 구체적 → **§1 그대로 구현**(정정 문서 불필요) · 엔진 옵션 `liq_fee_on_liq_price`(PAPER만 · 기본 False = 봇·트라이얼 #1 불변) · 2i 규약 행 |
+| advisor | 2 | ✅ 동의 | 훅 분 `on_minute_closed` 뒤에도 대기 진입 없음 단언 + 테스트 |
+| advisor | 3 | ✅ 동의 | `request_entry`에서 레짐 ⊄ limits.leverage_range → `EntryRefused`(size_entry의 ValueError는 방어선으로 유지) |
+| advisor | 4 | ✅ 동의 | 2g 판정기: 고정 자본 모드에서 `final_wallet`을 읽지 않는다(테스트) |
+| advisor | 5 | ✅ 동의 | exit_ref = 갱신된 청산가 단언 · 골든 재생성 방법 docstring |
+| Codex | 1 | ✅ 동의 | advisor 1과 같음 · 롱/숏 · 펀딩 뒤 손실식 테스트 |
+| Codex | 2 | ✅ 동의 | `ReplayResult` 필드 원복(`report_ledger_pnl` 제거) · 보고 원장 = `report_ledger(trades)` 함수 · 필드 목록 테스트 |
+| Codex | 3 | ◐ 부분 | 계산은 맞다는 판정 · XOR 대신 `sl == sl_rule.anchor`(자리표시) 유지 — Optional로 바꾸면 기본 경로 타입 14곳 변경 · **2i 규약 행으로 등록** |
+| Codex | 4 | ✅ 동의 | 추가: 롱/숏 청산 손실(두 기준 · 펀딩 뒤) · 경계 청산 exit_ref(롱/숏) · 사이징 거부·0체결 비리셋 · DB 기록(TIME_EXIT · fixed_capital) · 결과 필드 불변 · LIVE 기본 경로 = 기존 LIVE 테스트 전부 무변경 통과 |
+- Codex의 전체 테스트 167 오류는 읽기 전용 환경의 임시 디렉터리 부재(보고대로) — 로컬 전체 통과.
+
+### advisor 원문(verbatim)
+> **1. §1 liquidation-fee basis vs `_liquidate` — verify now, resolve before any P&L.**
+> Prereg line 46: "PAPER 손실 = 남은 격리 지갑 + 청산 시점 남은 명목(**수량 × 추정 청산가**) × liquidationFee(#2·#4)". Engine `_liquidate` (unchanged by 2b): `n = qty × entry_price; loss = n/L − comm − funding + n × fee` — fee on **entry** notional. Difference = fee × qty × |entry − liq|; hits net_bps of every liquidated trade (Arm B, P1 draws — "청산은 엔진 판정 그대로(보고)"). Check what registry #2 actually says (`grep "^| 2 |" docs/trial_registry.md`). If #2 = entry notional → prereg text is the error → correction doc 02 + row "engine/#2 authoritative". If #2 = liquidation-price notional → engine has been off since trial #1 → do **not** touch the default path; needs a user decision. Either way: a row before the IS run. Doesn't block 2d.
+> **2. Hook-bar guard is one-sided.** You assert `pending is None` at the 23:59 bar's *start*. An intent emitted at that bar's `on_minute_closed` fills at next-day 00:00 `on_bar` — no guard, silently a cross-day trade. Add after step 7: `assert eng.pending is None` (or `cancel_pending` + logged skip). One line, one test.
+> **3. `RegimeSizing` loosening moved a misconfig from fail-fast to fail-mid-bar.** Before: `RegimeSizing(…,10,30)` raised at construction. Now it constructs; `size_entry` raises `ValueError` inside `_execute_entry` inside `on_bar` — for the bot that's an uncaught exception in the trading loop, not `EntryRefused`. Planned and PROCEEDed, but the consequence wasn't stated. Cheapest fix: duplicate the containment check in `request_entry` → `EntryRefused` (bot path handles it). Raise with Codex; log the position either way.
+> **4. `final_wallet` is meaningless under `sizing_capital`** (= E_ref + last pnl). Note for 2g: evaluator reads `report_ledger_pnl` and per-trade net_bps only; assert it never touches `final_wallet` when fixed capital is set.
+> **5. Minor test gaps:** gap-liquidation test doesn't assert `exit_ref == liq_price_est`; golden test should state in its docstring "regenerate by running this body against bdf0554" (your scratch generator isn't committed).
+> **Procedure:** don't start 2d until Codex returns. Log this pass + Codex verbatim with per-point positions (one ops_log entry). If Codex FIX-FIRST → fix, re-run golden + full suite, narrow re-check before 2d. Item 1 goes into the 2i registry batch regardless of Codex's verdict — it's a text/code mismatch, not a Codex call.
+
+### Codex 원문(verbatim · task-muffu31k-j8wgyr)
+> 1. **BLOCKER — liquidation fee uses the wrong notional.** [paper/engine.py:603](/home/cms/project/BTC_Futures_E2E/paper/engine.py:603) calculates the fee as `qty × entry_price × liquidationFee`; the binding rule requires `qty × liq_price_est × liquidationFee`. [sizing/position.py:264](/home/cms/project/BTC_Futures_E2E/sizing/position.py:264) reports the same incorrect entry-notional loss. This overstates long liquidation losses and understates short losses, biasing `wallet_after`, `net_pnl`, `net_bps`, the report ledger, and especially P3 comparisons. Fixing it globally would change Trial #1/default behavior, so Trial #2 needs an explicit opt-in accounting policy unless the default-path constraint is formally revised.
+> 
+> 2. **BLOCKER — the no-hook golden does not actually prove byte-identical default behavior.** `ReplayResult` now always has `report_ledger_pnl`, including when `sizing_capital=None` ([engine_replay.py:61](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:61)). Thus full dataclass serialization/field enumeration differs from `bdf0554`. The golden test manually constructs a subset that omits this field ([test_replay_bar_open_exit.py:71](/home/cms/project/BTC_Futures_E2E/tests/test_replay_bar_open_exit.py:71)), hiding the schema change. Current Trial #1 writers happen to select fields individually, but the strict default-path promise is false at the public result-object boundary.
+> 
+> 3. **Contract mismatch — `SlFromFill` is not mutually exclusive with fixed SL as plan r2 specifies.** `EntryIntent.sl` remains mandatory while `sl_rule` is additional ([engine.py:129](/home/cms/project/BTC_Futures_E2E/paper/engine.py:129), [engine.py:136](/home/cms/project/BTC_Futures_E2E/paper/engine.py:136)); the engine requires `sl == anchor` as a placeholder ([engine.py:208](/home/cms/project/BTC_Futures_E2E/paper/engine.py:208)). A strategy following the stated XOR contract cannot construct the intended intent. The arithmetic thereafter is correct—quote-derived mirror SL is resolved before sizing, and TP/trail use fill-R—but this convention must either be aligned with r2 or explicitly registered before strategy implementation.
+> 
+> 4. **Missing tests.** The new liquidation tests assert only reason/timestamp ([test_engine_trial02_ext.py:200](/home/cms/project/BTC_Futures_E2E/tests/test_engine_trial02_ext.py:200), [test_replay_bar_open_exit.py:88](/home/cms/project/BTC_Futures_E2E/tests/test_replay_bar_open_exit.py:88)), which is why finding 1 passes. Add:
+> 
+>    - Long/short liquidation loss using `qty × liq_price_est`, including after funding.
+>    - Replay equality-boundary liquidation and `exit_ref == refreshed liq_price_est`.
+>    - Short 23:59 gap liquidation.
+>    - Fixed-capital non-reset for sizing rejection, leverage refusal, and zero-fill send failure.
+>    - DB persistence for `WalletResynced(source="fixed_capital")` and `PositionClosed(reason=TIME_EXIT)`.
+>    - A complete default `ReplayResult` compatibility assertion or an explicitly approved schema change.
+>    - A LIVE default-path call/event regression pin. Fixed-distance snapshot round-trip is already covered by the existing trailing tests.
+> 
+> The fixed-capital reset timing, replay `E_ref` baseline/report ledger, leverage bands, inclusive gap boundary, funding-first hook order, skipped `on_bar`, and continued `on_minute_closed` callback otherwise match r2.
+> 
+> Verification: targeted tests passed `27/27`; a focused default/Trial #1/LIVE/sizing/snapshot set passed `169/169`; `git diff --check` passed. The full suite reached `747 passed`, but 167 tests errored because the read-only environment provides no writable temporary directory, so a clean full-suite result could not be certified. No files were changed.
+> 
+> VERDICT: FIX-FIRST
+> 
+> Codex session ID: 01a0d322-d769-7740-a6ac-3a97f830c309
+> Resume in Codex: codex resume 01a0d322-d769-7740-a6ac-3a97f830c309

@@ -34,7 +34,9 @@
   `Trail.dist_r`(거리 = dist_r × R, 체결 때 가격 거리로 확정 → 스냅샷 형태 불변) ·
   `EntryIntent.sl_rule = SlFromFill(anchor, mirror)`(mirror면 SL = 2 × 예상 체결가 − anchor · 사이징 **전**에 확정 · P3 거울상) ·
   `Engine(sizing_capital=E_ref)`(PAPER만 · 체결된 진입마다 실행 지갑을 E_ref로 리셋 → `WalletResynced(source="fixed_capital")` ·
-  거부된 시도는 리셋 없음 · 사이징 자본 = E_ref) · `liquidate_if_open_beyond`(봉 시가가 추정 청산가 너머면 청산 · PAPER만).
+  거부된 시도는 리셋 없음 · 사이징 자본 = E_ref) · `liquidate_if_open_beyond`(봉 시가가 추정 청산가 너머면 청산 · PAPER만) ·
+  `liq_fee_on_liq_price`(PAPER만 · 청산 수수료 명목 = 수량 × 추정 청산가 — 트라이얼 #2 §1 "청산 시점 남은 명목"; 기본 False =
+  진입 명목 · 봇·트라이얼 #1 그대로).
 """
 from __future__ import annotations
 
@@ -177,7 +179,7 @@ def _tp_from_fill(rule: TpFromFill, direction: Direction, entry: Decimal, sl: De
 
 class Engine:
     def __init__(self, rules: RuntimeRules, sender: OrderSender, *, mode: Mode, wallet: Decimal, limits: SizingLimits,
-                 sizing_capital: Decimal | None = None):
+                 sizing_capital: Decimal | None = None, liq_fee_on_liq_price: bool = False):
         if sender.mode is not mode:
             raise ValueError(f"엔진 모드 {mode} ≠ 송신기 모드 {sender.mode}")
         if not isinstance(wallet, Decimal):
@@ -185,8 +187,11 @@ class Engine:
         if sizing_capital is not None and (mode is not Mode.PAPER or not isinstance(sizing_capital, Decimal)
                                            or sizing_capital <= 0):
             raise ValueError("sizing_capital은 PAPER(백테스트) 전용 양의 Decimal")
+        if liq_fee_on_liq_price and mode is not Mode.PAPER:
+            raise ValueError("liq_fee_on_liq_price는 PAPER(백테스트) 전용")
         self.rules, self.sender, self.mode, self.limits = rules, sender, mode, limits
         self.sizing_capital = sizing_capital                   # None = 현행(지갑으로 사이징 · 복리)
+        self.liq_fee_on_liq_price = liq_fee_on_liq_price       # False = 현행(청산 수수료 명목 = 진입 명목)
         self.wallet = wallet
         self.position: OpenPosition | None = None
         self.pending: EntryIntent | None = None
@@ -205,6 +210,10 @@ class Engine:
         if self.position is not None or self.pending is not None:
             raise EntryRefused("포지션 또는 대기 진입이 이미 있다(원웨이 단일 포지션)")
         long_ = intent.direction is Direction.LONG
+        lo, hi = self.limits.leverage_range
+        if not lo <= intent.regime.l_min <= intent.regime.l_max <= hi:
+            #  대역 불일치는 체결 시점(on_bar 안 ValueError)이 아니라 여기서 거부한다 — 봇 경로가 EntryRefused를 처리한다
+            raise EntryRefused(f"레짐 [{intent.regime.l_min}, {intent.regime.l_max}] ⊄ limits.leverage_range {self.limits.leverage_range}")
         if intent.sl_rule is not None and intent.sl != intent.sl_rule.anchor:
             raise ValueError(f"sl_rule이 있으면 sl은 anchor와 같아야 한다: sl {intent.sl} · anchor {intent.sl_rule.anchor}")
         if intent.trail is not None:
@@ -597,12 +606,14 @@ class Engine:
         return ev + [StopTrailed(ts_ms, old, cand)]
 
     def _liquidate(self, ts_ms: int) -> list[object]:
-        """PAPER — 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩) 전부 + N × liquidationFee."""
+        """PAPER — 남은 격리 지갑(N/L − 진입 수수료 − 누적 펀딩) 전부 + 명목 × liquidationFee
+        (명목 = 진입 명목 · `liq_fee_on_liq_price`면 수량 × 추정 청산가)."""
         pos = self.position
         assert pos is not None
         n = pos.qty * pos.entry_price
+        fee_n = pos.qty * pos.liq_price_est if self.liq_fee_on_liq_price else n
         loss = (n / Decimal(pos.leverage) - pos.entry_commission - pos.funding_paid
-                + n * self.rules.symbol_rules.liquidation_fee)
+                + fee_n * self.rules.symbol_rules.liquidation_fee)
         self.wallet -= loss
         self.position = None
         return [PositionClosed(ts_ms, pos.direction, ExitReason.LIQUIDATION, pos.qty, pos.entry_price, None, (), -loss,

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from backtest.data import MINUTE_MS, Bar1m, Funding
-from backtest.engine_replay import ReplayContext, replay
+from backtest.engine_replay import ReplayContext, ReplayResult, replay, report_ledger
 from exchange.loader import rules_from_snapshot_dir
 from exchange.orders import Direction
 from paper.engine import EntryIntent
@@ -63,6 +63,8 @@ def rules():
 
 
 def test_no_hook_path_matches_pre_2b_golden():
+    """골든 = 이 본문을 2b 이전 트리(bdf0554)에서 실행한 출력(`tests/fixtures/golden_replay_nohook.json`).
+    다시 만들려면 `git archive bdf0554`로 푼 트리에서 같은 호출을 돌린다 — 기본 경로를 바꾸는 변경은 골든을 고치지 않는다."""
     gold = json.loads((ROOT / "tests" / "fixtures" / "golden_replay_nohook.json").read_text())
     evs: list[list] = []
     r = replay(bars(2400), [Funding(T0 + 480 * MINUTE_MS, "0.0001", "60000"), Funding(T0 + 960 * MINUTE_MS, "-0.0002", "60100"),
@@ -90,6 +92,44 @@ def test_gap_liquidation_at_open_takes_precedence():
     r = replay(b, [], EnterThenExitAt(1, 5), rules=rules(), limits=L2, equity=D("1000"))
     t = r.trades[0]
     assert t["exit_reason"] == "liquidation" and t["exit_ms"] == T0 + 5 * MINUTE_MS
+
+
+@pytest.mark.parametrize("direction", [Direction.LONG, Direction.SHORT])
+def test_gap_liquidation_boundary_exit_ref_is_refreshed_liq_price(direction):
+    """경계(시가 == 펀딩 뒤 갱신된 추정 청산가)도 청산 · exit_ref = 그 청산가 · 숏도."""
+    sl = "58800" if direction is Direction.LONG else "61200"
+
+    class S(EnterThenExitAt):
+        def on_minute_closed(self, bar: Bar1m, ctx: ReplayContext):
+            i = (bar.open_ms - T0) // MINUTE_MS
+            if i == 1:
+                return EntryIntent(direction, D(sl), None, R2, decided_ms=ctx.now_ms, decision_mark=bar.d("mark_close"))
+            if i == 3 and ctx.engine.position is not None:
+                self.liq = ctx.engine.position.liq_price_est
+            return None
+
+    probe = S(1, 99)
+    replay(flat(6), [Funding(T0 + 3 * MINUTE_MS, "0.002", "60000")], probe, rules=rules(), limits=L2, equity=D("1000"))
+    liq = probe.liq
+    b = flat(8, overrides={5: (str(liq), str(liq), str(liq), str(liq))})
+    r = replay(b, [Funding(T0 + 3 * MINUTE_MS, "0.002", "60000")], S(1, 5), rules=rules(), limits=L2, equity=D("1000"))
+    t = r.trades[0]
+    assert t["exit_reason"] == "liquidation" and D(t["exit_ref"]) == liq
+
+
+def test_intent_emitted_on_the_hook_bar_is_an_error():
+    class Late(EnterThenExitAt):
+        def on_minute_closed(self, bar: Bar1m, ctx: ReplayContext):
+            if (bar.open_ms - T0) // MINUTE_MS == 5:
+                return EntryIntent(Direction.LONG, D("58800"), None, R2, decided_ms=ctx.now_ms, decision_mark=bar.d("mark_close"))
+            return None
+
+    with pytest.raises(AssertionError):
+        replay(flat(8), [], Late(0, 5), rules=rules(), limits=L2, equity=D("1000"))
+
+
+def test_replay_result_fields_unchanged():
+    assert [f for f in ReplayResult.__dataclass_fields__] == ["trades", "decisions", "final_wallet", "open_at_end"]
 
 
 def test_funding_in_the_hook_minute_is_settled_before_the_exit():
@@ -124,4 +164,4 @@ def test_fixed_capital_trade_baseline_is_e_ref():
         assert t["wallet_before"] == "1000"
     #  두 번째 트레이드의 사이징·기준 = E_ref(누적 지갑이 아니다) · 보고 원장 = net_pnl 합
     assert D(r.trades[1]["wallet_after"]) - D("1000") == D(r.trades[1]["net_pnl"])
-    assert r.report_ledger_pnl == D(r.trades[0]["net_pnl"]) + D(r.trades[1]["net_pnl"])
+    assert report_ledger(r.trades) == D(r.trades[0]["net_pnl"]) + D(r.trades[1]["net_pnl"])
