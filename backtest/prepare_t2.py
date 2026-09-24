@@ -347,6 +347,22 @@ def verify_manifest(out: Path) -> dict[str, Any]:
     return m
 
 
+PREPARED = ("bars_1m.parquet", "funding.json", "source_audit.json")
+
+
+def load_prepared_pinned(out: Path, pins: dict[str, Any],
+                         expect_range: tuple[int, int]) -> tuple[list[BD.Bar1m], list[BD.Funding]]:
+    """실행 경로(G12 · 해시만 · 다시 빌드하지 않음): 매니페스트 해시 + 원시·산출물 해시가 `pins`(커밋된 data_pins.json)와 같아야 한다.
+    원시 → 산출물의 재현은 `verify` 단계 영수증과 판정기가 따로 증명한다."""
+    m = verify_manifest(out)
+    if m["raw"] != pins["raw"] or {k: m[k] for k in PREPARED} != pins["prepared"]:
+        raise ValueError("준비 산출물·원시 해시가 고정값(data_pins)과 다르다")
+    meta = json.loads((out / "raw" / "fill_ranges.json").read_text())
+    if (meta["start_ms"], meta["end_ms"]) != expect_range:
+        raise ValueError(f"캡처 범위 {(meta['start_ms'], meta['end_ms'])} ≠ 기대 {expect_range}")
+    return read_bars(out / "bars_1m.parquet"), [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
+
+
 def verify_rebuild(out: Path, expect_range: tuple[int, int] | None = None) -> dict[str, Any]:
     """원시 파일에서 **다시 빌드**해 산출물 해시가 매니페스트와 같은지 확인한다(덮어쓰지 않는다 · 임시 디렉터리).
     매니페스트 자체의 원시 해시는 캡처 직후 레지스트리 행에 고정된 값과 호출자가 대조한다(`pinned_raw`)."""

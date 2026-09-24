@@ -22,13 +22,11 @@ from exchange.loader import rules_from_snapshot_dir
 from exchange.normalize import RejectReason
 from exchange.rules import RuntimeRules
 from paper.types import EntryFilled, EntrySkipped, SkipReason
-from sizing.config import SizingLimits
 from strategies.trial02 import anchor as A
-from strategies.trial02.config import BO_V1
+from strategies.trial02.config import BO_V1, LIMITS
 from strategies.trial02.strategy import Trial02, Variant
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-LIMITS = SizingLimits(leverage_range=(BO_V1.l_min, BO_V1.l_max), liq_fee_on_liq_price=True)
 NORMALIZATION = {RejectReason.BELOW_MIN_QTY, RejectReason.MIN_NOTIONAL}
 
 
@@ -87,13 +85,14 @@ def run_t2(bars: Sequence[Bar1m], fundings: Sequence[Funding], trade_days: set[i
 
 
 
-def _run_prepared(out: Path, pinned_raw: dict[str, str], variant: Variant, expect_range: tuple[int, int],
+def _run_prepared(out: Path, pins: dict[str, Any], variant: Variant, expect_range: tuple[int, int],
                   first_day: int, last_day: int) -> tuple[T2Run, DY.Validity]:
-    bars, fundings = PT.load_prepared(out, pinned_raw=pinned_raw, expect_range=expect_range)
+    bars, fundings = PT.load_prepared_pinned(out, pins, expect_range)                  # G12: 해시만(다시 빌드는 verify 단계·판정기)
     v = DY.validity(bars, fundings, first_day, last_day)
     return run_t2(bars, fundings, v.v_a if variant.arm == "A" else v.v_b, variant), v
 
 
-def run_prepared_is(out: Path, pinned_raw: dict[str, str], variant: Variant) -> tuple[T2Run, DY.Validity]:
-    """판정 경로의 유일한 입구 — IS 창(+21일)만 · 원시 해시 고정 필수 · 다시 빌드 대조 · V_A/V_B를 여기서 계산."""
-    return _run_prepared(out, pinned_raw, variant, PT.window_range(), A.IS_START_MS // A.DAY_MS, A.IS_END_MS // A.DAY_MS)
+def run_prepared_is(out: Path, pins: dict[str, Any], variant: Variant) -> tuple[T2Run, DY.Validity]:
+    """판정 경로의 유일한 입구 — IS 창(+21일)만 · 커밋된 data_pins(원시 + 산출물 해시) 필수 · V_A/V_B를 여기서 계산.
+    pins는 호출자(run.py)가 `t2_provenance.load_pins`로 읽는다(추적·깨끗·푸시)."""
+    return _run_prepared(out, pins, variant, PT.window_range(), A.IS_START_MS // A.DAY_MS, A.IS_END_MS // A.DAY_MS)

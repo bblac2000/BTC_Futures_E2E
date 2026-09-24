@@ -5431,3 +5431,8 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 
 ## 2026-09-24 — 2f F1: P1 공통 기계 분리(`backtest/p1_core.py` · 트라이얼 import 없음) + `run_time_exit(reason=)`(G6)
 - `backtest/placebo.py`는 트라이얼 #1 래퍼(공개 이름·기본값 유지) · 골든 `tests/fixtures/golden_p1_trial01.json`은 **리팩터 전 트리**에서 생성 → 바이트 동일 · 기존 placebo 테스트 통과.
+
+## 2026-09-24 — 트라이얼 #2 단계 2f 구현(설계 r1 + G1~G13)
+- F2 `backtest/p1_t2.py`(같은 날 적격 보기 · #36 규칙 · config.LIMITS · E_ref · TIME_EXIT · CFG 20260924/1000/1000/10) · F3 `strategies/trial02/run.py`(변형 이름 고정 표 · 커밋·푸시된 data_pins만 · 집계 없음) · F4 `backtest/p1_t2_run.py`(쌍 입력만 · V_A 재계산 대조 · n_A=0 계산 불가 · 병합 = 조각 기록 해시 + 0..999 정확히 한 번) · F5 `backtest/t2_stages.py`(모든 단계 푸시 선행 · verify 영수증 문 · 검증된 이어 하기) · `backtest/t2_provenance.py`(G1·G7·G10~G13) · G4 변형 화이트리스트 · G12 해시 전용 로더(`load_prepared_pinned` · 범위 대조) · LIMITS/P1_REGIME을 config로.
+- **TDD 이탈(공개)**: `t2_provenance.py`·`t2_stages.py`는 테스트보다 먼저 썼다 → 돌연변이 검사: provenance 6개 중 5개 잡음 → 놓친 1개(깨끗한 트리 검사)는 테스트를 더해 잡음 · stages 4/4 잡음.
+- 테스트 격리 결함 발견·수정: 전체 실행 순서에서만 트라이얼 #1 P1 골든의 28번째 자리가 달라짐 — 앞선 테스트가 전역 10진 문맥을 바꿔 남김 → `conftest` 자동 픽스처로 테스트마다 기본 문맥 · 트라이얼 #2 CLI 두 개는 시작 때 기본 문맥 고정(결정론).

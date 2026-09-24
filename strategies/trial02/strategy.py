@@ -47,8 +47,10 @@ class Variant:
             raise ValueError(f"arm {self.arm}")
         if self.arm == "B" and (self.delay or self.invert or self.p4_draw is not None):
             raise ValueError("플라시보 변형은 Arm A만(§4 원판 = Arm A)")
-        if self.delay < 0 or (self.p4_draw is not None and not 0 <= self.p4_draw < A.P4_DRAWS):
-            raise ValueError(f"잘못된 변형 {self}")
+        if self.delay not in (0, 1, 5) or (self.p4_draw is not None and not 0 <= self.p4_draw < A.P4_DRAWS):
+            raise ValueError(f"잘못된 변형 {self}(P2 지연은 1·5만 · P4 추출 0..199)")
+        if sum((bool(self.delay), self.invert, self.p4_draw is not None)) > 1:
+            raise ValueError(f"변형은 하나만(A · B · P2_delay1 · P2_delay5 · P3_invert · P4_draw) — {self}")
 
 
 @dataclass
