@@ -4287,3 +4287,73 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d2bc-e88a-7841-9456-7e841faf184f
 > Resume in Codex: codex resume 01a0d2bc-e88a-7841-9456-7e841faf184f
+
+
+## 2026-09-24 — 트라이얼 #2 사전등록 **사용자 §12 결정 → r7** · advisor 사후 MERGE(조건부) · Codex 좁은 확인(task-mufcn7s2-2a8viu) **MERGE**
+- 사용자 결정(레지스트리 #32 · 정정 #33): **N = 4(누적)** · **sl_dist 천장 5.00%** · 나머지 12건 유지 · 생존 게이트·23:59 순서 재확인.
+- r7 변경 요약: §0 N 문단 재작성 · α 0.0125 · CI 가운데 98.75%(0.625/99.375) 전 게이트 · G-B SR* = 네 실현 SR̂(트라이얼 #1 두 값 고정 · report.json SHA) · MDE z₀.₉₈₇₅ = 2.2414 · §7-2 α 0.0125 · sl_dist 띠 [0.30%, 5.00%] · §1-1 3/4/5% 행(20x/15x/12x) · §9 비용 배수 2~36배 · §12를 결정 기록으로 · 🔶 → 결정 표기.
+### Claude Code 항목별 입장
+| 지적 | 출처 | 입장 · 반영 |
+|---|---|---|
+| §12-12(SR̂_B 미정의 → SR* := 0)가 N = 4에서 뜻이 바뀜 — 세 값이 남아 SR*를 계산할 수 있고 > 0 · SR* := 0은 이제 덜 보수적 | advisor #1 · Codex #2 | ✅ 동의 — **고치지 않고 사용자 결정으로 다시 올림**(보고서) · 선택지 (a) SR* := 0 유지 · (b) SR* = expected_max_sr(정의된 세 값, n_trials = 4) — advisor는 (b) 권고 |
+| sed로 "✅ 결정 대안"이 "채택된 대안"처럼 읽힘 | advisor #2 | ✅ "대안 …는 채택 안 함 — §12 기록" 등으로 |
+| 트라이얼 #2 앵커 상수(N_TRIALS 4 · ALPHA 0.0125 · LEVEL 0.9875 · #1 SR̂)를 §11에 | advisor #3 | ✅ §11-5 "다중검정 상수" + #1 판정기 상수 import 금지 · report.json 대조 테스트 |
+| §1-1은 롱 · 정규화 전 값 | Codex #1 | ✅ 표 머리에 "롱 · 수량 내림 전 예시 · 숏 거리 · 실제 명목 · 규칙은 §1이 정본" |
+| 유지 개수 11 → 12 · 4.00% 행 누락 표기 | Codex #3 | ✅ 문서 수정 + 레지스트리 정정 #33 |
+
+### advisor 원문(verbatim)
+> You're at the r7 after-pass; Codex narrow check is running. This is the advisor half. I verified the propagation independently — it's complete — and found one place where the N=4 change silently altered the meaning of a rule the user "kept."
+> 
+> **Propagation check (passes)**
+> - α 0.0125 in §0, §3-1 MDE, §7-2. CI 98.75% / 0.625 / 99.375 in §0, G1, G2, G3, A/B, §3-1. z₀.₉₈₇₅ = 2.2414 correct (`inv_cdf(0.9875)`). SR* over four with trial #1 values pinned and the report.json SHA cited. The only remaining "N = 2" is the user's quoted sentence at L214 — legitimate.
+> - §1-1: I checked the 5.00% row by hand — at 13x, liq_dist ≈ 1/13 − 0.05% − MMR ≈ 7.2% < 7.5% (5%×1.5), so 12x is the highest passing L. Rows consistent with the #5 gate. §9 ratio 2~36× correct (5.00/0.14 = 35.7).
+> 
+> **Findings**
+> 
+> 1. **MEDIUM — §12-12 was kept under a premise N=4 removed.** The rule "SR̂_B undefined → SR* := 0" was written for N=2, where losing B leaves one value and V[SR̂] is uncomputable. With N=4, three realized SR̂ remain (#1A, #1B, #2A) and `expected_max_sr([…3 values…], 4)` is well-defined and **> 0** (trial #1's ≈ −0.24 vs any different SR̂_A gives positive variance). So SR* := 0 is now the *less* conservative branch, and its stated rationale ("두 번째 시도의 분산을 추정할 수 없다") is false — which is why you deleted that parenthetical. The rule as written is unambiguous (Codex-wise not a blocker), but it's a substantive change in gate stringency the user didn't see when they ticked "kept". Re-surface it as one line before anchoring: **(a) keep SR* := 0**, or **(b) SR* = expected_max_sr over the 3 defined values with n_trials = 4** (more conservative, uses the data that exists). Recommend (b); user decides. Codex Q2 covers this — cross-check when it lands.
+> 
+> 2. **LOW — sed artifact.** `🔶 대안 X는 §12-3` became `✅ 결정 대안 X는 §12-3` on the SL, TP and median rows (L40, L42, L49). Reads as "decided alternative." One-word fix: `대안 …는 §12-3에 기록(채택 안 함)`.
+> 
+> 3. **LOW — §11 code-time item missing.** Trial #2's anchor module needs `N_TRIALS = 4`, `ALPHA = 0.0125`, `LEVEL = 0.9875`, and the two pinned trial #1 SR̂ as constants, with a test asserting they match `report.json` (SHA `11c88452…`). Trial #1's `anchor.N_TRIALS = 2` / `evaluate.LEVEL = 0.975` must not be imported. Add to §11-5 now so it lands in the pre-P&L registry row.
+> 
+> **Process before you report**
+> - Standing rule: log the user decision + r7 diff summary + this pass + Codex's narrow check verbatim in ops_log with per-point positions. Not yet done.
+> - Report SHA `0683284571896064…` (post-sed, = c9b15cb). Note 11 commits `98c8199..c9b15cb` are unpushed — ask.
+> 
+> **Advisor after-pass: MERGE, conditional on #1 being surfaced to the user as a decision** (not fixed by you). #2–3 are wording/bookkeeping; apply and re-commit as r7 wording-only, no new round needed.
+
+### Codex 원문(verbatim · task-mufcn7s2-2a8viu)
+> 1. **NON-BLOCKING** — §1-1 is unlabeled long-side, pre-normalization arithmetic.  
+>    New 3/4/5% rows correctly select L = 20/15/12, but displayed distances are LONG values.  
+>    Snapshot SHORT distances are 4.532%/6.192%/7.852%; leverage choices remain identical.  
+>    Quantity flooring makes actual notionals 302.8/227.1/151.4, not 333.3/250.0/200.0.  
+>    The normative sizing rule remains unambiguous.
+> 
+> 2. **NON-BLOCKING** — Undefined B explicitly overrides four-SR `expected_max_sr` with SR* := 0.  
+>    This ignores the available #1A, #1B, and #2A values, so it is no longer an expected maximum.  
+>    It is nevertheless a clear, user-decided exception.
+> 
+> 3. **NON-BLOCKING** — §12 recordkeeping counts are inaccurate.  
+>    “11 kept” lists §12-2 through §12-13: twelve prior decisions.  
+>    It also says “3.00%·5.00% 행 추가,” omitting the added 4.00% row.
+> 
+> Q1. Yes. N = 4 is propagated to α = 0.0125, every CI, 0.625/99.375 percentiles, four-SR G-B with pinned #1 values, MDE `z₀.₉₈₇₅ = 2.2414`, §3-1, and §7-2. No stale N = 2, 97.5%, 1.25%, or 98.75%-upper-bound text remains.
+> 
+> Q2. The rule is computationally complete:
+> 
+> - A and B defined: calculate SR* from all four SR̂.
+> - B undefined: explicit SR* := 0.
+> - A undefined: §3-1 explicitly makes G-B fail.
+> 
+> Thus SR* cannot remain undefined or verdict-ambiguous. The methodological caveat is finding 2.
+> 
+> Q3. The new leverage choices are gate-consistent for both directions. At each row, L passes and L+1 fails. The displayed ancillary amounts are idealized before quantity flooring; see finding 1.
+> 
+> Q4. The operative band is consistently 0.30–5.00%. §9’s approximately 2–36× cost ratio is correct, §8 covers the band generically, and §7-3 separately reports below-floor and above-cap skips. Only §12’s omitted 4.00% mention remains.
+> 
+> Q5. No substantive rule was dropped. All former §12-2 through §12-13 choices remain represented in the body and decision record. Only the retained-item count is wrong.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0d2d1-1095-7220-817a-c8d81d3ef7da
+> Resume in Codex: codex resume 01a0d2d1-1095-7220-817a-c8d81d3ef7da
