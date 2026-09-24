@@ -4101,3 +4101,95 @@ Codex: r1 11 CLOSED · 1 PARTIAL(#5 ← L97) · r3 5 CLOSED · 1 PARTIAL · advi
 > 
 > Codex session ID: 01a0d2b3-602a-7e83-bf08-945da744b5fa
 > Resume in Codex: codex resume 01a0d2b3-602a-7e83-bf08-945da744b5fa
+
+
+## 2026-09-24 — 트라이얼 #2 초안 r5(b1a7b4e) **사후 검토 5차** · Codex(task-mufbo01w-ulm6vx) FIX-FIRST → r6 반영
+Codex: r1 12개 전부 CLOSED · 새 지적 5개.
+| 지적 | 입장 · r6 반영 |
+|---|---|
+| #1 HIGH CI 꼬리 미지정 | ✅ §3-1 "CI 정의": 가운데 97.5% 퍼센타일 부트스트랩 — 하한 1.25 · 상한 98.75 백분위(#19 ①과 같음) · 모든 게이트·§7-2 공통 |
+| #2 HIGH IS 동시 실패 우선순위 | ✅ §7 IS 우선순위 0~5(데이터·설계 폐기 → 0건 → 생존 → 원판 게이트 → 플라시보 하네스 폐기 → 플라시보 기각) · 생존·원판 실패는 평가 가능한 사실이라 하네스 폐기보다 먼저 |
+| #3 MEDIUM OOS 데이터 불가 | ✅ OOS 우선순위 0 = 폐기(OOS 데이터) · 확정 펀딩율 없는 날 = 데이터 무효일(§1 완결성에도 추가) |
+| #4 MEDIUM 퇴화 통계 | ✅ §3-1: ρ̂ 미정의 → 0 · SR̂_A/PSR 미정의 → G-B 실패 · CI 미정의 → 게이트 실패 · MDE 미정의 → 검정력 부족 · Sharpe 미정의 → 라벨 없음 · 미정의를 통과로 읽지 않는다 |
+| #5 LOW G-B 설명 부정확 | ✅ "겹침 때문에 실현 SR̂가 비슷할 가능성 · SR*는 실현 값으로만" |
+
+### Codex 원문(verbatim · task-mufbo01w-ulm6vx)
+> ## Numbered findings
+> 
+> 1. **HIGH — [L89–95](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:89), [L109](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:109)** — CI tail is not uniquely specified.  
+>    “97.5% CI 하한” can mean percentile `q=.025` or central-97.5% `q=.0125`; MDE’s `z₀.₉₇₅` suggests the former. This changes G1/G2/G3/A-B verdicts.  
+>    **Fix:** state percentile-bootstrap bounds explicitly, including upper bound used by §7-2.
+> 
+> 2. **HIGH — [L84](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:84), [L97](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:97), [L123](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:123), [L149–152](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:149)** — IS simultaneous-failure precedence remains open.  
+>    Zero trades is explicitly first, but P1/P4 harness failure (`폐기`) plus liquidation (`REJECT(생존)`) has two outcomes. §3 evaluates survival before placebo; §7 lists discard first without declaring priority.  
+>    **Fix:** number IS priorities as done for OOS/forward.
+> 
+> 3. **MEDIUM — [L123–125](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:123), [L150](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:150), [L154–158](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:154)** — OOS required-data unavailability has no terminal rule.  
+>    §4-1 says unavailable required datasets cause discard, but §7 defines that only for IS. All OOS days excluded for missing data could instead become “OOS 트레이드 0” REJECT.  
+>    **Fix:** add OOS data-unavailability precedence and distinguish individual invalid days from an unusable window, including missing funding history.
+> 
+> 4. **MEDIUM — [L88](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:88), [L91](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:91), [L106](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:106)** — Degenerate statistics remain undefined.  
+>    r5 handles undefined `SR̂_B`, but not zero-variance A: `ρ̂`, `SR̂_A`, PSR and the final daily-Sharpe comparison can be undefined.  
+>    **Fix:** freeze zero-variance/undefined behavior for each statistic and resulting verdict/label.
+> 
+> 5. **LOW — [L91](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:91)** — Advisor finding 5’s explanation is still imprecise.  
+>    High A/B estimator correlation alone does not imply small cross-sectional `V[SR̂]`; similar realized Sharpe values do.  
+>    **Fix:** say overlap makes similar realized SRs plausible, while reported realized SRs determine `SR*`.
+> 
+> ## Answers
+> 
+> ### 1. Round-1 findings 1–12
+> 
+> 1. **CLOSED** — r2 L39: deliberate next-open deviation.
+> 2. **CLOSED** — r2 L53–54, L93–94: execution/statistical ledgers.
+> 3. **CLOSED** — r2 L47 was partial; current L45–47 and L196 complete 23:59 chronology.
+> 4. **CLOSED** — r2 L83–84, L111–115: IS → OOS → forward.
+> 5. **CLOSED** — r2 L96, L143–152 defined verdicts; r5 L97, L159–163 removed the last forward conflict.
+> 6. **CLOSED** — r2 L104 removed the placement collision; current L114 fixes eligibility.
+> 7. **CLOSED** — r2 L40, L105: equality boundary and delayed gate time.
+> 8. **CLOSED** — r2 L28, L107, L189: epoch, seed, quantile method.
+> 9. **CLOSED** — r2 L31/L124 were partial; current L31/L134 include the replay day and exact gap dates.
+> 10. **CLOSED** — r2 L95, L145, L155–158: OOS-zero/G0/MDE labels.
+> 11. **CLOSED** — r2 L35: crossing-predicate equivalence.
+> 12. **CLOSED** — r2 L53/L56/L189–192: snapshot, normalization, seeds and pre-PnL registry row.
+> 
+> ### 2. Entry-reference deviation
+> 
+> **Acceptable.** Next-bar mark open plus adverse-fill adjustment matches the declared historical/paper execution path better than inventing a band-price fill after retracement.
+> 
+> It remains a model approximation, not necessarily the first executable quote. §2 discloses that limitation and §12-9 requires confirmation.
+> 
+> ### 3. Advisor findings 1–9
+> 
+> No finding is materially misapplied. Findings 1–4 and 6–9 are correctly represented. Finding 5 has the LOW explanatory imprecision in finding 5 above, but the implemented rule and realized-value reporting are unambiguous.
+> 
+> ### 4. Requested ambiguity checks
+> 
+> - **§3/§4-1/§7:** forward precedence is fixed; IS collision and OOS unavailable-data handling remain open.
+> - **P1:** singular at L114—same UTC day, exit no later than 23:58, day in `V_A`.
+> - **Completeness/gap:** consistent at L31/L134; the known two-minute gap invalidates the enumerated A/B days.
+> - **Ledgers:** flat, daily, A/B and B&H populations/formulas are fixed; CI tails and degenerate statistics remain open.
+> - **23:59:** unambiguous at L45–47/L196—opening-price liquidation first, otherwise time exit, never high/low evaluation.
+> 
+> ### 5. Single implementation?
+> 
+> **No.** Findings 1–4 can still produce different numeric thresholds, labels, or terminal verdicts.
+> 
+> ### 6. Hidden user decisions
+> 
+> Current §12 lists **13**, not six.
+> 
+> Additional hidden statistical choice: one-sided 97.5% lower bound versus central 97.5% CI. Missing-funding/OOS-data treatment also needs confirmation or an explicit technical rule. IS precedence and zero-variance handling are technical rules, not preference decisions.
+> 
+> ### 7. Round-4 findings 1–5
+> 
+> 1. **CLOSED** — L97 defers zero trades to stage-specific precedence.
+> 2. **CLOSED as scoped** — L91/L217 define `n_A` and undefined `SR̂_B`; undefined A is the new finding 4.
+> 3. **CLOSED** — L138/L218 define 00:00 activation and 30 complete days.
+> 4. **CLOSED** — L42/L208 distinguish nominal and fill-dependent R.
+> 5. **CLOSED** — L106 gives the window-return formula; L163 gives the strict comparison.
+> 
+> VERDICT: FIX-FIRST — blockers: exact CI bounds, IS simultaneous-failure precedence, OOS unavailable-data verdict, and degenerate A-statistic rules.
+> 
+> Codex session ID: 01a0d2b7-febe-7f83-a1d2-ada9f46791ee
+> Resume in Codex: codex resume 01a0d2b7-febe-7f83-a1d2-ada9f46791ee
