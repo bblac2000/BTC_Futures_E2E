@@ -11,6 +11,9 @@ from decimal import Decimal
 #  사용자 확정(2026-09-12 open-decisions #1): 허용 레버리지 **범위**. 거래소 값이 아니라 정책 값이다.
 #  거래소 상한(브라켓 initialLeverage)은 런타임 규칙에서 따로 적용된다.
 PERMITTED_LEVERAGE: tuple[int, int] = (50, 100)
+#  등록된 레버리지 정책 대역(append-only) — (50,100) = open-decisions #1(봇 기본) · (10,30) = 레지스트리 #30(트라이얼 #2).
+#  봇 기본은 PERMITTED_LEVERAGE 그대로다. 다른 대역은 `SizingLimits(leverage_range=…)`로 **명시**할 때만 쓰인다.
+REGISTERED_LEVERAGE_BANDS: tuple[tuple[int, int], ...] = ((50, 100), (10, 30))
 
 #  사용자 확정(2026-09-15 레지스트리 #2) 정책 값 — 거래소 값 아님(tests/test_no_exchange_literals.py 허용 목록)
 #  레지스트리 #5(2026-09-15 · 시장 데이터를 보기 전에 사전확약) — SL·청산 게이트. 14일 페이퍼 후 새 행으로만 재평가, 사후 완화 금지.
@@ -30,13 +33,13 @@ class RegimeSizing:
     l_max: int
 
     def __post_init__(self):
-        lo, hi = PERMITTED_LEVERAGE
         if not isinstance(self.risk_pct, Decimal):
             raise TypeError(f"{self.name}.risk_pct는 Decimal이어야 한다")
         if not (isinstance(self.l_min, int) and isinstance(self.l_max, int)):
             raise TypeError(f"{self.name}: l_min/l_max는 정수(거래소 레버리지는 정수)")
-        if not lo <= self.l_min <= self.l_max <= hi:
-            raise ValueError(f"{self.name}: [{self.l_min}, {self.l_max}]가 허용 범위 [{lo}, {hi}] 밖이거나 역전")
+        if not any(lo <= self.l_min <= self.l_max <= hi for lo, hi in REGISTERED_LEVERAGE_BANDS):
+            raise ValueError(f"{self.name}: [{self.l_min}, {self.l_max}]가 등록된 대역 {REGISTERED_LEVERAGE_BANDS} 어느 하나에도 "
+                             f"들지 않거나 역전")
         if not 0 < self.risk_pct < 1:
             raise ValueError(f"{self.name}: risk_pct {self.risk_pct}는 (0, 1)")
 
@@ -49,8 +52,11 @@ class SizingLimits:
     pos_pct_max: Decimal = POS_PCT_MAX_DEFAULT
     pos_pct_min: Decimal = POS_PCT_MIN_DEFAULT
     loss_tolerance: Decimal = LOSS_TOLERANCE_DEFAULT
+    leverage_range: tuple[int, int] = PERMITTED_LEVERAGE   # 레짐 [l_min, l_max]는 이 안에 있어야 한다(size_entry가 검사)
 
     def __post_init__(self):
+        if tuple(self.leverage_range) not in REGISTERED_LEVERAGE_BANDS:
+            raise ValueError(f"leverage_range {self.leverage_range}는 등록된 대역 {REGISTERED_LEVERAGE_BANDS}이 아니다")
         for f in ("buffer_rel", "min_gap", "pos_pct_max", "pos_pct_min", "loss_tolerance"):
             if not isinstance(getattr(self, f), Decimal):
                 raise TypeError(f"SizingLimits.{f}는 Decimal이어야 한다")

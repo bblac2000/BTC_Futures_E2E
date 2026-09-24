@@ -4651,3 +4651,12 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d314-aa56-7871-9508-c44b389e570d
 > Resume in Codex: codex resume 01a0d314-aa56-7871-9508-c44b389e570d
+
+## 2026-09-24 — 트라이얼 #2 단계 2b·2c: 공유 계층 변경(엔진·사이징·재생 · 전부 기본 꺼짐)
+- PROVENANCE 헤더 없는 파일(복사 아님) — 변경 기록은 이 항목.
+- `sizing/config.py`: `REGISTERED_LEVERAGE_BANDS = ((50,100),(10,30))`(#30) · `RegimeSizing`은 등록 대역 하나 안에 · `SizingLimits.leverage_range` 기본 `PERMITTED_LEVERAGE`(50,100 — 불변) · 등록 대역만 허용.
+- `sizing/position.py`: `size_entry`가 레짐 범위 ⊆ `limits.leverage_range`를 요구(아니면 ValueError — 설정 오류).
+- `paper/types.py`: `ExitReason.TIME_EXIT`.
+- `paper/engine.py`: `Trail.dist_r`(dist와 배타 · 체결 때 dist_r × R로 확정 — 스냅샷·TrailSet 형태 불변) · `SlFromFill(anchor, mirror)`(`sl == anchor` 요구 · mirror면 SL = 2 × 예상 체결가 − anchor · 사이징 전 확정 · 체결 전 검사도 해석된 SL) · `sizing_capital`(PAPER만 · 체결된 진입마다 지갑 → E_ref · `WalletResynced(source="fixed_capital")` · 거부 시도는 리셋 없음) · `liquidate_if_open_beyond`(PAPER만 · 경계 포함).
+- `backtest/engine_replay.py`: `exit_at_bar_open` 훅 7단계 · `sizing_capital` → 트레이드 기준 지갑 = E_ref · `report_ledger_pnl`.
+- 기본 경로 고정: 2b 이전 커밋(bdf0554) 트리로 만든 골든(`tests/fixtures/golden_replay_nohook.json` · 60 트레이드 · 120 이벤트)과 바이트 동일 · 전체 테스트·ruff·pyright 통과.

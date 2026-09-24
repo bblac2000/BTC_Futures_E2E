@@ -61,6 +61,7 @@ class ExitReason(StrEnum):
     MANUAL = "manual"                      # 텔레그램 /close 등
     STALE_DATA = "stale_data"              # 레지스트리 #12 — 피드 무수신이 #1 grace를 넘었다(PAPER는 마지막 수신 mark로 체결)
     TRAIL = "trail"                        # 트레일링으로 옮겨진 SL에서 청산(`EntryIntent.trail`이 있을 때만 · 기본 꺼짐)
+    TIME_EXIT = "time_exit"                # 전략의 시간 청산(봉 시가 · 트라이얼 #2 §1 23:59 · 재생 루프의 `exit_at_bar_open`만 쓴다)
 
 
 class SkipReason(StrEnum):

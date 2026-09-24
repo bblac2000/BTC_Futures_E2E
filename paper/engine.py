@@ -30,6 +30,11 @@
   옮겨진 SL에서 나가면 `ExitReason.TRAIL`(체결 기준은 SL과 같다).
 - **체결 뒤 TP(`EntryIntent.tp_rule` · 기본 None)**: R = |체결 진입가 − SL|로 레벨 TP와 폴백 TP(fallback_r × R)를 정한다 —
   트레일링과 같은 R(레지스트리 #21). None이면 기존대로 `intent.tp`를 그대로 쓴다.
+- **트라이얼 #2 확장(단계 2b · 전부 기본 꺼짐 — 봇·트라이얼 #1 경로 불변)**:
+  `Trail.dist_r`(거리 = dist_r × R, 체결 때 가격 거리로 확정 → 스냅샷 형태 불변) ·
+  `EntryIntent.sl_rule = SlFromFill(anchor, mirror)`(mirror면 SL = 2 × 예상 체결가 − anchor · 사이징 **전**에 확정 · P3 거울상) ·
+  `Engine(sizing_capital=E_ref)`(PAPER만 · 체결된 진입마다 실행 지갑을 E_ref로 리셋 → `WalletResynced(source="fixed_capital")` ·
+  거부된 시도는 리셋 없음 · 사이징 자본 = E_ref) · `liquidate_if_open_beyond`(봉 시가가 추정 청산가 너머면 청산 · PAPER만).
 """
 from __future__ import annotations
 
@@ -92,9 +97,19 @@ class FeedError(ValueError):
 
 @dataclass(frozen=True)
 class Trail:
-    """트레일링 설정(전략 config에서 온다) — `arm_r` R 이익 뒤 SL = 극값 ∓ `dist`(가격 거리 · 결정 시점에 고정)."""
+    """트레일링 설정(전략 config에서 온다) — `arm_r` R 이익 뒤 SL = 극값 ∓ 거리.
+    거리는 `dist`(가격 거리 · 결정 시점에 고정) 또는 `dist_r`(R 배수 · 체결 때 dist_r × R로 확정) 중 **정확히 하나**."""
     arm_r: Decimal
-    dist: Decimal
+    dist: Decimal | None = None
+    dist_r: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class SlFromFill:
+    """SL을 **체결 기준가**로 정한다(사이징 전에 확정). mirror=True면 SL = 2F − anchor(체결가 기준 거울상 — 트라이얼 #2 P3),
+    False면 SL = anchor. F = 송신기의 예상 체결가(PAPER 체결가와 같다)."""
+    anchor: Decimal
+    mirror: bool
 
 
 @dataclass(frozen=True)
@@ -111,13 +126,14 @@ class TpFromFill:
 class EntryIntent:
     """전략 출력 — 무엇을 원하는가. 크기·레버리지는 실행 시점에 엔진이 정한다."""
     direction: Direction
-    sl: Decimal
+    sl: Decimal                            # 고정 SL · `sl_rule`이 있으면 반드시 `sl_rule.anchor`와 같다(자리표시 — 실제 SL은 체결 때)
     tp: Decimal | None
     regime: RegimeSizing
     decided_ms: int
     decision_mark: Decimal                 # 결정 시점 mark(기록·TP 방향 검사용 — 체결가 아님)
     trail: Trail | None = None             # 기본 꺼짐 — 트라이얼 전략 config가 켤 때만
     tp_rule: TpFromFill | None = None      # 기본 꺼짐 — 있으면 `tp`는 None이어야 하고 TP는 체결 뒤 정해진다
+    sl_rule: SlFromFill | None = None      # 기본 꺼짐 — 있으면 `sl == sl_rule.anchor`여야 하고 SL은 예상 체결가로 정해진다
 
 
 @dataclass
@@ -160,12 +176,17 @@ def _tp_from_fill(rule: TpFromFill, direction: Direction, entry: Decimal, sl: De
 
 
 class Engine:
-    def __init__(self, rules: RuntimeRules, sender: OrderSender, *, mode: Mode, wallet: Decimal, limits: SizingLimits):
+    def __init__(self, rules: RuntimeRules, sender: OrderSender, *, mode: Mode, wallet: Decimal, limits: SizingLimits,
+                 sizing_capital: Decimal | None = None):
         if sender.mode is not mode:
             raise ValueError(f"엔진 모드 {mode} ≠ 송신기 모드 {sender.mode}")
         if not isinstance(wallet, Decimal):
             raise TypeError("wallet은 Decimal")
+        if sizing_capital is not None and (mode is not Mode.PAPER or not isinstance(sizing_capital, Decimal)
+                                           or sizing_capital <= 0):
+            raise ValueError("sizing_capital은 PAPER(백테스트) 전용 양의 Decimal")
         self.rules, self.sender, self.mode, self.limits = rules, sender, mode, limits
+        self.sizing_capital = sizing_capital                   # None = 현행(지갑으로 사이징 · 복리)
         self.wallet = wallet
         self.position: OpenPosition | None = None
         self.pending: EntryIntent | None = None
@@ -184,8 +205,14 @@ class Engine:
         if self.position is not None or self.pending is not None:
             raise EntryRefused("포지션 또는 대기 진입이 이미 있다(원웨이 단일 포지션)")
         long_ = intent.direction is Direction.LONG
-        if intent.trail is not None and not (intent.trail.arm_r > 0 and intent.trail.dist > 0):
-            raise ValueError(f"trail 값은 양수여야 한다: {intent.trail}")
+        if intent.sl_rule is not None and intent.sl != intent.sl_rule.anchor:
+            raise ValueError(f"sl_rule이 있으면 sl은 anchor와 같아야 한다: sl {intent.sl} · anchor {intent.sl_rule.anchor}")
+        if intent.trail is not None:
+            tr = intent.trail
+            if (tr.dist is None) == (tr.dist_r is None):
+                raise ValueError(f"trail은 dist와 dist_r 중 정확히 하나: {tr}")
+            if not (tr.arm_r > 0 and (tr.dist if tr.dist is not None else tr.dist_r) > 0):  # type: ignore[operator]
+                raise ValueError(f"trail 값은 양수여야 한다: {tr}")
         if intent.tp_rule is not None:
             if intent.tp is not None:
                 raise ValueError("tp와 tp_rule은 함께 줄 수 없다")
@@ -244,6 +271,19 @@ class Engine:
     def on_funding(self, *, ts_ms: int, rate: Decimal, mark: Decimal) -> list[object]:
         """봉 단위 재생용 — 실제 펀딩 이력(정산 시각·율·mark)을 넣는다."""
         return [self._settle_funding(ts_ms, rate, mark)] if self.position is not None else []
+
+    @in_exec_context
+    def liquidate_if_open_beyond(self, open_mark: Decimal, *, ts_ms: int) -> list[object]:
+        """봉 시가 갭 청산(PAPER · 트라이얼 #2 §1 23:59 봉 ②) — 롱 시가 ≤ 추정 청산가 · 숏 시가 ≥ 추정 청산가(경계 포함)."""
+        if self.mode is not Mode.PAPER:
+            raise ValueError("liquidate_if_open_beyond는 PAPER(백테스트) 전용")
+        pos = self.position
+        if pos is None:
+            return []
+        long_ = pos.direction is Direction.LONG
+        if (long_ and open_mark <= pos.liq_price_est) or (not long_ and open_mark >= pos.liq_price_est):
+            return self._liquidate(ts_ms)
+        return []
 
     @in_exec_context
     def close_now(self, *, ref_mark: Decimal, ts_ms: int, reason: ExitReason = ExitReason.MANUAL) -> list[object]:
@@ -389,10 +429,15 @@ class Engine:
         #  SL 트리거 기준은 mark(#5) — 예상 체결가가 아니라 **mark가 이미 SL을 넘었는지**로 건너뛴다
         #  (2 bps 슬리피지에서 BUY 예상가가 SL 위로 올라가 "SL 이미 발동된 진입"을 허용하던 결함 · 레지스트리 #7 전환 중 발견)
         long_ = pe.direction is Direction.LONG
-        if (long_ and ref_mark <= pe.sl) or (not long_ and ref_mark >= pe.sl):
-            return [EntrySkipped(ts_ms, None, SkipReason.SL_CROSSED_BEFORE_FILL, f"실행 mark {ref_mark} · SL {pe.sl}")]
         quote = self.sender.quote_fill_price(side_for(pe.direction, Intent.ENTRY), ref_mark)
-        d = size_entry(quote, pe.sl, pe.direction, self.wallet, pe.regime, self.rules, self.limits)
+        if pe.sl_rule is not None:
+            sl = 2 * quote - pe.sl_rule.anchor if pe.sl_rule.mirror else pe.sl_rule.anchor
+        else:
+            sl = pe.sl
+        if (long_ and ref_mark <= sl) or (not long_ and ref_mark >= sl):
+            return [EntrySkipped(ts_ms, None, SkipReason.SL_CROSSED_BEFORE_FILL, f"실행 mark {ref_mark} · SL {sl}")]
+        equity = self.wallet if self.sizing_capital is None else self.sizing_capital
+        d = size_entry(quote, sl, pe.direction, equity, pe.regime, self.rules, self.limits)
         if not d.ok or d.leverage is None:
             why = SkipReason.SL_CROSSED_BEFORE_FILL if d.reason is RejectReason.SL_WRONG_SIDE else SkipReason.SIZING_REJECTED
             return [EntrySkipped(ts_ms, d, why, f"실행 mark {ref_mark} · 예상 체결가 {quote} · {d.reason} · {d.detail}")]
@@ -438,6 +483,11 @@ class Engine:
                 ev.append(EntrySkipped(ts_ms, d, SkipReason.SEND_FAILED, f"{type(failure).__name__}: {failure}"))
             return ev
 
+        reset: WalletResynced | None = None
+        if self.sizing_capital is not None:
+            #  고정 사이징 자본(L5 · 트라이얼 #2 §1): 체결된 진입마다 실행 지갑을 E_ref로 — 누적은 호출자의 보고 원장
+            reset = WalletResynced(ts_ms, self.wallet, self.sizing_capital, "fixed_capital", "진입 전 실행 지갑 = E_ref")
+            self.wallet = self.sizing_capital
         self.wallet -= commission
         post = self._post_fill(d, entry, qty)
         tp = pe.tp if pe.tp_rule is None else _tp_from_fill(pe.tp_rule, d.direction, entry, d.sl)
@@ -445,15 +495,20 @@ class Engine:
         self.position = OpenPosition(d.direction, qty, entry, d.leverage, d.sl, tp, post.liq_price_est, commission,
                                      ts_ms, d, Decimal())
         if pe.trail is not None:
-            self.position.trail, self.position.trail_r = pe.trail, abs(entry - d.sl)
+            r = abs(entry - d.sl)
+            tr = pe.trail if pe.trail.dist_r is None else Trail(pe.trail.arm_r, pe.trail.dist_r * r)
+            self.position.trail, self.position.trail_r = tr, r
         live_ev: list[object] = []
         if self.mode is Mode.LIVE:
             post, live_ev = self._live_after_entry(ts_ms, d, post)
         ev.insert(0, EntryFilled(ts_ms, d, tuple(fills), d.leverage, post, adopted=adopted, entry_commission=commission))
+        if reset is not None:
+            ev.insert(0, reset)
         pos = self.position
         assert pos is not None
         if pos.trail is not None and pos.trail_r is not None:
-            ev.insert(1, TrailSet(ts_ms, pos.trail.arm_r, pos.trail.dist, pos.trail_r))
+            assert pos.trail.dist is not None
+            ev.insert(2 if reset is not None else 1, TrailSet(ts_ms, pos.trail.arm_r, pos.trail.dist, pos.trail_r))
         ev += live_ev
         if not post.gate_ok:
             #  #5는 사전확약 게이트 — 실제 체결 기준으로 깨지면 즉시 청산(Codex L3 검토 4 · 기록만 하는 완화 없음)
@@ -533,7 +588,9 @@ class Engine:
                 return []
             pos.trail_armed = True
             ev.append(TrailArmed(ts_ms, best))
-        cand = best - pos.trail.dist if long_ else best + pos.trail.dist
+        dist = pos.trail.dist
+        assert dist is not None                  # dist_r는 체결 때 dist로 확정된다
+        cand = best - dist if long_ else best + dist
         if (long_ and cand <= pos.sl) or (not long_ and cand >= pos.sl):
             return ev
         old, pos.sl, pos.trail_moved = pos.sl, cand, True

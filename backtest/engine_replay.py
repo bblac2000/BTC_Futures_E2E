@@ -8,6 +8,12 @@
 전략은 `on_minute_closed(bar, ctx) -> EntryIntent | None`만 구현하면 된다. 결정·건너뜀 사유는 전략이 `ctx.skip(reason)`으로 남긴다.
 `ctx.bar_events` = 그 분 `on_bar`의 엔진 이벤트(전략이 청산 시각을 알아 쿨다운을 건다).
 창 끝에 열린 포지션은 **트레이드로 세지 않고** `open_at_end`로 따로 보고한다(사전등록이 정하지 않았다 — 단계 d Codex 질문).
+
+트라이얼 #2 확장(단계 2c · 기본 꺼짐 — 훅 없는 전략은 기존 경로 그대로 · 골든 테스트):
+- 전략에 `exit_at_bar_open(bar) -> bool`이 있고 참이면 그 분은: 1 펀딩 → 2 대기 진입 없음 단언 → 3 시가 갭 청산(경계 포함) →
+  4 살아 있으면 시가에 `TIME_EXIT` → 5 `ctx.bar_events` = 그 이벤트 → 6 `Engine.on_bar`를 부르지 않는다 → 7 `on_minute_closed`는 부른다.
+- `sizing_capital`(E_ref): 엔진이 체결된 진입마다 실행 지갑을 E_ref로 리셋 → 트레이드 기준 지갑 = E_ref ·
+  `report_ledger_pnl` = 트레이드 순손익의 누적(보고용 · 사이징·적격성에 쓰이지 않는다).
 """
 from __future__ import annotations
 
@@ -23,7 +29,7 @@ from exchange.gate import Mode
 from exchange.rules import RuntimeRules
 from paper.engine import Engine, EntryIntent, EntryRefused
 from paper.sender import PaperSender
-from paper.types import EntryFilled, EntrySkipped, PositionClosed
+from paper.types import EntryFilled, EntrySkipped, ExitReason, PositionClosed
 from sizing.config import SizingLimits
 
 
@@ -52,11 +58,15 @@ class ReplayResult:
     decisions: list[dict[str, Any]]
     final_wallet: Decimal
     open_at_end: dict[str, Any] | None = None     # 창 끝에 열린 포지션 — 트레이드로 세지 않고 따로 보고(사전등록에 규칙 없음 · Codex 검토)
+    report_ledger_pnl: Decimal | None = None      # sizing_capital일 때만 — 트레이드 순손익 누적(보고용)
 
 
 def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strategy, *, rules: RuntimeRules,
-           limits: SizingLimits, equity: Decimal, on_event: Callable[[object], None] | None = None) -> ReplayResult:
-    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits)
+           limits: SizingLimits, equity: Decimal, on_event: Callable[[object], None] | None = None,
+           sizing_capital: Decimal | None = None) -> ReplayResult:
+    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital)
+    exit_hook: Callable[[Bar1m], bool] | None = getattr(strategy, "exit_at_bar_open", None)
+    ledger = Decimal(0) if sizing_capital is not None else None
     ctx = ReplayContext(eng)
     trades: list[dict[str, Any]] = []
     open_trade: dict[str, Any] | None = None
@@ -70,7 +80,15 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
             fi += 1
         wallet_before = eng.wallet
         liq_now = eng.position.liq_price_est if eng.position is not None else None   # 이 봉에서 청산되면 gross 기준가
-        ctx.bar_events = eng.on_bar(mark_bar(b))
+        if exit_hook is not None and exit_hook(b):
+            #  봉 시가 청산(트라이얼 #2 §1 23:59): 대기 진입이 있으면 규칙 위반(late_cross · P2 drop이 막아야 한다)
+            assert eng.pending is None, f"봉 시가 청산 분 {t}에 대기 진입이 있다"
+            o = b.d("mark_open")
+            ctx.bar_events = eng.liquidate_if_open_beyond(o, ts_ms=t)
+            if eng.position is not None:
+                ctx.bar_events += eng.close_now(ref_mark=o, ts_ms=t, reason=ExitReason.TIME_EXIT)
+        else:
+            ctx.bar_events = eng.on_bar(mark_bar(b))
         for ev in ctx.bar_events:
             if on_event is not None:
                 on_event(ev)
@@ -79,7 +97,8 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                               "entry_mark": str(b.d("mark_open")), "entry_fill": str(ev.post_fill.entry_price),
                               "qty": str(ev.post_fill.qty), "leverage": ev.leverage, "sl": str(ev.decision.sl),
                               "tp": None if eng.last_entry_tp is None else str(eng.last_entry_tp),
-                              "sl_dist": str(ev.post_fill.sl_dist_pct), "wallet_before": str(wallet_before)}
+                              "sl_dist": str(ev.post_fill.sl_dist_pct),
+                              "wallet_before": str(wallet_before if sizing_capital is None else sizing_capital)}
                 ctx.decisions.append({"ts_ms": t, "outcome": "entered", "trade_id": open_trade["trade_id"]})
                 liq_now = ev.post_fill.liq_price_est             # 같은 봉에서 바로 청산되는 경우의 gross 기준가
             elif isinstance(ev, EntrySkipped):
@@ -97,6 +116,8 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                 trades.append(open_trade | {"exit_ms": ev.ts_ms, "exit_reason": str(ev.reason), "exit_ref": str(ref),
                                             "wallet_after": str(ev.wallet_after), "gross_bps": str(r.gross_bps),
                                             "net_bps": str(r.net_bps), "net_pnl": str(r.net_pnl)})
+                if ledger is not None:
+                    ledger += r.net_pnl
                 open_trade = None
         ctx.now_ms = t + MINUTE_MS - 1
         intent = strategy.on_minute_closed(b, ctx)
@@ -105,4 +126,4 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
                 eng.request_entry(intent)
             except EntryRefused as e:
                 ctx.skip("entry_refused", detail=str(e))
-    return ReplayResult(trades, ctx.decisions, eng.wallet, open_trade)
+    return ReplayResult(trades, ctx.decisions, eng.wallet, open_trade, ledger)

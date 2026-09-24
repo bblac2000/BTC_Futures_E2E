@@ -153,6 +153,10 @@ def _size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decim
         raise TypeError(f"direction은 Direction이어야 한다: {direction!r}")
     if entry <= 0 or sl <= 0 or equity <= 0:
         raise ValueError(f"entry·sl·equity는 양수: {entry}, {sl}, {equity}")
+    lo, hi = limits.leverage_range
+    if not lo <= regime.l_min <= regime.l_max <= hi:
+        raise ValueError(f"{regime.name}: [{regime.l_min}, {regime.l_max}]가 limits.leverage_range {limits.leverage_range} 밖 — "
+                         "설정 오류(대역을 섞지 않는다)")
 
     fee = rules.symbol_rules.liquidation_fee
     taker = rules.commission.taker
