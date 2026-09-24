@@ -348,10 +348,27 @@ def test_arm_b_median_window_excludes_the_tested_day():
 def test_position_carried_into_next_day_is_an_error():
     """거래일의 23:59 봉이 없는데(잘못 주입된 거래일 집합) 포지션이 있으면 다음 날 첫 봉을 **엔진이 처리하기 전에** 멈춘다 —
     다음 날 00:00 봉이 SL을 치는 경우에도(Codex 2d·2e r2)."""
+    from backtest.data import Funding
+    from paper.engine import Engine
+    from paper.types import FundingSettled
     d0 = [b for b in day(D0, LONG_UP, LONG_BARS) if (b.open_ms % DAY) // MIN != 1439]
+    f00 = [Funding((D0 + 1) * DAY + 3, "0.01", "60650")]
     for nxt in (day(D0 + 1, [(0, "60650")]), day(D0 + 1)):                   # SL 위 / SL(60,000)을 치는 00:00 봉
-        with pytest.raises(AssertionError):
-            run(history() + d0 + nxt, {D0})
+        seen: list[object] = []
+        orig = Engine.on_funding
+
+        def spy(self, *, ts_ms, rate, mark, _o=orig, _s=seen):
+            ev = _o(self, ts_ms=ts_ms, rate=rate, mark=mark)
+            _s.extend(ev)
+            return ev
+        Engine.on_funding = spy  # type: ignore[method-assign]
+        try:
+            with pytest.raises(AssertionError):
+                s = Trial02(tick=TICK, trade_days={D0}, variant=Variant("A"))
+                replay(history() + d0 + nxt, f00, s, rules=RULES, limits=LIM, equity=D("1000"), sizing_capital=D("1000"))
+        finally:
+            Engine.on_funding = orig  # type: ignore[method-assign]
+        assert not [e for e in seen if isinstance(e, FundingSettled)]     # 00:00 펀딩 정산 전에 멈춘다
 
 
 def test_strategy_ranges_match_days_complete_mark_days():

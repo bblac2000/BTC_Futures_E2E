@@ -210,21 +210,40 @@ def test_verdict_entry_runs_on_verified_prepared_input(tmp_path):
     assert v.v_a == {D0} and len(run.result.trades) == 1 and run.crosses[0]["final_reason"] is None
 
 
-def test_median_is_exactly_the_registered_window():
-    """각 창 구성원: 날마다 다른 범위 → 전략 중앙값 = R_{d−21}…R_{d−2}의 Decimal 중앙값 · R_{d−1}·R_{d−22}는 들어가지 않는다."""
+def _ranges_and_vals():
     ranges: dict[int, tuple[str, str, str, str]] = {}
     vals: dict[int, Decimal] = {}
     for j, di in enumerate(range(D0 - 23, D0)):
         half = 300 + 37 * ((j * 7) % 23)                          # 서로 다른 반폭
         ranges[di] = ("60000", str(60000 + half), str(60000 - half), "60000")
         vals[di] = D(2 * half)
+    return ranges, vals
+
+
+def _b_median(ranges) -> Decimal:
     r = H.run_t2(history(n=23, ranges=ranges) + day(D0), [], {D0}, Variant("B"))
-    got = [x["median"] for x in r.strategy.log if x["event"] == "day" and x["day"] == D0][0]
-    window = sorted(vals[D0 - j] for j in range(2, 22))
-    assert D(got) == (window[9] + window[10]) / 2
-    for j in range(2, 22):                                        # 구성원 하나씩: 창 목록에 있고 d−1·d−22는 없다
-        assert vals[D0 - j] in window
-    assert r.strategy.ranges[D0 - 1] == vals[D0 - 1] and r.strategy.ranges[D0 - 22] == vals[D0 - 22]
+    return D([x["median"] for x in r.strategy.log if x["event"] == "day" and x["day"] == D0][0])
+
+
+def _expected(vals: dict[int, Decimal]) -> Decimal:
+    w = sorted(vals[D0 - j] for j in range(2, 22))
+    return (w[9] + w[10]) / 2
+
+
+def test_median_each_member_matters_and_neighbours_do_not():
+    """창 구성원 20개를 **하나씩** 반대쪽 극단으로 옮겨 중앙값이 기대값(그 목록의 Decimal 중앙값)대로 바뀌는지 ·
+    d−1 · d−22를 옮겨도 불변(창 밖)."""
+    ranges, vals = _ranges_and_vals()
+    m0 = _b_median(ranges)
+    assert m0 == _expected(vals)
+    for j in range(2, 22):
+        di = D0 - j
+        half = 5000 if vals[di] <= m0 else 10                   # 중앙값 아래면 매우 크게 · 위면 매우 작게 → 가운데 둘이 바뀐다
+        v2 = vals | {di: D(2 * half)}
+        got = _b_median(ranges | {di: ("60000", str(60000 + half), str(60000 - half), "60000")})
+        assert got == _expected(v2) and got != m0, j
+    for di in (D0 - 1, D0 - 22):
+        assert _b_median(ranges | {di: ("60000", "65000", "55000", "60000")}) == m0
 
 
 def test_no_funding_settled_event_at_0000(monkeypatch):

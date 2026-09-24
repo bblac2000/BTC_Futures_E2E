@@ -5191,3 +5191,24 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d3a8-e44f-7d92-8cb7-ff9d0b397668
 > Resume in Codex: codex resume 01a0d3a8-e44f-7d92-8cb7-ff9d0b397668
+
+## 2026-09-24 — 2d·2e 재확인 r3(Codex task-mufla90x-ut0ylo **FIX-FIRST**) → 수정
+| # | Codex | 입장 | 반영 |
+|---|---|---|---|
+| 2 | CLOSED(실행 때 원시 해시는 레지스트리 고정값에서) | ✅ | 실행 규약: 캡처 직후 원시 해시를 레지스트리 행에 고정 → `run_prepared_is`에 그 값 |
+| 4 | PARTIAL — 구성원 하나씩 아님 · 동어반복 단언 | ✅ | 20개 구성원을 하나씩 반대 극단으로 → 중앙값 = 기대값이고 바뀐다 · d−1 · d−22는 불변 |
+| 가드 | 펀딩이 가드보다 먼저 | ✅ | 재생에 선택 훅 `before_minute(bar, engine)`(펀딩·엔진 처리 **전** · 없으면 기존 경로 그대로 — 골든 통과) · 전략 가드를 그리로 · 테스트가 00:00 FundingSettled 없음까지 확인(이전 코드에서 실패 확인) |
+
+### Codex 원문(verbatim · task-mufla90x-ut0ylo)
+> ## Narrow re-check
+> 
+> - **#2 — CLOSED at the consumer boundary.** `run_prepared_is` fixes the IS plus 21 day range, requires caller supplied raw hashes, and rebuilds the prepared inputs before replay ([harness.py](/home/cms/project/BTC_Futures_E2E/strategies/trial02/harness.py:90), [prepare_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:366)). At execution, those hashes must come from the independent registry pin.
+> - **#4 — PARTIAL.** The new test checks one exact median, but does not perturb each of the 20 members. Its assertions that members are in the locally constructed window are tautological; replacing `d−2` with excluded `d−22` leaves this test’s median unchanged ([test_trial02_harness.py](/home/cms/project/BTC_Futures_E2E/tests/test_trial02_harness.py:213)). The direct event test does cover the normal 00:00 funding case.
+> - **Day-boundary timing — still open.** Replay processes funding before calling `exit_at_bar_open` ([engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:75)). With a missing 23:59 bar and a carried position, my read-only synthetic reproduction observed one 00:00 `FundingSettled` **before** the moved guard raised ([strategy.py](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:124)). Put the guard before the minute’s funding step and test that case.
+> 
+> The three added synthetic checks passed when run directly. I accessed neither `var/` nor market data.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0d3ae-7e9a-7113-bf83-5f9b2202d0a5
+> Resume in Codex: codex resume 01a0d3ae-7e9a-7113-bf83-5f9b2202d0a5

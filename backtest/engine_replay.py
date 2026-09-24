@@ -16,6 +16,7 @@
   보고 원장 = `report_ledger(trades)`(트레이드 순손익 누적 · 사이징·적격성에 쓰이지 않는다 · `final_wallet`은 이 모드에서 의미 없음).
 - 훅 분에는 `on_minute_closed` 뒤에도 대기 진입이 없어야 한다(날을 넘는 진입 금지 — late_cross가 막아야 한다).
 - 청산 수수료 기준은 `limits.liq_fee_on_liq_price`(트라이얼 #2 §1)로 엔진·사이징에 함께 들어간다.
+- 전략에 `before_minute(bar, engine)`이 있으면 그 분의 **펀딩·엔진 처리 전에** 부른다(검사 전용 — 트라이얼 #2 날 경계 가드).
 """
 from __future__ import annotations
 
@@ -67,6 +68,7 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
            sizing_capital: Decimal | None = None) -> ReplayResult:
     eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital)
     exit_hook: Callable[[Bar1m], bool] | None = getattr(strategy, "exit_at_bar_open", None)
+    pre_hook: Callable[[Bar1m, Engine], None] | None = getattr(strategy, "before_minute", None)
     ctx = ReplayContext(eng)
     trades: list[dict[str, Any]] = []
     open_trade: dict[str, Any] | None = None
@@ -74,6 +76,8 @@ def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strateg
     fs = sorted(fundings, key=lambda f: f.funding_ms)
     for b in bars:
         t = b.open_ms
+        if pre_hook is not None:
+            pre_hook(b, eng)
         while fi < len(fs) and fs[fi].funding_ms < t + MINUTE_MS:
             if fs[fi].funding_ms >= t and eng.position is not None:
                 eng.on_funding(ts_ms=fs[fi].funding_ms, rate=Decimal(fs[fi].rate), mark=Decimal(fs[fi].mark))
