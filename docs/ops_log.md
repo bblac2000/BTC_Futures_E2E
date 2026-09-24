@@ -3540,3 +3540,219 @@ Codex 제약: 코드·문서만 읽음(시장 데이터·var/·OOS 열람 금지
 > 
 > Codex session ID: 01a0d0dd-883f-7d10-ba2c-0ca819413881
 > Resume in Codex: codex resume 01a0d0dd-883f-7d10-ba2c-0ca819413881
+
+
+## 2026-09-24 — 트라이얼 #2 초안 r1(334c0fa) **사후 검토(after-pass)** · advisor MERGE-after-fixes · Codex(task-mufaro9f-e1b4ci) **FIX-FIRST** → r2 반영
+### Claude Code 항목별 입장(✅ 동의·반영 · ⚠️ 이견)
+| 지적 | 출처 | 입장 · r2 반영 |
+|---|---|---|
+| 진입 기준가가 조용히 바뀜(`max(U, 다음 시가)` 누락) | Codex #1 HIGH | ⚠️ **의도적 이탈로 명시** — 전진·라이브 엔진은 결정 뒤 첫 mark에 체결하므로 다음 시가가 실제 기준(더 나쁜 가격 가정은 실행 경로와 어긋남) · §1 진입 행에 이유 기록 · Codex r2에서 수용 여부 확인 |
+| 고정 명목 내부 모순(실행 명목 가변 · 통계 원장 없음) | Codex #2 HIGH | ✅ §1에 **실행 원장(E_ref 1,000 · B2)과 통계 원장(N_stat 1,000 × net_bps)** 분리 · flat·일별·A/B·매수보유 비교 식 명시 |
+| 청산 판정 순서 불완전 | Codex #3 HIGH | ✅ §1 "청산 판정" 행(갭 포함 같은 봉 청산 · SL/TP보다 먼저 · 펀딩마다 재계산 · 손실 모델) |
+| 게이트 순서 충돌(G3 대 G-B) | Codex #4 HIGH | ✅ §3 머리말: 헌법 순서 = 중요도 · 평가 순서 = IS(G0→G1→G2→G-B→생존→벤치→플라시보) → OOS → 전진 · §4-1·§7 일치 |
+| 전진 판정 미정의 | Codex #5 HIGH | ✅ §7 단계별 판정표(IS PASS · OOS PASS · ACCEPT · 전진 실패 유형별) |
+| P1 배치 유일하지 않음 | Codex #6 HIGH · advisor #2 | ✅ **advisor 단순안 채택**: 트라이얼 #1 (a)~(f) 그대로 + 적격 분에 "같은 UTC 일 · 청산 ≤ 23:58 · 완결성 만족 날" 제약 하나 · 일별 개수 순열·방향 캡 삭제(두 규칙 충돌·예측 가능한 폐기 제거) |
+| P2 경계(23:59 동치 · 게이트 시점) | Codex #7 | ✅ `fill_ts ≥ 23:59:00 → dropped` · 결정 게이트는 지연된 결정 시각 상태로 |
+| P4 시드 재현성(day_index · 분위수) | Codex #8 | ✅ `day_index = floor(open_ms / 86,400,000)` · numpy 선형 분위수 |
+| 결손일 정책(2/3 대 엄격) | Codex #9 | ✅ **엄격 채택**(한 분이라도 없으면 그 암-일 데이터 무효) · 알려진 결손 2분의 영향(2024-08-13 · B 창) §5에 명시 |
+| 검정력 라벨 충돌 | Codex #10 · advisor #7 | ✅ OOS G0 미달 = **"OOS 표본 부족"**(§7-2 MDE 분류와 다른 라벨) · IS G0 실패는 게이트 실패 + MDE 분류 병기 |
+| 교차 술어 누락 | Codex #11 | ✅ 동치임을 §1에 명시 |
+| 런타임 규약 일부 미정 | Codex #12 | ✅ §11 6·7·8(스냅샷 SHA · 반올림 · 시드 표 · 분위수 · 테스트 목록 · 산출물 스키마) |
+| N 근거가 헌법 예와 반대 | advisor #1 HIGH | ✅ §0·§12-1을 **있는 그대로**: 헌법 기본 = 누적 N 4 · 제시한 근거는 헌법의 예와 맞지 않음 · 사용자 결정 N 2 |
+| A/B 통계 두 개 | advisor #3 | ✅ CI는 **일별 정책 대비 하나** · 트레이드 평균 항등식·Σ 항등식은 해석용(§0) |
+| SL 선택 미공개 | advisor #4 | ✅ §12-3 |
+| G-B DSR 사실상 무의미 | advisor #5 | ✅ §3 G-B 행에 공시(규칙 유지) |
+| 중앙값 창 문언 | advisor #6 | ✅ §12-5 |
+| 시간 청산 = 재생 루프 훅 | advisor #8 | ✅ §1 시간 청산 행(그 봉 판정보다 먼저) · §11-1 `exit_at_bar_open` 프로토콜 |
+| `sl_wrong_side` 건너뜀 사유 | advisor #9 | ✅ §1 결정 시점 게이트 · §7-3 |
+| 00:00 기준 시각 특이성은 어떤 플라시보도 흔들지 않음 · mark 체결 근사 · P1이 날짜도 무작위화 | Codex Q7 | ✅ 한계로 공시(§0 · §2 · §4 끝) |
+
+### advisor 원문(verbatim)
+> You're in the after-pass; Codex is running on 334c0fa. This is the advisor half. Draft is close — findings below are text fixes, not redesign.
+> 
+> **Owning my before-pass deviations — the draft's choices are right, drop mine:**
+> - Trail 1R (Codex) beats my ATR_15m: SL is day-scale, a 15m trail would repeat the "ATR 스케일 ≠ 실행 스케일" failure. Agree.
+> - Last entry "fill < 23:59:00" (Codex) beats my 21:59 cutoff: one fewer arbitrary parameter; holding-time report catches the short holds. Agree.
+> - P4 tick-grid q/R (Codex) + my per-day seed: correct and dimensionally clean. Agree.
+> 
+> **Findings (draft text, fix before anchor)**
+> 
+> 1. **HIGH — §0 N justification inverts the constitution's example.** §1 says N doesn't increase for "동일 가설의 전진 검증" — i.e. *same* hypothesis. Your reason ① "신호 가족이 다르다" is the case where N *should* rise: two new hypotheses tested on the same IS data → cumulative 4. Reasons ② ③ (closed trial, no result-driven values) are true but don't bear on the multiple-comparison count. Don't soften §12 — state plainly: "N = 2 is the user's decision; the constitution's default reading is cumulative N = 4 (α 0.0125); the stated 'N 무증가' reasons don't match the constitution's own example." Then the user rules with the tension visible.
+> 
+> 2. **MEDIUM — P1 (c) has two rules that collide.** `dir_k = rng.integers(0, 2)` per slot AND "방향마다 하루 1슬롯". A 2-slot day can draw LONG twice. An implementer resolves this three ways (redraw, complement, fail). Pre-commit one. Also: pairing (sl_dist, h) globally then assigning to days means two long-hold pairs can land on one day and not fit → placement failure → >10 → DISCARD. That's a *foreseeable* harness discard. Consider the simpler well-posed version: trial #1 (a)–(f) unchanged + one constraint "slot must lie within one UTC day, exit ≤ 23:58". Drop the count-vector permutation and per-direction cap — they don't change what P1 tests (exposure-matched random timing) and they add failure modes. Flag in §12 as a choice; Codex proposed the permutation, so let it weigh in.
+> 
+> 3. **MEDIUM — Two different "A/B" statistics.** §0 gives the per-trade mean identity `(n_e/n_A)(μ_e − μ_c)`; §3 defines the CI on daily fixed-notional `B_day − A_day`. Note that Σ(B_day − A_day) = −Σ(expansion-day A PnL) — say so. Pick one for the CI (the daily one is fine) and label the other as a derived identity, so the report can't be read two ways.
+> 
+> 4. **MEDIUM — SL choice not surfaced.** User offered two examples: "opposite side of the band" (= D_d, R_trade = 1.0·R_prev) or ATR multiple. You chose O_d (R_trade = 0.5·R_prev) with a stated source — defensible, but it halves R, doubles cap-skips' complement, and moves TP/trail geometry. Add to §12: "SL = O_d chosen over D_d; confirm."
+> 
+> 5. **LOW — G-B DSR is near-vacuous.** With B ⊂ A, SR̂_B ≈ SR̂_A → V[SR̂] ≈ 0 → SR* ≈ 0 (trial #1: 0.0012). The gate collapses to SR̂_A > 0. Disclose in §3 G-B row; keep the rule.
+> 
+> 6. **LOW — "previous 20 days" reading.** Draft uses R_{d−21}…R_{d−2} (Codex, excludes the tested day). User's wording ("prior day's range below the median of the previous 20 days") reads naturally as d−20…d−1, which *includes* the tested day. State the choice in §12.
+> 
+> 7. **LOW — §3 has two "검정력 부족" paths.** G3 on n < 48 (OOS) vs §7 MDE > 20 bps (IS). Label the OOS one "OOS 표본 부족" so reports distinguish them.
+> 
+> 8. **LOW — time exit is a replay-loop hook, not just an enum.** Exit must fire *before* `on_bar(23:59)` evaluates SL/TP on that bar, at its mark_open. Needs a `Strategy.exit_at_bar_open(bar) -> bool` protocol method (strategy logic stays in the strategy module, per 격리 실행). §11 item 1 should say this so the code step doesn't hard-code it in `replay()`.
+> 
+> 9. **LOW — add `sl_wrong_side`** to §7-1's mutually-exclusive skip list (cross bar closes below O_d for a long). Trial #1 had 0; record it anyway.
+> 
+> **Checks the draft passes:** every user field has a number or rule; look-ahead clean (O_d, R_{d−1}, median all from closed data at 00:00); §9 has the four testable invariants; L5 fixed notional; evaluator-before-run; P1 seed 20260924; survival gate verbatim; verdict classes copied.
+> 
+> **When Codex lands:** log both passes verbatim + per-point table (standing rule); apply the text fixes (1–4 minimum, 5–9 cheap); re-commit; then report **draft verbatim** + Codex verdict + §12 decision list with items 1, 2, 4, 6 added. Push of 98c8199/334c0fa/fixes is the user's call — ask.
+> 
+> **Advisor after-pass: MERGE after text fixes 1–4.** None require redesign; all are wording the user needs to see before anchoring.
+
+### Codex 원문(verbatim · task-mufaro9f-e1b4ci)
+> ## Numbered findings
+> 
+> 1. **HIGH — `docs/trials/trial_02_preregistration.md:36` — Entry reference changed silently.**  
+>    Q4 required long `max(U_d, next_open)`, short `min(D_d, next_open)`. Draft uses the next open, including a retrace inside the band.  
+>    **Fix:** freeze reference price first, then apply adverse 2 bps and tick.
+> 
+> 2. **HIGH — `docs/trials/trial_02_preregistration.md:50-51,90-91` — “Fixed notional” is internally inconsistent.**  
+>    `budget/sl_dist` produces variable execution notional. Flat and A/B rows nevertheless call raw PnL “fixed-notional”; the promised `N_stat = 1,000` rescaling is absent.  
+>    **Fix:** define separate execution and statistical ledgers, including exact daily/flat formulas.
+> 
+> 3. **HIGH — `docs/trials/trial_02_preregistration.md:44,89` — Liquidation chronology is incomplete.**  
+>    Liquidation decides survival REJECT, but the Q4 rule—open beyond liquidation means immediate liquidation; otherwise adverse intrabar extreme—was not copied.  
+>    **Fix:** state detection, fill price, gap treatment, and post-funding recalculation explicitly.
+> 
+> 4. **HIGH — `docs/trials/trial_02_preregistration.md:78-92,105-108` — Gate order conflicts.**  
+>    §3 and constitution §2 place G3 before G-B; staging requires G-B during IS before OOS. This changes whether OOS is opened.  
+>    **Fix:** choose one order and make §3, §4-1, §7 identical.
+> 
+> 5. **HIGH — `docs/trials/trial_02_preregistration.md:92,108,129-137` — Forward-test verdict is undefined.**  
+>    Staging waits until the 30-day forward window, but ACCEPT omits G-F. “ACCEPT after G3” also leaves no explicit result for G3 pass followed by G-F failure.  
+>    **Fix:** define `OOS PASS`, final ACCEPT conditions, and every G-F failure verdict.
+> 
+> 6. **HIGH — `docs/trials/trial_02_preregistration.md:100` — P1 placement is not uniquely implementable.**  
+>    “Eligible days” is undefined; assignment of sampled slots to permuted day counts is unspecified; two independently sampled equal directions can conflict with the one-slot-per-direction cap.  
+>    **Fix:** specify the date universe, zero-day handling, slot-to-date assignment, direction construction, and exact loop order.
+> 
+> 7. **MEDIUM — `docs/trials/trial_02_preregistration.md:101` — P2 has two boundary ambiguities.**  
+>    “After 23:59” could allow a fill exactly at 23:59, contrary to §1. It also does not say when the decision-time and execution-time `sl_dist` gates are rerun.  
+>    **Fix:** use `fill_ts >= 23:59:00 → dropped` and freeze both gate times.
+> 
+> 8. **MEDIUM — `docs/trials/trial_02_preregistration.md:103` — P4 seed is not fully reproducible.**  
+>    `day_index = UTC day number` lacks an epoch/formula; p95 quantile convention is also unstated.  
+>    **Fix:** define, for example, `floor(unix_ms/86_400_000)` and the percentile method.
+> 
+> 9. **MEDIUM — `docs/trials/trial_02_preregistration.md:30,47-48` — Missing-day policy departs from Q4.**  
+>    Q4 required any incomplete daily input to be data-invalid. Draft accepts days with at least 2/3 of minutes while calling warm-up days “complete.”  
+>    **Fix:** adopt strict completeness or record and justify the deliberate 2/3 override.
+> 
+> 10. **MEDIUM — `docs/trials/trial_02_preregistration.md:87,132-135` — Power classification can conflict.**  
+>     G3 G0 failure is automatically called “검정력 부족,” while §7 reserves that label for MDE > 20 bps.  
+>     **Fix:** state whether G0 failure overrides the MDE taxonomy or how both labels combine.
+> 
+> 11. **LOW — `docs/trials/trial_02_preregistration.md:33` — Q4’s prior-below crossing predicate is omitted.**  
+>     `high ≥ U`/`low ≤ D` is deterministic and normally equivalent for the first touch because `O_d` starts inside fixed bands, but parity is incomplete.  
+>     **Fix:** add the predicate or state the equivalence deliberately.
+> 
+> 12. **LOW — `docs/trials/trial_02_preregistration.md:50,55-56,169` — Runtime conventions remain partially deferred.**  
+>     Exact filter snapshot, price/quantity rounding, bracket selection, bootstrap child mapping, and quantile conventions are not frozen.  
+>     **Fix:** list them in the mandatory pre-PnL registry row.
+> 
+> ## Q1 — Planned vs done
+> 
+> Not every Q4 pre-commit was implemented.
+> 
+> - Cross predicate omitted: no stated deviation; practically equivalent under stated invariants.
+> - Gap/retrace entry reference omitted: no reason; does not hold.
+> - `[0.30%,5.00%] → [0.30%,2.00%]`: deliberate user override; reason holds.
+> - Any-incomplete-day → 2/3 threshold: precedent is cited, but the deviation is not acknowledged; reason insufficient.
+> - Funding excludes 00:00: deliberate because positions close at 23:59; reason holds.
+> - `N_stat=1,000` rescaling omitted: ops log says fixed sizing capital is “the same meaning”; mathematically false for raw flat/daily PnL.
+> - P4 spawned streams → per-day composite seeds: deliberate `#22` choice; acceptable after defining `day_index`.
+> - Kill-switch moved from backtest recommendation to forward G-F: explicit deviation; reason holds, but final verdict must include G-F.
+> - Liquidation chronology: incomplete, without stated reason.
+> - Runtime normalization: partly deferred, without all required rules.
+> 
+> All other Q4 items are substantially represented.
+> 
+> ## Q2 — Numbers or rules
+> 
+> No literal TBD remains, but the draft is not ambiguity-free. Key ambiguous lines:
+> 
+> - Line 36: “다음 1m 봉 mark 시가 … 띠 너머 갭이면 그 시가에 체결.”
+> - Line 100: “일별 슬롯 수 벡터 … 적격 일 위에 무작위 순열로 배치.”
+> - Line 101: “지연된 체결이 23:59:00 이후면.”
+> - Line 103: “day_index = UTC 일 번호.”
+> - Lines 50-51 versus 90-91: variable execution notional versus “fixed-notional” PnL.
+> - Lines 92/108/130: G-F exists, final judgment follows forward, but ACCEPT does not list G-F.
+> 
+> ## Q3 — Look-ahead/leakage
+> 
+> - `O_d`: clean; 00:00 mark open is known immediately.
+> - `R_{d−1}`: clean; only prior closed UTC-day bars.
+> - Median: clean; `d−1` is tested against `d−21…d−2`.
+> - Warm-up: temporally clean; no warm-up trading. Completeness policy needs reconciliation.
+> - P2: no inherent leakage if execution occurs only at the delayed bar; gate timing and 23:59 equality need freezing.
+> - P4: clean; it uses only `O_d`, prior range, and tick information. Seed indexing is incomplete.
+> - P1: full-sample `(sl_dist,h)` resampling is legitimate for a retrospective placebo, not a deployable strategy. Its daily placement algorithm remains underdefined.
+> - Canonical P1 daily placement does not leak price outcomes merely by checking endpoint availability, but its eligible-date universe must be fixed.
+> 
+> ## Q4 — Gate/verdict logic
+> 
+> - Arm A judgment subject: consistent.
+> - A/B reported, not gated: consistent.
+> - Survival liquidation → REJECT: consistent in intent.
+> - G3 on realized `n`: consistent for pass/fail; failure-class label conflicts with MDE §7.
+> - P1/P4 unevaluable → DISCARD: consistent.
+> - Undefined/conflicting paths:
+>   - G-B timing: before versus after G3.
+>   - G3 pass followed by G-F failure.
+>   - Forward zero trades, missing data, or kill-switch activation.
+>   - Whether “ACCEPT after G3” means immediately after G3 or only after forward completion.
+> 
+> ## Q5 — P1 and P4
+> 
+> - **P1:** not yet well-posed. The null concept is clear, but date eligibility and slot assignment admit multiple implementations.
+> - **P4:** mathematical draw and null interpretation are well-posed. Full determinism still requires the `day_index` formula and percentile convention.
+> 
+> ## Q6 — Four user decisions
+> 
+> 1. **N**
+>    - N=2: α=0.025, 97.5% CI; easier threshold, but the multiplicity-reset argument is contestable.
+>    - N=4: α=0.0125, 98.75% CI and four-attempt SR*; more conservative and aligned with cumulative counting.
+> 
+> 2. **A/B role**
+>    - Report-only B: clean Arm A hypothesis; B cannot rescue an A failure.
+>    - B activation candidate: requires B-specific gates, OOS/forward policy, acceptance rule, and likely revised multiplicity.
+> 
+> 3. **TP**
+>    - 2R: preserves parity and caps rare extreme winners.
+>    - No TP: lets trail/time exit express continuation, increasing right-tail and duration exposure.
+> 
+> 4. **OOS split**
+>    - ~85 days: preserves longer IS but has high G0-failure risk.
+>    - ~175 days from 2026-04-01: improves OOS power but shortens IS and changes the frozen split before anchoring.
+> 
+> ## Q7 — Additional skeptical objections and registry timing
+> 
+> Additional objections:
+> 
+> - A new, different signal family does not normally justify resetting cumulative multiplicity; closure of Trial #1 prevents reuse but does not erase prior attempts.
+> - UTC midnight specificity is not challenged by any placebo; P4 randomizes distance, not daily anchor time.
+> - Mark-price fills are not directly executable market prices; the 2 bps model must be defended as sufficient execution approximation.
+> - P1 randomizes regime/date exposure as well as timing, so its null is not perfectly exposure-conditional.
+> - The short OOS is knowingly likely to answer “underpowered” rather than test G3.
+> 
+> Record **now, before anchoring**:
+> 
+> - Four user decisions.
+> - Findings 1–10: fill, ledgers, liquidation, gate order, final verdict, P1/P2/P4, missing-day policy, power labels.
+> - Final document hash, parameter hash, Drive `createdTime`, and Trial #1 OOS closure.
+> 
+> Record **at code time, before any real-data PnL**:
+> 
+> - TIME_EXIT engine path and enum.
+> - Fixed-sizing-equity/statistical-ledger implementation.
+> - Exact exchange-filter snapshot, rounding, bracket, and fee inputs.
+> - Seed-child/statistic mapping and percentile method.
+> - Canonical subprocess/CLI paths, artifact schema, commit/push evidence.
+> - Tests for the four §9 invariants and liquidation/funding chronology.
+> 
+> VERDICT: FIX-FIRST — blockers: findings 1–6, plus deterministic resolution of 7–10.
+> 
+> Codex session ID: 01a0d2a0-fcb9-7b60-a5d0-7cc50a5fff11
+> Resume in Codex: codex resume 01a0d2a0-fcb9-7b60-a5d0-7cc50a5fff11
