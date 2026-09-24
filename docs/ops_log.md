@@ -5054,3 +5054,35 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d38f-2937-7d13-952d-468860c25eb5
 > Resume in Codex: codex resume 01a0d38f-2937-7d13-952d-468860c25eb5
+
+## 2026-09-24 — 2d·2e 설계 r5 재확인(Codex task-mufk4l7w-xcyeze **FIX-PLAN-FIRST**) → 설계 r6
+- #3·C5 CLOSED · 새 고정 2건 → ✅ 동의 → C19(출처 품질 규칙 · mark-only 중단은 REST에만) · C20(08/16 격자 밖 펀딩 → 중단).
+
+### 설계 r6 변경
+> # 2d/2e design r6 — two pins (Codex r5)
+> 
+> C19 Source-quality rules, per aligned minute in range:
+>     - Archive: a row that is not a complete usable bar (any mark or kline field not `ok`, or missing) is simply NOT USED → the
+>       minute goes to REST fill. Archive mark-without-kline is reported, never used, never a stop.
+>     - REST (fill minutes only): a row PRESENT in `klines` or `markPriceKlines` with any non-`ok` field → STOP (malformed exchange
+>       response is not "absence"). Mark row ok + kline row absent → STOP (mark-only; C12's mark-only rule applies ONLY here).
+>       Mark row absent → minute missing (day invalid under C2), whatever the archive had.
+> C20 Funding events must lie on the 8h grid: every validated event's bucket must start at 00:00, 08:00 or 16:00 UTC. Any validated
+>     event at another time → STOP (the preregistration §1 funding row covers only 08:00/16:00 while holding; 00:00 is never held
+>     because every position exits at 23:59). Replay therefore can only ever settle 08:00/16:00 events; 00:00 events reach replay but
+>     no position is open then (assert in the strategy run: no FundingSettled at 00:00).
+
+### Codex 원문(verbatim · task-mufk4l7w-xcyeze)
+> **r5 closes the two r4 findings in the design.** C17 fetches REST whenever the archive lacks a complete usable bar and keeps each minute’s bar within one source. C18 checks raw funding bucket cardinality before exclusion and sends only validated events to replay.
+> 
+> Two verdict-relevant rules still need to be pinned:
+> 
+> - **Archive mark-only outcome:** C17 says an archive mark without a kline becomes a missing minute if REST has no mark, while the retained C12 rule says mark-only minutes stop the run. Specify whether C12 applies only to REST fill pairs. Also state whether a REST mark row with non-`ok` fields counts as absent or causes a stop. [C12](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4998) · [C17](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:5025)
+> - **Funding outside 08:00/16:00:** C18 validates buckets at any time and puts every validated event into the replay input. A 12:00 event would therefore settle during an open position, although the preregistered funding rule specifies 08:00 and 16:00. Specify whether such an event stops the run or is settled, and align the preregistration if settlement is intended. [C18](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:5033) · [preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:51)
+> 
+> Read-only design review; no `var/` or market data accessed.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0d390-d5c5-78c2-9522-a89dc6f38776
+> Resume in Codex: codex resume 01a0d390-d5c5-78c2-9522-a89dc6f38776
