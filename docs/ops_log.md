@@ -5015,3 +5015,42 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d38c-b738-7cb1-b52b-7fd50f4970a7
 > Resume in Codex: codex resume 01a0d38c-b738-7cb1-b52b-7fd50f4970a7
+
+## 2026-09-24 — 2d·2e 설계 r4 재확인(Codex task-mufk28j6-yh83k0 **FIX-PLAN-FIRST**) → 설계 r5
+- #2 CLOSED · #3 PARTIAL(archive mark 있음 + kline 없음 경로) · C5 PARTIAL(버킷 카디널리티) → ✅ 동의 → C17(분마다 출처 하나 · 혼합 없음) · C18(버킷 규칙).
+
+### 설계 r5 변경
+> # 2d/2e design r5 — fill ranges and funding buckets (Codex r4: #3 PARTIAL, C5 PARTIAL)
+> 
+> C17 (replaces C14 step 2 and C15's source rule) A minute's bar comes WHOLLY from one source — no archive/REST mixing.
+>     "Complete usable archive bar" = exactly one archive row (after exact-duplicate collapse) whose 4 mark fields AND 4 kline OHLC
+>     fields (+ volume fields) are all `ok`. Fill ranges = every aligned minute in range WITHOUT a complete usable archive bar.
+>     For each fill minute the REST pair is used: kline from `klines`, mark from `markPriceKlines`, both `ok` required.
+>     Outcomes per fill minute: both present+ok → REST bar; mark ok but kline absent/non-ok in REST → STOP (mark-only);
+>     mark absent in REST (whatever the archive had) → minute missing (C2 makes its day invalid; the archive's mark-without-kline,
+>     if any, is reported but never used). Tests: archive row with valid mark + empty kline → fetched; REST pair complete → REST bar;
+>     REST mark-only → stop; nothing anywhere → missing.
+> C18 (replaces C16's funding clause) Funding bucket = [b, b+60,000) for every minute b that contains ≥1 raw funding record (any time
+>     of day). Raw cardinality is counted over ALL records in the bucket (ok or malformed) BEFORE any exclusion:
+>     - 1 record, ok → one funding event;
+>     - ≥2 records, all byte-identical (same fundingTime, rate, mark strings) → collapse to one event (reported);
+>     - ≥2 records otherwise (different timestamps or values in one minute) → STOP;
+>     - any record in the bucket not ok (rate or mark empty/unparseable/non-finite) → STOP.
+>     `funding.json` = exactly the validated events (one per bucket, the record's own fundingTime/rate/mark). Replay settles only
+>     these. Window day d is A-valid only if the buckets starting at d 08:00 and d 16:00 each yield one event (a bucket with no
+>     record → day invalid, missing_funding_08/16).
+> Tests: each bucket case above; replay receives only validated events.
+
+### Codex 원문(verbatim · task-mufk28j6-yh83k0)
+> | Item | r4 status | Finding |
+> |---|---|---|
+> | #2 Exact UTC mark grid | **CLOSED in the design** | Audit and build use the same raw capture; differing duplicate bars stop, and C2 checks the prepared grid. |
+> | #3 Mark availability | **PARTIAL** | [C14](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4982) does not fetch REST when an archive row has valid mark fields but lacks kline fields. [C15](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4991) then calls for a stop if no kline exists *in any source*, although REST was never checked. Define fill ranges using complete usable archive bars, and pin whether an archive kline may pair with a REST mark. |
+> | C5 Funding | **PARTIAL** | [C16](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4995) counts `ok` records but gives no outcome for two records at different timestamps in one boundary bucket, or one `ok` plus one malformed record. [C15](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4993) still puts raw records into `funding.json`; [replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:77) settles every record it encounters. Check bucket cardinality before excluding malformed values, and specify exactly which validated events reach replay. |
+> 
+> Add synthetic cases for those archive fallback and funding bucket combinations. This was a read-only design review; I accessed neither `var/` nor market data.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0d38f-2937-7d13-952d-468860c25eb5
+> Resume in Codex: codex resume 01a0d38f-2937-7d13-952d-468860c25eb5
