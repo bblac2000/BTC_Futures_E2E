@@ -3108,3 +3108,435 @@ IS 트레이드 표본은 사실상 **2024년 9~12개월**이다(트레이드당
 - **판정: swap 파일 만들지 않는다**(레지스트리 #29 · TODO 5q 종결). 재검토 조건: 봇에 전략이 붙어 상주 메모리가 커질 때 · E2E quality 피크 증가 시.
 - 정리: 호스트 임시 스크립트 `var/mem/sampler.sh` 삭제(로그는 보존) · transient 유닛·타이머는 `--collect`로 자동 정리됨(유닛 0·타이머 0·영구 유닛 파일 0) · 로컬 예약 작업도 남아 있지 않다.
   저장소의 `scripts/vps_memory_sampler.sh`(ssh 래퍼)는 다음 측정을 위해 남긴다.
+
+
+## 2026-09-24 — 트라이얼 #2 사전등록 초안 **사전 검토(before-pass)** · advisor + Codex(task-muet5ijx-7eh6g8) · 둘 다 PROCEED
+상시 규칙(CLAUDE.md 2026-09-24): 큰 작업 전후로 advisor + Codex 심층 검토 · 원문 기록 · 항목별 동의/이견.
+Codex 제약: 코드·문서만 읽음(시장 데이터·var/·OOS 열람 금지 — 트라이얼 #2 값은 데이터를 보기 전에 정한다).
+
+### Claude Code 항목별 입장(동의 ✅ · 이견 ⚠️ · 사용자 결정 🔶)
+| 쟁점 | advisor | Codex | Claude Code 입장(초안 반영) |
+|---|---|---|---|
+| N 카운터 | 누적 N = 4(α 0.0125)가 헌법 기본 · N = 2면 "N 무증가" 근거 필요 | N = 2는 결정 수준에서 충족 | 🔶 **사용자 결정 N = 2를 따른다** + 초안에 "N 무증가" 근거(다른 신호 가족 · #1 영구 종결 · #1 신호 재사용 없음) 명시 · 보고서 맨 앞에 다시 올림 |
+| 판정 주체 · A/B | B ⊂ A → A−B = (n_e/n)(μ_e−μ_c) 항등식 명시 · A/B는 부호와 함께 보고(게이트 아님) · 팔별 판정 | A가 1차 가설 · B는 "control"이 아니라 수축 필터 정책/하위집단 · A/B를 ACCEPT 게이트로 두면 필터 실패로 멀쩡한 돌파가 기각됨 | ✅ 둘 다 동의 — **Arm A = 판정 주체**, Arm B = 사전지정 하위집단 정책(보고 + 활성화 후보 아님) · A/B 97.5% CI는 **계산·보고**(일별 정책 PnL 차이 · 비활성일 0) · ⚠️ 사용자 문언("gates … A/B paired 97.5% CI")과 다르므로 🔶 확인 요청 |
+| OOS 검정력 | ~85일 → n < 48 가능 · 실현 n으로 평가, 미달은 검정력 부족 | G0는 면제 못 함 | ✅ 창은 사용자 지정 그대로 · **G3는 실현 n으로 G0 규칙 적용 · 미달 = "검정력 부족"(통과 아님)** 사전확약 |
+| 청산 0 생존 게이트 | 블랙스완 게이트 — 문언 그대로 사전확약 · Arm A IS에 적용 | Arm A의 IS·OOS·전진 | ✅ Codex 범위(A의 IS·OOS·전진) · B·플라시보는 보고 |
+| TP | SL=시가·k 0.5면 2R은 거의 안 닿음 → 없음 또는 2R | +2R | ✅ **+2R 유지**(사용자 문언에 TP 있음 · #1 관례) + "드물게 발동" 공시 |
+| 트레일 거리 | ATR_15m×1.0(진입 때 고정) | **1R**(일 스케일) | ⚠️ advisor에 이견 — SL이 일 스케일(k·전일 범위)인데 트레일을 15m ATR로 두면 "ATR 스케일 ≠ 실행 스케일" 실패(learnings)를 되풀이 → **Codex 안: +1R 무장 · 거리 1R** |
+| 마지막 진입 | 판단 봉 ≤ 21:59:59(보유 ≥ 2h) | 진입이 23:59:00 전이면 허용 | ⚠️ 자의 파라미터를 줄이려 **Codex 안**(체결이 23:59:00 전) · 짧은 보유는 보유시간 분포로 보고 |
+| P4 정의 | k ~ U(0,1) · SeedSequence([20260924,4,d,day]) | 틱 오프셋 q ~ U{1틱…⌊R/틱⌋} → k* = q/R · 노출 정합 아님(수준 특이성 귀무) · 190/200 미만이면 폐기 | ✅ **Codex 틱 격자 + advisor 시드 규칙(#22 방식 일별 시드)** · "무엇을 검정하는가"(k 선택 대 무작위 k — 기준점·범위 척도는 남는다) 명시 · 평가 불가 기준 190/200 |
+| 고정 명목 | 사이징 자본 1,000 고정(엔진 플래그) · 지갑은 누적 보고 | 실행 원장과 통계 원장 분리 | ✅ 둘은 같은 뜻 — **B2 사이징 자본 매 진입 1,000 USDT 고정**(복리 없음) · 통계 = 트레이드당 bps |
+| 시간 청산 경로 | 엔진 exit 훅 + ExitReason.TIME_EXIT(구현 규약 행) | 23:59:00 첫 mark | ✅ 초안은 규칙만 · 구현은 코드 단계에서 규약 행 |
+| 첫 교차 소비 | 막혀도 소비 · 청산 뒤 반대 방향 허용 | 같음 + 동시 교차 = 둘 다 소비(conflict) | ✅ |
+| 수축 중앙값 | 최근 20일 | R[d−1] < median(R[d−21]…R[d−2]) · 짝수 = 가운데 둘 평균 · 21일 워밍업 | ✅ Codex 정의(검정 대상 날 제외) |
+| 봉 안 순서 | 청산 > SL > TP(#19 ⑦) | 청산 → SL/트레일 → TP · 펀딩 후 청산가 재계산 | ✅ |
+| P1 일 단위 | (h 최대 1,440분에서도 배치 가능) | 일별 0/1/2 개수 벡터를 적격 일에 섞고 분 무작위 · 방향/일 1회 · 23:59 전 청산 | ✅ Codex 적응안(트라이얼 #1 (a)~(f) 유지 + 일 단위 제약) |
+| 킬스위치 | — | 생존 게이트로 0회 권고 | ⚠️ 백테스트는 킬스위치를 모사하지 않음 → **보고 불가 공시 · 전진 G-F에서 0회 확인**(생존 게이트는 사용자 결정대로 청산 0) |
+| sl_dist 띠 | 사용자 [0.30%, 2.00%] | [0.30%, 5.00%] 권고 | ✅ **사용자 값 [0.30%, 2.00%]** · 상한 초과 비율 보고 |
+| 비용 문턱 | R 50~200 bps 대비 비용 8~30% | 손익분기 이동 14 bps + 펀딩 · θ 포함 24 bps · 넓은 띠만으로 L4를 피하지 못함 | ✅ 둘 다 초안 §2에 반영 · 보유시간 분포 필수 보고 |
+| 증류 | 24/7 시장엔 세션 시가가 없다 — 기준점의 정보성은 가설의 일부 | #74와 차이를 식·불변식으로 | ✅ §0·§9에 식과 테스트할 불변식 4개 |
+
+### advisor 원문(verbatim)
+> You're at the trial #2 before-pass. CLAUDE.md rule and registry #30 are committed (98c8199, unpushed); Codex is running. This is the advisor half. Wait for Codex, log both verbatim with per-point agree/disagree, then draft — don't start the draft before both land.
+> 
+> **Findings**
+> 
+> 1. **HIGH — N counter.** You wrote N = 2, α = 0.025. Constitution §1: "트라이얼을 추가하면 N이 오르고 임계가 올라간다 — 'N 무증가'를 주장하려면 그 근거를 적는다." Trial #1 spent 2 hypotheses. Cumulative N = 4 → α = 0.0125, CI 99.375% two-sided… no: Bonferroni α = 0.05/4 = 0.0125 → CI level 0.9875, and DSR's SR* over 4 SR̂s (trial #1's are −0.238/−0.235). If the user wants N = 2, the draft must state the "N 무증가" justification (different signal family; trial #1 definitively closed). This changes every CI and G-B — user decides before drafting; flag it first in your report.
+> 
+> 2. **HIGH — Arm roles are inverted vs trial #1 and B ⊂ A.** B's trades are *identical* to A's on compression days. So A−B = (n_e/n)(μ_e − μ_c): the "A/B" statistic is just a scaled expansion-vs-compression contrast. State that identity in the draft. Then pre-declare: (a) which arm is the judgment subject — recommend **arm-level verdicts, both arms run every gate, ACCEPT = any arm passes all, A activates if both pass, B only if A fails and B passes** (same shape as the T-S2 decision you were shown); (b) the A/B row is *reported with sign*, not a gate requiring A > B (that would test "the filter hurts").
+> 
+> 3. **HIGH — OOS is underpowered as specified.** OOS = 2026-07-01 → anchor−1 ≈ 85 days. At ≤2 trades/day and realistic ~0.4/day → ~35 trades < 48 (constitution: n ≥ 30(1+4ρ̄), "T1 계열은 창 ≥ 150일"). Either pre-commit "G3 evaluated on realized n; n < 48 → G3 = power shortfall, not effect-absent" or move the split (e.g. IS → 2026-03-31, OOS from 2026-04-01 ≈ 175 days). User's call; the draft cannot leave it implicit.
+> 
+> 4. **MEDIUM — Zero-liquidation gate is a black-swan gate.** At 30x, liq_dist ≈ 2.9%; with sl_dist cap 2.0%, B2 drops to L≈28 (2.0×1.5 = 3.0 > 2.88). Gap SL→liq ≈ 0.9–1.0%. Trial #1 forensics: median liquidation-bar range 0.49%, max 2.49%. On 1m-bar priority (liq > SL, #19 ⑦) one flash bar wider than the gap books a liquidation and REJECTs the trial. That's what the user asked for — pre-commit it verbatim, and pre-commit that it applies to **Arm A's IS run** (report B's count).
+> 
+> 5. **MEDIUM — Time exit needs a new engine path.** `engine_replay` has no strategy-driven exit hook, and `ExitReason` has no TIME_EXIT. Draft states the rule; implementation convention (registry row before P&L): strategy returns an exit request → `close_now(ref_mark = mark_open of the 23:59 bar, ts = 23:59:00, reason = TIME_EXIT)`. Adding the enum value is the same benign shape as TRAIL. Default path unchanged.
+> 
+> 6. **MEDIUM — Fixed notional needs an engine flag.** `replay()` compounds via `Engine.wallet`. Pre-commit: sizing equity fixed at 1,000 USDT per entry (`Engine(sizing_equity=…)`, default None = current behaviour); wallet still accumulates for the flat benchmark and final-wallet report. Same pattern as P1 in #19 ④.
+> 
+> 7. **MEDIUM — P4 as worded is a parameter null, not an information null.** "Random k per day from the prior 24h range, same band geometry" tests "is k = chosen better than k = random" — the anchor (today's open) and the range scale stay informative. Trial #1's P4 randomised the *level's information*. State plainly what this P4 tests. Propose exact rule: k_d,day ~ U(0, 1) via `SeedSequence([20260924, 4, d, day_index])`, symmetric band, same SL-at-open rule (sl_dist moves with k_d), same floor/cap. If the user meant "level ~ U[low_prev, high_prev] as a price, band = open ± |level−open|", say so — nearly equivalent, but pick one.
+> 
+> 8. **MEDIUM — TP geometry.** With k = 0.5 and SL = open: entry ≈ open+0.5R, sl_dist = 0.5R, trail arms at open+1.0R, TP = 2R sits at open+1.5R — today must exceed 1.5× yesterday's range. TP will almost never fire; exits will be trail/time/SL. Either accept 2R as the trial-#1 convention (mostly decorative, say so) or pre-commit **no TP** as the purer "continues through the day" test. User chooses.
+> 
+> 9. **LOW — "First cross per direction" when not flat.** Long open, short band crossed → skipped (one_position). Is the day's short *consumed*? Pre-commit: yes, consumed (stricter, deterministic, no "wait for a convenient cross"). Also pre-commit: after a stop-out, the other direction's first cross is eligible (reversal allowed).
+> 
+> 10. **LOW — 24/7 market has no session open.** The classical ORB premise is overnight-information release at the open. BTC's 00:00 UTC is a funding boundary and the daily-candle roll, not a session. Put one sentence in §0 saying the anchor's information content is part of the hypothesis, not assumed.
+> 
+> **Q1–Q6, short**
+> 
+> - **Q1** Distinct from #74 (1m rolling channel + meta-label) and from Donchian generally: the level is `open ± k·(prior H−L)`, not the prior H/L themselves; no N-bar highest/lowest anywhere (Arm B's 20-day *median of ranges* is a scalar, not a channel). Draft must carry the CLAUDE.md-mandated "how it differs from #74" paragraph. Not on the §7 short-signal list: hold is hours–1 day.
+> - **Q2** A alone answers "does the breakout have edge". A/B (with the identity in #2) answers only "compression days vs expansion days within the same signal". It cannot answer "does the filter add information beyond the day partition" — that would need a different filter.
+> - **Q3** Top invalidators, in order: N miscount (#1), zero-liq black swan (#4), OOS power (#3), look-ahead in "today's open"/20-day median (both are available at 00:00:00 if defined on closed data — say so), late entries with minutes of hold (see cutoff below), P1 placement failures with h up to 1,440 min (~365 slots × ~600 min ≈ 17% occupancy — should place; 10-failure rule stands).
+> - **Q5** R here is 50–200 bps (k·R with BTC daily range 1–4%) vs ~16 bps cost (14 + ~2 funding for 2 boundaries) → cost ≈ 8–30% of R. Breakeven win-rate at 1R loss/2R win ≈ 38% net. Structurally clears L4's failure mode (trial #1 had ~20 bps moves vs 14 bps cost). The floor 0.30% skips low-vol days; the 2.0% cap skips high-vol days — report both skip shares.
+> - **Q6** §8 gaps to close in the draft: expected-n row (say "G0 on realized n only", as #1 did), cost regime tag (copy trial #1 §2), OOS window vs n_eff (#3), N counter (#1), implementation conventions that will need registry rows before P&L (#5, #6, #7, P1 seed derivation).
+> 
+> **Pre-commit table (proposals + source — user confirms or overrides)**
+> 
+> | Field | Proposal | Source |
+> |---|---|---|
+> | Series | mark for open, range, cross, SL/TP/trail/fills (one series, no basis gap) | trial #1 #19 ⑦ analog |
+> | Today's open | mark_open of the 00:00 bar; the 00:00 bar itself is cross-eligible | definitional |
+> | Prior range R | max(mark_high) − min(mark_low) over prior UTC day's closed bars; < 2/3 minutes present → no trade | #19 ⑨ analog |
+> | k | 0.5 | Williams (1999), Crabel (1990); standard 변동성 돌파 default |
+> | Cross | closed 1m bar mark_high ≥ open+k·R (long) / mark_low ≤ open−k·R (short) | hypothesis wording |
+> | Entry | next bar mark_open (engine re-sizes) | #19 ⑦ |
+> | SL | today's UTC open → sl_dist = k·R/entry | classic ORB stop-at-open |
+> | sl_dist band | [0.30%, 2.00%], skip + reason | user |
+> | Trail | arm +1R, dist 1.0×ATR_15m(14) frozen at entry | #21 ⓙⓚ |
+> | TP | user chooses: none, or 2R (#21 ⓙ) | see #8 |
+> | Time exit | close_now at mark_open of 23:59 bar, ts 23:59:00, TIME_EXIT | user |
+> | Last entry | decision bar close ≤ 21:59:59.999 (≥ ~2h min hold) | design; user confirms |
+> | Direction rule | first cross per direction consumed even if skipped; reversal after stop-out allowed | see #9 |
+> | Arm B filter | R_prev < strict median of the 20 most recent complete days' R | user |
+> | Funding | actual history at 08:00/16:00 (00:00 never held) | #19 ⑦ |
+> | Sizing | B2, risk 1%, L ∈ [10,30], **sizing equity fixed 1,000** | #30, L5 |
+> | Skip denominator | first-cross setups passing one_position | #21 analog |
+> | Seeds | P1 20260924; bootstrap (20260924,1); P4 (20260924,4) | #19 ③ pattern |
+> | Survival | Arm A IS liquidations = 0 else REJECT(survival) | user |
+> | Verdict classes | §7 of trial #1 + survival REJECT | trial #1 |
+> 
+> **BEFORE-PASS: PROCEED** — with #1 (N), #2 (arm roles), #3 (OOS split), #8 (TP) as explicit user decisions listed at the top of the draft's report. Everything else is a stated convention.
+
+### Codex 원문(verbatim · task-muet5ijx-7eh6g8)
+> I reviewed only source code and documentation.  
+> I did not open `var/`, market-data files, backtest artifacts, or either trial’s OOS.
+> 
+> ## Numbered findings
+> 
+> 1. **HIGH — Arm B is not a control arm.**  
+>    It is a prespecified subset of Arm A’s days.  
+>    Calling it “control” overstates what the comparison identifies.
+> 
+> 2. **HIGH — Arm A must carry the primary alpha hypothesis.**  
+>    An A/B gate would otherwise reject a profitable breakout merely because the contraction filter adds nothing.  
+>    That would conflate breakout alpha with filter efficacy.
+> 
+> 3. **HIGH — P4 is not yet dimensionally defined.**  
+>    A scalar `k` cannot literally be drawn “from a price range.”  
+>    The draft must define either a random offset or a dimensionless distribution for `k`.
+> 
+> 4. **HIGH — “Fixed notional” and B2 sizing need reconciliation.**  
+>    B2 produces risk-scaled execution notional.  
+>    L5 requires equal statistical weight without compounding.  
+>    These should be separate execution and statistical ledgers.
+> 
+> 5. **HIGH — 1m intrabar chronology can decide survival.**  
+>    Cross, SL, trail, TP, funding, and liquidation may share a bar.  
+>    The ordering must be conservative and frozen before implementation.
+> 
+> 6. **MEDIUM — Trial #1’s paired CI is not trade-paired.**  
+>    It resamples the same UTC dates, then subtracts separate trade-weighted means.  
+>    Empty B days disappear from B’s denominator.  
+>    See [stats.py](/home/cms/project/BTC_Futures_E2E/backtest/stats.py:72).
+> 
+> 7. **MEDIUM — Trial #1’s P1 cannot be reused unchanged.**  
+>    Global random-minute placement does not preserve the daily signal cap, UTC close censoring, or daily funding geometry.
+> 
+> 8. **MEDIUM — P4 can be well-defined but is not exposure-matched.**  
+>    Random offsets alter crossing frequency and holding time.  
+>    Treat P4 only as a level-specificity null; P1 remains the exposure null.
+> 
+> 9. **MEDIUM — The 1m implementation remains exposed to the short-signal finding.**  
+>    Daily bands are structurally slower, but post-entry continuation can still end within minutes.  
+>    Realized holding time must be reported; it cannot be assumed.
+> 
+> 10. **LOW — The Trial #1 evaluator is not a Trial #2 evaluator.**  
+>     It hardcodes Trial #1’s module, thresholds, and A−B semantics.  
+>     See [evaluate.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate.py:47).
+> 
+> ## Q1 — Scope and overlap
+> 
+> The hypothesis is materially distinct from Donchian #74, but it is still part of the broader breakout/continuation family.
+> 
+> The defensible distinction is mechanical:
+> 
+> \[
+> R_{d-1}=\max(H_{d-1})-\min(L_{d-1})
+> \]
+> 
+> \[
+> U_d=O_d+kR_{d-1},\qquad D_d=O_d-kR_{d-1}
+> \]
+> 
+> Both levels are fixed at 00:00 UTC and remain unchanged through day \(d\).
+> 
+> The draft must state:
+> 
+> - `O_d` is the 00:00 UTC 1m mark-bar open.
+> - `R_{d-1}` uses only fully closed mark bars from the prior UTC day.
+> - Levels never use a rolling highest-high or lowest-low.
+> - Levels do not update intraday.
+> - There is no channel lookback or Donchian function/import.
+> - There is no logistic meta-label or secondary classifier.
+> - There are at most two signal opportunities per day: first cross per direction.
+> - No Trial #1 S/R, swing, VP, rejection, or 4h TSMOM feature is used.
+> - The 1m bar is crossing/execution resolution; the level scale is daily.
+> - E2E #74 remains prior negative evidence for breakout continuation generally.
+> 
+> Required tests:
+> 
+> - Two histories with equal `O_d` and `R_{d-1}` must produce identical bands.
+> - Changing today’s running high/low must not move either band.
+> - No rolling-extrema channel may exist in the code path.
+> - Each direction’s first cross must permanently consume that direction for the UTC day.
+> 
+> That makes the distinction testable and complies with the repository’s Donchian prohibition in [CLAUDE.md](/home/cms/project/BTC_Futures_E2E/CLAUDE.md:38).
+> 
+> ## Q2 — What A/B can answer
+> 
+> Arm A should be the primary hypothesis:
+> 
+> > Does the daily fixed-band breakout possess positive gross and net post-entry continuation edge?
+> 
+> Arm B should be renamed the **contraction-filter policy** or **prespecified subgroup**, not control.
+> 
+> A/B can answer:
+> 
+> - Whether deploying only on contraction-qualified days improves policy-level results.
+> - Whether qualifying days have different conditional trade quality.
+> - Whether excluding non-contraction days helps or hurts.
+> 
+> It cannot answer:
+> 
+> - Whether the breakout itself has alpha.
+> - Whether contraction causes the difference.
+> - Whether B independently reproduces A.
+> - Whether fewer B trades represent superior timing rather than reduced exposure.
+> 
+> Recommended contrasts:
+> 
+> 1. **Primary:** Arm A versus flat and P1.
+> 2. **Policy contrast:** daily fixed-notional PnL  
+>    `B_day − A_day`, with zero on days B is inactive.
+> 3. **Filter-enrichment diagnostic:**  
+>    B trades versus `C = A trades on non-contraction days`.
+> 
+> Use the same resampled UTC dates for the CI.
+> 
+> Do not call this trade pairing.
+> 
+> The Trial #1 statistic subtracts two separately normalized trade means.  
+> That is not inherently biased for those two per-trade estimands, but:
+> 
+> - B’s selected dates receive different weights.
+> - Empty B days vanish.
+> - A and B overlap.
+> - The difference is not a treatment effect.
+> - Sparse B trading widens and destabilizes the CI.
+> 
+> The mandatory 97.5% A/B CI should therefore be secondary.
+> 
+> If it remains an overall ACCEPT gate, the registered hypothesis must explicitly be a conjunction:
+> 
+> > Arm A has alpha, and the contraction-only policy improves the prespecified A/B estimand.
+> 
+> Otherwise a valid Arm A breakout could be rejected for an unrelated filter failure.
+> 
+> ## Q3 — Main invalidation risks
+> 
+> 1. **Today’s open look-ahead**  
+>    Use only the 00:00 mark open known at that instant.  
+>    Never derive it from a completed daily candle.
+> 
+> 2. **Prior-range look-ahead**  
+>    Use exactly the fully closed prior UTC day.  
+>    No current-day extrema.
+> 
+> 3. **Median timing**  
+>    Define whether the candidate prior day is included.  
+>    I recommend comparing `R[d−1]` with the median of `R[d−21]…R[d−2]`.
+> 
+> 4. **UTC boundary artifact**  
+>    Levels reset abruptly at midnight and all positions close daily.  
+>    This is part of the strategy, not a neutral bookkeeping choice.
+> 
+> 5. **Late signals**  
+>    A signal whose scheduled entry is 23:59 has no holding interval.  
+>    It must be skipped by rule.
+> 
+> 6. **Funding boundaries**  
+>    Entry/exit ordering at 00:00, 08:00, and 16:00 must be fixed.  
+>    P1 must preserve comparable boundary exposure.
+> 
+> 7. **Intrabar ambiguity**  
+>    A 1m bar can touch liquidation, SL, trail, and TP.  
+>    Conservative ordering is necessary.
+> 
+> 8. **Liquidation after funding**  
+>    Funding can reduce isolated collateral.  
+>    Recalculate effective liquidation geometry after funding.
+> 
+> 9. **Trade-count power**  
+>    The ceiling is only two signals per day.  
+>    Actual crossings, busy-position skips, and B filtering can make B underpowered.
+> 
+> 10. **Within-day dependence**  
+>     Two trades on one day are clustered.  
+>     UTC-day block bootstrap is necessary; lag-1 trade autocorrelation alone is insufficient.
+> 
+> 11. **Regime concentration**  
+>     A strong directional period can make long breakouts dominate.  
+>     Report long/short and calendar-year results as diagnostics only.
+> 
+> 12. **Short OOS**  
+>     The OOS period may satisfy calendar length but still fail G0, especially for B.  
+>     G0 may not be waived.
+> 
+> 13. **P4 distribution**  
+>     Uniform random offsets test the registered `k` against arbitrary offsets.  
+>     They do not exposure-match the canonical strategy.
+> 
+> 14. **P1 daily cadence**  
+>     Unrestricted global placement can put trades on too many days or violate the per-direction daily cap.
+> 
+> 15. **Contraction persistence**  
+>     B days may cluster across regimes.  
+>     A paired date bootstrap preserves that clustering but does not remove selection.
+> 
+> 16. **First-cross consumption**  
+>     If a blocked or unsized first cross is silently ignored and a later cross is accepted, the strategy has been retrospectively improved.
+> 
+> ## Q4 — Conventions that must be frozen
+> 
+> | Convention | Recommended pre-commit | Source |
+> |---|---|---|
+> | Price family | Mark 1m OHLC for open, range, crossing, exits, and liquidation | Hypothesis consistency; Trial #1 mark basis |
+> | Daily range | Prior UTC day `00:00…23:59` mark high minus mark low | User hypothesis |
+> | `k` | `0.50`; no sweep | Williams-style volatility-breakout convention |
+> | Daily bands | `O ± 0.5R`; fixed until next UTC midnight | Hypothesis |
+> | Contraction median | Strict `R[d−1] < median(R[d−21]…R[d−2])`; even median = mean of middle two | Recommended; excludes the tested observation |
+> | Warm-up | Require all 21 preceding complete days | Implied by the median definition |
+> | Cross | Long: prior observed mark below U and current bar high reaches/exceeds U; short symmetric | Deterministic OHLC rule |
+> | Signal entry | Next 1m mark open after the cross bar | Registry #19 precedent |
+> | Entry fill | Next mark open plus 2 bps adverse slippage and adverse tick | Registry #7/#19 |
+> | Gap beyond level | Reference `max(U, next_open)` long; `min(D, next_open)` short | Conservative stop-entry treatment |
+> | Last eligible cross | Scheduled entry must be before 23:59:00 | Required by time exit |
+> | SL | UTC open `O_d` | Natural invalidation of an open-relative breakout |
+> | `R` for exits | Absolute distance from adverse entry fill to SL | Registry #21 precedent |
+> | `sl_dist` band | Recommend `[0.30%, 5.00%]`; user must approve | 0.30% cost floor from Trial #1; 5% derived from 10x survival geometry |
+> | TP | Full exit at `+2R` | Trial #1’s fixed fallback |
+> | Trail | Arm at `+1R`; trail distance `1R`; ratchet only; effective next bar | Trial #1 structure, daily-scale adaptation |
+> | Time exit | MARKET at the first mark observation at exactly 23:59:00 UTC | User decision |
+> | Same-bar exit order | Liquidation → SL/trail → TP | Conservative Trial #1 precedent |
+> | Entry-bar exit | No same-bar exit because entry occurs next bar; after entry, apply ordinary priority | Deterministic chronology |
+> | One position | One position total; no pyramiding | Prior-trial engine |
+> | Both directions | Allow sequential long and short on one day only after flat | Matches “first per direction” |
+> | Busy-position cross | Consume the direction and record `position_busy`; do not reuse later crosses | Prevents cherry-picking |
+> | Simultaneous crossings | Skip and consume both directions as `conflict_cross` | Intrabar order unknowable |
+> | Cooldown | No extra minute cooldown; daily direction lock is the cooldown | Strategy structure |
+> | Zero range | If prior range `< 1 tick`, skip the whole day | Doji/division guard |
+> | Missing daily input | Any incomplete open/range/median day is data-invalid, not a no-trade day | Data-integrity rule |
+> | Funding | Actual signed funding at 00/08/16; settle before processing that minute’s exits or new entries | Registry #19 |
+> | Funding-at-entry | A position opened on the boundary minute does not receive/pay that boundary funding | Same ordering |
+> | Statistical notional | `N_stat = 1,000 USDT` per trade; no compounding | Trial #1 starting scale plus L5 |
+> | B2 reference capital | Reset `E_ref = 1,000 USDT`, `risk_pct = 1%` at every entry | Preserves B2 without compounding |
+> | Execution notional | `budget/sl_dist`; statistical PnL later rescaled to `N_stat` | Reconciles B2 with L5 |
+> | Leverage | Highest integer 10–30 passing both registry #5 liquidation gates | Registry #30 |
+> | Runtime normalization | Quantity floor, then MIN_NOTIONAL recheck; runtime tick/step/brackets/fees | Constitution |
+> | Skip denominator | First directional crosses on valid arm-days, before position, SL-band, and sizing gates | Clean opportunity denominator |
+> | Skip reporting | Mutually exclusive first-failure counts: busy, conflict, late, SL-band, B2, normalization, missing input | Auditability |
+> | G0 | Recommend Trial #1 rule: `n≥48` and `n/(1+4·max(ρ̂,0.15))≥30` | Registry #24 |
+> | Bootstrap | UTC calendar-day blocks, empty days retained, 10,000 samples, 97.5% CI | Trial #1 |
+> | Bootstrap seed | Recommend `SeedSequence((20260924,1))`, fixed child numbers by statistic | Registry #24 pattern |
+> | P2 | Delay scheduled entry by exactly +1/+5 bars; keep day’s fixed bands and UTC close; delayed fill defines R | User decision plus registry #21 pattern |
+> | P3 | Reverse direction only; mirror SL/TP/trail around entry using the original R distance | Registry #21 pattern |
+> | P1 seed | `20260924`, PCG64 spawned into 1,000 draw streams | User decision |
+> | P1 daily cadence | Preserve the canonical 0/1/2-trades-per-day count vector, randomly permute it over eligible UTC days, then randomize eligible minutes | Required adaptation |
+> | P1 pairs | Resample `(sl_dist,h)` together; never separately | Trial #1 conventions |
+> | P1 caps | At most one slot per direction/day, no overlap, all exits before 23:59 | Canonical geometry |
+> | P1 failure | 1,000 placement attempts/slot; do not redraw pairs; >10 failed draws = DISCARD | Trial #1 conventions a–f |
+> | P4 draw variable | Draw tick offset `q∼Uniform{1 tick,…,floor(R/tick)}`; set `k*=q/R` | Makes the null dimensionally valid |
+> | P4 geometry | One `k*` per UTC day, shared symmetrically by upper/lower bands; all other rules unchanged | “Same band geometry” |
+> | P4 seed | Recommend `SeedSequence((20260924,4)).spawn(200)[d]`; consume days in UTC order | Registry #22 pattern |
+> | P4 evaluability | User must choose: recommend DISCARD if fewer than 190/200 draws have defined trade means | Prevents selective zero-draw removal |
+> | P4 rejection | Canonical mean net bps `≤` random-level p95 means REJECT | Trial #1 rule |
+> | Survival scope | Canonical Arm A in IS, OOS, and forward; B/placebos reported separately | Arm A is deployable strategy |
+> | Liquidation gate | Count must equal zero; one modeled liquidation = REJECT on survival grounds | User decision |
+> | Liquidation chronology | Bar open beyond liquidation counts immediately; otherwise adverse extreme with liquidation priority | Conservative precedent |
+> | Funding and liquidation | Recompute isolated collateral/liquidation state after every funding settlement | Necessary survival accounting |
+> | Kill-switch gate | Recommend zero activations of registry #11 daily-loss, consecutive-loss, and vanished-position rules | Constitution checklist |
+> | B&H label | Preserve `ACCEPT — 수동(매수보유)을 이기지는 못함` | Trial #1 |
+> | Verdicts | IS PASS only before OOS; ACCEPT after all gates; REJECT with power class; DISCARD for design/data/harness failure | Research protocol |
+> | OOS | Trial #2 only; Trial #1 OOS remains permanently closed; exactly one opening after IS pass | Registry #25 |
+> | Forward | Arm A only, 30 days; intermediate reports show survival/integrity, not performance | Prior protocol |
+> 
+> The two material user choices still requiring explicit approval are:
+> 
+> - Whether `[0.30%, 5.00%]` is the desired SL-distance band.
+> - Whether P4 uses the new `(20260924,4)` namespace or literally reuses `(20260921,4)`.
+> - Whether the A/B CI is secondary or an overall ACCEPT gate.
+> 
+> ## Q5 — Cost hurdle
+> 
+> The arithmetic break-even favorable movement is:
+> 
+> \[
+> 14\text{ bps}+\text{signed funding}
+> \]
+> 
+> If Trial #1’s economic threshold remains `θ = +10 bps`, the practical target is:
+> 
+> \[
+> 24\text{ bps}+\text{signed funding}
+> \]
+> 
+> That is the required post-entry movement.
+> 
+> The distance already traveled from today’s open to the breakout level is not earned by the strategy.
+> 
+> With a simplified `SL = 1R`, `TP = 2R` outcome:
+> 
+> \[
+> E[gross]=(3p-1)R
+> \]
+> 
+> Ignoring funding:
+> 
+> - At `R = 30 bps`, zero-net break-even needs about a 48.9% TP probability.
+> - At `R = 30 bps`, a +10 bps net target needs about 60%.
+> - At `R = 50 bps`, those figures are about 42.7% and 49.3%.
+> 
+> Trails and time exits change those exact probabilities.
+> 
+> A daily-range breakout can plausibly clear 14 bps because its risk and holding horizon are daily-scale.
+> 
+> But plausibility comes from scale only.
+> 
+> False breakouts, late entries, trails, and 23:59 exits can still realize moves below 14 bps.  
+> The design therefore does not escape L4 merely by using a wide band.
+> 
+> ## Q6 — Current checklist failures
+> 
+> The following items are not yet satisfied:
+> 
+> - Non-overlap is not yet written as equations and executable invariants.
+> - G0 planning values and B’s underpowered outcome handling are not frozen.
+> - The 14 bps cost model needs its Trial #2 regime label.
+> - P1 is registered conceptually but not defined for daily cadence.
+> - P4 is registered but not dimensionally or statistically complete.
+> - The Trial #2 Drive `createdTime` anchor does not yet exist.
+> - Fixed-notional accounting is still ambiguous.
+> - Cross, entry, exits, simultaneous events, and late signals are unspecified.
+> - Median membership and missing-day handling are unspecified.
+> - Kill-switch survival treatment is unspecified.
+> - A/B’s estimand, sign, and gate status are unspecified.
+> - Verdict thresholds and MDE classes have not been copied into Trial #2.
+> - The canonical subprocess strategy and evaluator paths do not exist yet.
+> - The evaluator must be committed and pushed before any run.
+> - Trial #1 OOS closure must be stated explicitly in the Trial #2 draft.
+> 
+> Already satisfied at the decision level:
+> 
+> - IS/OOS calendar windows.
+> - N = 2 and Bonferroni α = 0.025.
+> - Flat and P1 benchmark requirements.
+> - B&H reporting and label.
+> - P2/P3/P4 families.
+> - Fixed-notional principle.
+> - 10–30x leverage policy.
+> - Zero-liquidation survival rule.
+> - Thirty-day forward-paper requirement.
+> 
+> BEFORE-PASS: PROCEED
+> 
+> Codex session ID: 01a0d0dd-883f-7d10-ba2c-0ca819413881
+> Resume in Codex: codex resume 01a0d0dd-883f-7d10-ba2c-0ca819413881
