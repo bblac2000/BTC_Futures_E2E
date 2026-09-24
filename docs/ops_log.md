@@ -4357,3 +4357,30 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d2d1-1095-7220-817a-c8d81d3ef7da
 > Resume in Codex: codex resume 01a0d2d1-1095-7220-817a-c8d81d3ef7da
+
+
+## 2026-09-24 — 트라이얼 #2 r8(§12-12 SR* 규칙) **Codex 좁은 확인**(task-mufdq43y-n8y7fe) **MERGE**
+- 사용자 결정(레지스트리 #34): SR*는 항상 정의된 SR̂ 집합으로 expected_max_sr(n_trials = 4) · 정의된 값 < 2개면 G-B 실패.
+- Codex: 모든 조합에서 단일값 · §3-1과 모순 없음 · `expected_max_sr`는 ddof = 1(문서와 일치) · "2개 미만" 가드는 트라이얼 #1 두 값이 고정이라 도달 불가지만 무해 · 비차단 1건("네 실현 SR̂" 요약 문구).
+- Claude Code: ✅ 비차단 문구 4곳을 "정의된 SR̂(최대 네 개)"로 고침(규칙 변경 없음) → 이것이 앵커할 최종 r8.
+
+### Codex 원문(verbatim · task-mufdq43y-n8y7fe)
+> 1. **NON-BLOCKING** — Stale summary wording remains in §0, the G-B disclosure, and §12-1 (“네 실현 SR̂” / “네 값”). It should ideally say “up to four defined SR̂ values.” The operative G-B rule and §12-12 are nevertheless explicit, so implementations should not diverge.
+> 
+> Q1. Yes. With the two pinned trial-#1 constants, the defined subset always contains at least two values:
+> 
+> - A/B defined: use four values.
+> - A defined, B undefined: use three values.
+> - A undefined, B defined: compute from three values, but G-B fails under §3-1.
+> - A/B undefined: compute from the two pinned values, but G-B fails because A is undefined.
+> 
+> There is no contradiction with §3-1 or the G-B conjunction. The “fewer than two” guard is unreachable while both pinned constants remain defined, but is harmless.
+> 
+> Q2. Yes. `expected_max_sr` uses `np.var(..., ddof=1)`, matching the text’s sample variance requirement. The defined values are the variance input; `n_trials` remains 4.
+> 
+> Q3. No operative text still assigns `SR* := 0`. That phrase remains only in explicitly superseded historical records: §12-12 describes it as discarded, registry #32 records the old rule, and #34 explicitly replaces it. Counts are consistent after the append-only correction: #33 corrects #32’s original 11 to 12 retained items; #34 changes one of those 12, leaving 11 retained and one changed, matching the r8 header and §12 record.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0d2ec-c1c1-7222-bb18-90e2b75c4baf
+> Resume in Codex: codex resume 01a0d2ec-c1c1-7222-bb18-90e2b75c4baf
