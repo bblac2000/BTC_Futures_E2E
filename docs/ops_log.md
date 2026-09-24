@@ -5391,3 +5391,28 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d3bb-fd81-7a23-84e7-8c849f75e6bf
 > Resume in Codex: codex resume 01a0d3bb-fd81-7a23-84e7-8c849f75e6bf
+
+## 2026-09-24 — 2f 설계 r3 재확인(Codex task-muflwnbf-jhqw2v **FIX-PLAN-FIRST**) → r4
+- G10·G12 CLOSED · G11 PARTIAL(영수증 ↔ 현재 매니페스트 해시 · 핀 커밋 대조 누락) → ✅ 동의 → G13.
+
+### 설계 r4 변경
+> # 2f design r4 — receipt ↔ manifest ↔ pins-commit binding (Codex r3: G11 PARTIAL)
+> 
+> G13 Every later stage, every resume, and the evaluator's input validation require, in addition to G11:
+>     (i) SHA256(current `manifest.json`) == receipt.manifest_sha256, and
+>     (ii) the commit that last changed `strategies/trial02/data_pins.json` (`git log -1 --format=%H -- <file>`) == receipt.pins_commit
+>          == the pins commit stored in the run's own record.
+>     Any mismatch → refuse (no rerun).
+> Tests: manifest-only change (files untouched, manifest rewritten consistently) refused; pins-commit mismatch refused.
+
+### Codex 원문(verbatim · task-muflwnbf-jhqw2v)
+> G10 closes the r2 code identity gap: stages and evaluator records must share the execution-code fingerprint. G12 supplies the hash-only run path, with full rebuilds at verification and evaluation.
+> 
+> **G11 remains partial.** The verify receipt records a manifest SHA256 and pins commit, but the later-stage gate does not explicitly compare either value with the current `manifest.json` and pins commit. A manifest-only change can pass `verify_manifest`, which checks the files named *inside* the manifest, while leaving the receipt bound to an older manifest. This leaves the receipt-to-manifest link required by the r2 review unproven. See [G11](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:5364) and [verify_manifest](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:340).
+> 
+> Add those two equality checks for every later stage, resume, and evaluator input validation; test a manifest-only change and a pins-commit mismatch. This was a read-only design review; I ran no market-data stages.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0d3be-7064-71e0-ae0c-ea57ada29ffb
+> Resume in Codex: codex resume 01a0d3be-7064-71e0-ae0c-ea57ada29ffb
