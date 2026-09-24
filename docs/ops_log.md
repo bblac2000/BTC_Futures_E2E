@@ -5349,3 +5349,45 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 
 ### advisor 원문 요지(verbatim 항목 0~7)
 > 0 status report now (fee basis, sl==anchor, 23:59 H/L, position_busy, TDD+mutation, pipeline; ask whether data_pins needs a push before stage A) · 1 F3 --pins contradicts F6 → committed tracked clean file only · 2 per-run rebuild cost → pin prepared hashes, rebuild once in verify stage + evaluator (Codex's call) · 3 F7 missing B&H input · 4 disclose P1 saturation risk · 5 Q1: reason param, TIME_EXIT · 6 tests: h ∈ {1,1438,1439,1440}, liquidation under LIMITS, seed reproduction, source reader · 7 limits/regime from config not harness.
+
+## 2026-09-24 — 2f 설계 r2 재확인(Codex task-muflt7hh-km7whk **FIX-PLAN-FIRST**) → r3
+- #1·#2·#4·#5·Q1 CLOSED · #3 PARTIAL(코드 동일성) · G8 수용 조건(verify 영수증 필수 · 해시 전용 로더) → ✅ 동의 → G10~G12.
+
+### 설계 r3 변경
+> # 2f design r3 — code identity + verify receipt (Codex r2: #3 PARTIAL, G8 conditions)
+> 
+> G10 Execution-code fingerprint = SHA256 over the sorted (path, file-SHA256) list of a frozen set: strategies/trial02/*.py,
+>     backtest/{engine_replay,prepare_t2,days,p1_core,p1_t2,p1_t2_run,placebo_exec,returns,data,replay,t2_stages}.py, paper/*.py,
+>     sizing/*.py, exchange/*.py (+ pyproject.toml, uv.lock). Every record stores the fingerprint + clean HEAD. A stage (or resume)
+>     refuses if the current fingerprint differs from the verify receipt's fingerprint; the evaluator requires ONE fingerprint across
+>     the receipt and all A/B/P2/P3/P4/P1 records (else 폐기 as a harness defect is NOT inferred — it refuses to evaluate and reports).
+> G11 Verify receipt: stage `verify` (after `prepare` and after the pins commit is pushed) runs the full rebuild
+>     (`verify_rebuild`, expect_range = IS+21d) and writes `_records/verify.json` with pins commit, manifest SHA256, raw + prepared
+>     hashes, evaluator commit, fingerprint. A, base, p1, p1-merge, p4 refuse unless the receipt exists, its hashes equal
+>     `data_pins.json` and the current prepared files, and its fingerprint/evaluator commit equal the current ones.
+> G12 Hash-only run loader `prepare_t2.load_prepared_pinned(out, pins)`: `verify_manifest` + SHA256 of bars_1m.parquet, funding.json,
+>     source_audit.json and every raw file equal to `pins` (no rebuild). `harness.run_prepared_is` uses it; `verify_rebuild` is used
+>     only by the `verify` stage and by the evaluator.
+> Tests: changed-code resume refused (fingerprint); missing / mismatched verify receipt refused; hash-only loader rejects a tampered
+> prepared file; evaluator-side fingerprint uniformity (in 2g).
+
+### Codex 원문(verbatim · task-muflt7hh-km7whk)
+> This is a **design re-check**, not an implementation pass. I read the r2 plan and relevant code without accessing `var/` or market data.
+> 
+> | Before-pass item | Status | Ruling |
+> |---|---|---|
+> | 1. Evaluator push order | **CLOSED** | G1 requires the pushed evaluator before every stage, including `prepare`, and a pushed pins commit before strategy runs. |
+> | 2. P1 rules source | **CLOSED** | G2 fixes the snapshot-verified rules and explicit P1 configuration for placement and execution. |
+> | 3. Resume and merge provenance | **PARTIAL** | G3 fixes output hashes, merge coverage, and evaluator input checks, but does not require resumed or evaluated runs to use the same **strategy, harness, and preparation code**. Existing records contain `git_head`; r2 does not say to validate it or an equivalent source fingerprint. |
+> | 4. Variant combinations | **CLOSED** | G4 defines the allowed variants and binds run names to metadata. |
+> | 5. Zero-trade and defined-draw contract | **CLOSED** | G5 defines the `n_A=0` path, all 200 P4 IDs, the 190-draw threshold, and zero-trade P2/P3 values. |
+> | Q1. P1 exit reason | **CLOSED** | G6 specifies `TIME_EXIT`, retains liquidation counts, and preserves Trial #1’s default. |
+> 
+> **G8:** A rebuild on every run is unnecessary for data provenance. Pinned raw and prepared hashes, a recorded raw-to-prepared rebuild, and a second rebuild in the evaluator can establish the chain. The plan still needs to make the `verify` receipt a mandatory prerequisite for A and every placebo run, bound to the same pins and manifest. It also needs to specify the hash-only run path: the current [`load_prepared`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:366) rebuilds on every call.
+> 
+> Those two provenance requirements are verdict-relevant. Add the `verify` gate and a common execution-code identity check to G3/G8, then test a changed-code resume and a missing or mismatched `verify` receipt. The [r2 text](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:5299) currently leaves both paths open.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0d3bb-fd81-7a23-84e7-8c849f75e6bf
+> Resume in Codex: codex resume 01a0d3bb-fd81-7a23-84e7-8c849f75e6bf
