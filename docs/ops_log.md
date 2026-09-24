@@ -3878,3 +3878,115 @@ Codex: r1 지적 12개 중 9 CLOSED · 3 PARTIAL(#3 · #6 · #9) · **진입 기
 > 
 > Codex session ID: 01a0d2a9-431e-7543-ba8c-1342c35e5e2a
 > Resume in Codex: codex resume 01a0d2a9-431e-7543-ba8c-1342c35e5e2a
+
+
+## 2026-09-24 — 트라이얼 #2 초안 r3(ef6b658) **사후 검토 3차** · Codex(task-mufbbgme-g4ccmq) FIX-FIRST → r4 반영
+Codex: r1 지적 11 CLOSED · 1 PARTIAL(#3 → §11 순서) · r2 지적 4 CLOSED · 3 PARTIAL · 새 지적 6개(정밀·우선순위).
+### Claude Code 항목별 입장
+| 지적 | 입장 · r4 반영 |
+|---|---|
+| #1 HIGH §11 구현 순서가 23:59 갭 청산을 건너뜀 | ✅ §11-1 = §1 순서 그대로(갭 청산 → time_exit → 고저 판정 없음 · `on_bar` 판정 호출 안 함) |
+| #2 HIGH REJECT 대 폐기 · "데이터 부재" 중복 | ✅ §4-1: 평가 가능한 게이트 실패 = REJECT · 하네스/설계/필수 데이터셋 불가 = 폐기 · 완결성 제외 암-일 = 표본 제외 · §7 행 문구 일치 |
+| #3 HIGH 전진 실패 우선순위 | ✅ 우선순위 1 생존(청산·킬스위치) → 2 실행 결함(폐기) → 3 0건 → 4 부호 |
+| #4 MEDIUM 전진 사이징·부호 통계 | ✅ 전진 = 복리(L5) · 부호 = 트레이드당 평균 net_bps · §12-10 사용자 확인 |
+| #5 MEDIUM 매수보유 라벨 창·끝점 | ✅ §3-1: 일 종가 정의 · 첫 수익률 · 결손 처리 · 라벨 창 = IS(OOS 보고) · §12-11 |
+| #6 LOW P2/P3 0건 | ✅ 값 = 0 bps(flat) · P4 제외 규칙과 다른 이유 명시 |
+
+### Codex 원문(verbatim · task-mufbbgme-g4ccmq)
+> ## Numbered findings
+> 
+> 1. **HIGH — [§11 L195](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:195)** — The implementation rule directly calls `time_exit` before `on_bar`, without first performing §1’s 23:59 opening-price liquidation check. This can turn a survival liquidation into a time exit.  
+>    **Fix:** specify `23:59 open-gap liquidation check → if alive, exit_at_bar_open/time_exit → never evaluate high/low`.
+> 
+> 2. **HIGH — [§4-1 L122](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:122), [§7 L149](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:149)** — “하나라도 실패면 REJECT” conflicts with P1/P4/data/design invalidity being `폐기`. “데이터 부재” also overlaps ordinary invalid arm-days excluded by the strict completeness rule.  
+>    **Fix:** say evaluable gate failure → REJECT; harness/design/unavailable-required-dataset → 폐기; predefined incomplete arm-days → exclusion, not 폐기.
+> 
+> 3. **HIGH — [§7 L158–161](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:158)** — Forward failures have no precedence. A run with both a data gap and liquidation qualifies for both `REJECT(생존)` and `폐기(전진 실행 결함)`.  
+>    **Fix:** add explicit forward priority, as already done for OOS.
+> 
+> 4. **MEDIUM — [§1 L53–54](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:53), [§3 L96](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:96), [§10 L188](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:188)** — Forward sizing and “순엣지” admit two implementations: fixed `E_ref=1,000` versus compounding, and equal-weight mean `net_bps` versus compounded wallet PnL.  
+>    **Fix:** state the forward sizing capital and exact G-F sign statistic.
+> 
+> 5. **MEDIUM — [§3 L93](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:93), [§3-1 L106](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:106), [§7 L162](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:162)** — The final B&H label does not identify which stage/window supplies the comparison. The first close-to-close return and missing-kline treatment are also unstated.  
+>    **Fix:** name the comparison window, endpoint convention, first return, and missing-kline outcome.
+> 
+> 6. **LOW — [§3-1 L107](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:107), [§4 L114–115](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:114)** — P2 or P3 producing zero trades leaves their mean `net_bps` and rejection comparison undefined.  
+>    **Fix:** predefine zero-trade variant handling.
+> 
+> ## Answers
+> 
+> ### 1. Round-1 findings 1–12
+> 
+> Current r3 status; “r2” references historical `cb99254` lines.
+> 
+> | # | Status | Closure |
+> |---|---|---|
+> | 1 | **CLOSED** | r2 L39: deliberate next-open deviation stated. |
+> | 2 | **CLOSED** | r2 L53–54, L93–94: execution/statistical ledgers separated. |
+> | 3 | **PARTIAL** | r2 L47 added chronology; r3 L45/L47 fixes 23:59 semantics, but r3 L195 still omits the opening liquidation check. |
+> | 4 | **CLOSED** | r2 L83–84, L111–115: IS → OOS → forward order. |
+> | 5 | **CLOSED** | r2 L96, L143–152: OOS PASS, G-F failures and ACCEPT added. New precedence issues are findings 3–4 above. |
+> | 6 | **CLOSED** | r2 L104 removed the collision; r3 L113 fixes `V_A`, empty eligibility and RNG behavior. |
+> | 7 | **CLOSED** | r2 L40, L105: `≥23:59` drop and delayed gate time. |
+> | 8 | **CLOSED** | r2 L28, L107, L189: epoch, seed and quantile. |
+> | 9 | **CLOSED** | r2 L31/L124 were partial; r3 L31/L133 include the evaluation day and enumerate gap-affected dates. |
+> | 10 | **CLOSED** | r2 L95, L145, L155–158; r3 L153–168 adds explicit OOS precedence. |
+> | 11 | **CLOSED** | r2 L35: crossing-predicate equivalence. |
+> | 12 | **CLOSED** | r2 L53/L56/L189–192: snapshot, normalization, seed mapping and pre-PnL registry row. |
+> 
+> ### 2. Entry-reference deviation
+> 
+> **Acceptable.** The first post-decision reference plus adverse-fill adjustment better matches the intended execution path; worse-of-band invents an unavailable fill after a retrace.
+> 
+> The justification should remain described as a model approximation, not an “actual fill”: next-minute mark open is not necessarily the first executable quote. §2’s disclosure and §12-9 confirmation cover this caveat.
+> 
+> ### 3. Advisor findings 1–9
+> 
+> 1. Correctly applied.  
+> 2. Correctly applied in r3; P1 is now deterministic and surfaced in §12-7.  
+> 3. Correctly applied.  
+> 4. Correctly surfaced in §12-3.  
+> 5. Corrected properly in r3 L91; the earlier overclaim is gone.  
+> 6. Correctly surfaced in §12-5.  
+> 7. Correctly applied with explicit OOS precedence.  
+> 8. **Partial/misapplied:** the strategy hook exists, but §11 L195 can bypass the required 23:59 liquidation-first rule.  
+> 9. Correctly applied.
+> 
+> ### 4. New ambiguities or contradictions
+> 
+> - §4-1 `하나라도 실패면 REJECT` versus §7 `폐기`.
+> - Ordinary completeness exclusions versus undefined §7 “데이터 부재”.
+> - §11 time-exit hook versus §1 liquidation-first ordering.
+> - Forward simultaneous-failure precedence.
+> - Forward compounding and exact net-edge statistic.
+> - Final B&H comparison window/endpoints.
+> - P2/P3 zero-trade handling.
+> 
+> P1 eligibility itself is now singular at L113. The known two-minute gap treatment is also explicit at L31/L133. Flat, daily, A/B and P1/P4 ledger populations are otherwise adequately fixed at L54 and L101–108.
+> 
+> ### 5. Single implementation?
+> 
+> **No.** Findings 1–6 still permit different results or verdict strings, particularly at 23:59, simultaneous forward failures, forward net-edge calculation, and the B&H label.
+> 
+> ### 6. Hidden user decisions
+> 
+> r3 now lists **nine**, not six. One material choice remains hidden: forward fixed-capital versus compounded sizing, together with which ledger determines G-F’s positive sign.
+> 
+> The B&H label’s comparison stage may also merit confirmation. Verdict precedence and zero-variant handling are technical rules, not user preference decisions.
+> 
+> ### 7. Round-2 findings 1–7
+> 
+> | # | Status |
+> |---|---|
+> | 1 | **CLOSED** — L31/L133. |
+> | 2 | **PARTIAL** — semantic rule and test are fixed, but L195 still permits time exit before the gap-liquidation check. |
+> | 3 | **CLOSED** — L95/L153–157. |
+> | 4 | **CLOSED** — L113. |
+> | 5 | **PARTIAL** — principal ledger populations are fixed; B&H endpoints/stage remain ambiguous. |
+> | 6 | **CLOSED** — L91. |
+> | 7 | **PARTIAL** — listed defaults are surfaced, but forward compounding/ledger remains hidden. |
+> 
+> VERDICT: FIX-FIRST — blockers: 23:59 implementation ordering; IS REJECT-versus-폐기 distinction; forward failure precedence; forward sizing/net-edge definition.
+> 
+> Codex session ID: 01a0d2af-114a-7952-bc07-acdcce0bf349
+> Resume in Codex: codex resume 01a0d2af-114a-7952-bc07-acdcce0bf349
