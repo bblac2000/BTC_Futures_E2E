@@ -4969,3 +4969,49 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d38a-c069-7f03-86c7-696b5773d05e
 > Resume in Codex: codex resume 01a0d38a-c069-7f03-86c7-696b5773d05e
+
+## 2026-09-24 — 2d·2e 설계 r3 재확인(Codex task-mufjysw7-3ni97c **FIX-PLAN-FIRST**) → 설계 r4(한 번 캡처 → 감사 → 빌드)
+- #2·#3·C5 PARTIAL: 감사가 **실제 준비 입력**과 묶이지 않음 → ✅ 동의 → 트라이얼 #1 parquet 재사용 안 함 · 원시 캡처 하나에서 감사와 빌드를 순수 함수로 · 매니페스트 해시.
+
+### 설계 r4 변경
+> # 2d/2e design r4 — single capture → audit → build (replaces C11–C13's separate read)
+> 
+> C14 Trial #2 does NOT reuse trial #1's prepared parquet. New `backtest/prepare_t2.py`, one deterministic pipeline, run once in the
+>     post-push validity pass (window = IS + 21 warm-up days; OOS never):
+>     1 Read RAW archive rows for the range (every CSV row, unfiltered) → `raw/archive_rows.jsonl` (+ SHA256).
+>     2 Fill ranges = every aligned minute in range with no archive row OR an archive row whose mark fields are empty/unparseable/
+>       non-finite (Codex: include rows the old loader skipped). Recorded in `raw/fill_ranges.json`.
+>     3 Fetch REST `klines` and `markPriceKlines` for exactly those fill ranges and `fundingRate` for the full range; store every
+>       response page verbatim → `raw/rest_klines.jsonl`, `raw/rest_mark.jsonl`, `raw/funding.jsonl` (+ SHA256 each).
+>     4 Audit = pure function of the raw files only → `source_audit.json`.
+>     5 Build = pure function of the SAME raw files only → `bars_1m.parquet`, `funding.json`. No network in 4–5.
+>     6 `manifest.json` = SHA256 of every raw file, audit, and prepared output + code commit. The strategy run and evaluator verify the
+>       manifest hashes of the prepared inputs they read (mismatch → stop). Re-running 4–5 on the raw files must reproduce the
+>       prepared hashes (test + a verify command).
+> C15 Build rules (deterministic): per minute, archive row wins if its mark fields are valid and its kline fields present; else REST
+>     (mark from markPriceKlines, kline from klines). A minute with valid mark but no kline in any source → C12 STOP (mark-only).
+>     Exact duplicate rows collapse; differing duplicates → STOP. Funding list = raw funding records, one per funding_ms after exact
+>     duplicate collapse; differing duplicates → STOP.
+> C16 Value classification for mark/rate fields: `empty` (missing or ""), `unparseable` (Decimal() raises), `non_finite`
+>     (NaN/Inf), `ok`. Only `ok` counts as present. Funding validity for boundary b of window day d = exactly one `ok` record
+>     (rate and mark both ok) in [b, b+60,000); zero → day invalid (missing_funding); differing duplicates → STOP (C12).
+> C12 (unchanged) stop list, now evaluated on the raw capture: differing duplicate bars or funding, mark-only minutes, non-ok mark in
+>     a row that the build would select.
+> Tests (synthetic raw files + fake client): capture writes pages verbatim; audit and build are pure and reproducible; every C12
+> condition stops; archive rows with empty mark trigger REST fill; manifest mismatch stops a consumer.
+
+### Codex 원문(verbatim · task-mufjysw7-3ni97c)
+> | r2 item | r3 status | Reason |
+> |---|---|---|
+> | #2 Exact UTC mark grid | **PARTIAL** | C11 can see duplicates before the loaders collapse them, and C2 checks the prepared grid. The design does not yet establish that the audited rows are the rows used in the prepared bars. |
+> | #3 Mark availability independent of klines | **PARTIAL** | Separate REST pages expose mark-only minutes before the [intersection](/home/cms/project/BTC_Futures_E2E/backtest/data.py:145). The audit still needs to cover the exact REST fill ranges used for preparation. |
+> | C5 Funding cardinality and finite values | **PARTIAL** | Checking raw records fixes visibility lost at [funding deduplication](/home/cms/project/BTC_Futures_E2E/backtest/data.py:159). The plan still needs to bind those records to the funding list used by replay and classify empty or unparseable values explicitly; `Decimal.is_finite()` alone does not do that. |
+> 
+> **New verdict-relevant ambiguity in C11–C13:** C11 describes a separate post-push raw-source read, while the existing [preparation path](/home/cms/project/BTC_Futures_E2E/backtest/prepare.py:42) creates bars and funding through separate loader calls. A clean later audit could therefore approve a prepared artifact made from different REST responses. Pin how the audit verifies the *actual prepared input*: use the same captured raw responses, or compare the audit’s selected values, timestamps, and fill ranges against the prepared bars and funding, stopping on any mismatch. Fill ranges must include archive rows skipped for empty mark fields ([loader behavior](/home/cms/project/BTC_Futures_E2E/backtest/data.py:111)).
+> 
+> This is a design review only; I did not access `var/` or market data.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0d38c-b738-7cb1-b52b-7fd50f4970a7
+> Resume in Codex: codex resume 01a0d38c-b738-7cb1-b52b-7fd50f4970a7
