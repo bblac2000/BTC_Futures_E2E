@@ -4739,3 +4739,21 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d32f-4e3a-77a3-9d1e-dd0e2bca19f9
 > Resume in Codex: codex resume 01a0d32f-4e3a-77a3-9d1e-dd0e2bca19f9
+
+## 2026-09-24 — 트라이얼 #2 2b·2c 재확인 r3(Codex task-mufjmufw-ir6w4u) **MERGE**
+- #1·#4 CLOSED · 기본 경로 변경 없음(LIVE·무훅 골든 = 2b 이전 트리). 2b·2c 완료.
+
+### Codex 원문(verbatim)
+> | Finding | Status | Re-check |
+> |---|---|---|
+> | #1 | **CLOSED** | [SizingLimits](/home/cms/project/BTC_Futures_E2E/sizing/config.py:58) now supplies one fee-basis setting to the [sizing estimate](/home/cms/project/BTC_Futures_E2E/sizing/position.py:265) and [PAPER liquidation](/home/cms/project/BTC_Futures_E2E/paper/engine.py:613). The long/short, funding, and replay P&L checks passed. |
+> | #4 | **CLOSED** | The leverage-refusal wallet check, LIVE call/event golden, and replay-level fee-difference check passed. The no-hook replay golden also passed. |
+> 
+> **Default path:** No behavioral change found. `liq_fee_on_liq_price` defaults to `False`, preserving entry-notional liquidation fees; the LIVE and no-hook goldens match the supplied pre-2b fixtures. `SizingLimits` gains a field, but default execution does not change.
+> 
+> The checks were run directly without pytest cache or temporary files; the full suite was not run. The worktree is clean, and `git diff --check` passed.
+> 
+> **VERDICT: MERGE**
+> 
+> Codex session ID: 01a0d384-3b34-7141-88f0-f951aa21c709
+> Resume in Codex: codex resume 01a0d384-3b34-7141-88f0-f951aa21c709
