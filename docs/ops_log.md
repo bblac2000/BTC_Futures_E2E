@@ -4193,3 +4193,97 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d2b7-febe-7f83-a1d2-ada9f46791ee
 > Resume in Codex: codex resume 01a0d2b7-febe-7f83-a1d2-ada9f46791ee
+
+
+## 2026-09-24 — 트라이얼 #2 초안 r6(de3f2cf) **사후 검토 6차** · Codex(task-mufbuwiv-40zoir) **MERGE** · 비차단 3건 반영
+프롬프트 변경 공개: 6차부터 "차단(BLOCKER) = 충실한 두 구현이 다른 판정을 낼 수 있거나 결과를 새게/치우치게 하는 것만 · 다듬기는 NON-BLOCKING으로 따로" 기준을 명시했다(무한 반복 방지 · 모호성 기준은 낮추지 않음).
+| 지적(비차단) | 반영 |
+|---|---|
+| #1 펀딩 완결성이 §12-8에 없음 | ✅ §12-8에 추가 |
+| #2 P1의 N_A 미정의 | ✅ `rng.integers(0, n)`(N_A := n) |
+| #3 MDE(z₀.₉₇₅)의 단측 해석 미명시 | ✅ 단측 α 0.025 · 검정력 0.80(트라이얼 #1 §7과 같음) · CI와 해석 차이 공시 |
+사후 검토 결론: advisor(r1) MERGE-after-fixes → 반영 · Codex r1~r5 FIX-FIRST → r6 **MERGE**. 초안은 사용자 §12 결정 대기(앵커·코드 없음).
+
+### Codex 원문(verbatim · task-mufbuwiv-40zoir)
+> No blockers found. Three non-blocking clarifications remain.
+> 
+> ## Numbered findings
+> 
+> 1. **MEDIUM — NON-BLOCKING — [L31, L218](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:31)** — r6 requires both 08:00 and 16:00 funding records for every valid day, but §12-8 describes only mark-bar completeness. This is explicit for implementers but partly hidden from user confirmation.  
+>    **Fix:** add funding completeness to §12-8.
+> 
+> 2. **LOW — NON-BLOCKING — [L116](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:116)** — P1 defines original count as `n` but samples with undefined `N_A`. Context makes `N_A = n`, so no realistic verdict split.  
+>    **Fix:** replace `N_A` with `n`, or define `N_A := n`.
+> 
+> 3. **LOW — NON-BLOCKING — [L102, L110, L171](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110)** — Gate CI is central 97.5%, while MDE uses `z₀.₉₇₅`. The formula is executable, but its one-sided interpretation is unstated.  
+>    **Fix:** say “one-sided α=0.025 MDE” or change the quantile if MDE should mirror the central CI.
+> 
+> ## Answers
+> 
+> ### 1. Round-1 findings 1–12
+> 
+> 1. **CLOSED** — r2 L39: explicit next-open rule and deliberate deviation.
+> 2. **CLOSED** — r2 L53–54, L93–94: execution and statistical ledgers separated.
+> 3. **CLOSED** — r2 L47 was partial; current [L45–47, L201](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:45) completes liquidation/time-exit chronology.
+> 4. **CLOSED** — r2 L83–84, L111–115: IS → OOS → forward staging.
+> 5. **CLOSED** — r2 L96, L143–152 introduced verdicts; current L97 and L164–168 remove the later precedence conflict.
+> 6. **CLOSED** — r2 L104 removed the placement collision; current [L116](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:116) fixes eligibility and failure behavior.
+> 7. **CLOSED** — r2 L40, L105: `fill_ts ≥ 23:59` and delayed gate timing.
+> 8. **CLOSED** — r2 L28, L107, L189: epoch, P4 seed and percentile convention.
+> 9. **CLOSED** — r2 L31/L124 were partial; current [L31, L136](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:31) covers the replay day and exact gap effects.
+> 10. **CLOSED** — r2 L95, L145, L155–158: OOS-zero, G0 and MDE labels.
+> 11. **CLOSED** — r2 L35: prior-inside crossing equivalence.
+> 12. **CLOSED** — r2 L53/L56/L189–192: normalization, snapshots, seeds and pre-PnL registry requirements.
+> 
+> ### 2. Entry-reference deviation
+> 
+> **Acceptable.** The next-bar mark open plus adverse-fill adjustment matches the declared historical/paper/live execution path better than inventing a band-price fill after a retracement.
+> 
+> It remains an execution approximation, not necessarily the first executable quote. §2 discloses that limitation, and §12-9 requires user confirmation.
+> 
+> ### 3. Advisor findings 1–9
+> 
+> All are correctly applied.
+> 
+> - #2 P1 is deterministic and surfaced in §12-7.
+> - #4 SL geometry now distinguishes nominal band distance from fill-dependent actual R.
+> - #5 now states only that similar realized Sharpes are plausible; it no longer asserts they must be similar.
+> - #8 has identical 23:59 semantics in §1 and §11.
+> 
+> No advisor finding creates a new material ambiguity.
+> 
+> ### 4. Current ambiguities or contradictions
+> 
+> - **§3/§4-1/§7:** aligned. §3 gives evaluation order; §7 gives terminal-result precedence.
+> - **P1:** singular: “same UTC day,” endpoint no later than 23:58, and day in `V_A`.
+> - **Completeness/gap:** consistent. L31’s strict rule produces exactly the invalid dates listed at L136.
+> - **Ledgers:** flat, trade, daily, A/B and B&H populations/formulas are fixed at L54 and L102–111.
+> - **23:59:** unambiguous—opening-price liquidation first, otherwise time exit, never high/low evaluation.
+> - Remaining issues are only the three non-blocking clarifications above.
+> 
+> ### 5. Single implementation
+> 
+> Yes for every verdict-affecting field. Two faithful implementations should produce the same trades, statistics and terminal verdicts.
+> 
+> The `N_A` alias and MDE-sidedness label merit cleanup but do not override their executable surrounding rules.
+> 
+> ### 6. Hidden user decisions
+> 
+> Current §12 lists **13**, not six, plus two later procedural approvals.
+> 
+> One newly added default should be surfaced more clearly: strict completeness now includes both daily funding records, but §12-8 mentions only mark bars. No other material user decision remains hidden.
+> 
+> If N=4 is chosen, the main CI and G-B formulas must be updated before anchoring; that is implementation of §12-1, not another decision.
+> 
+> ### 7. Round-5 findings 1–5
+> 
+> 1. **CLOSED** — exact central CI bounds at [L102](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:102).
+> 2. **CLOSED** — numbered IS precedence at [L151–156](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:151).
+> 3. **CLOSED** — OOS unavailable-data handling at [L31, L158](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:158).
+> 4. **CLOSED** — degenerate-statistic rules at [L111](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:111).
+> 5. **CLOSED** — corrected G-B explanation at [L91](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:91).
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0d2bc-e88a-7841-9456-7e841faf184f
+> Resume in Codex: codex resume 01a0d2bc-e88a-7841-9456-7e841faf184f
