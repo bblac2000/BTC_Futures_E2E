@@ -4927,3 +4927,45 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d386-741a-7341-8660-f30704b48ca0
 > Resume in Codex: codex resume 01a0d386-741a-7341-8660-f30704b48ca0
+
+## 2026-09-24 — 2d·2e 설계 r2 재확인(Codex task-mufjw1kz-dmtf39 **FIX-PLAN-FIRST**) → 설계 r3(원시 출처 감사)
+- #1·#4 CLOSED · #2·#3 PARTIAL(로더가 병합·중복 제거·교집합 **뒤**만 보인다) · C5 새 항목(펀딩 중복 제거 전 검사 · 유한값) → ✅ 전부 동의 → C11~C13.
+
+### 설계 r3 변경
+> # 2d/2e design r3 — raw-source audit (Codex r2: #2 PARTIAL, #3 PARTIAL, C5 new)
+> 
+> C11 New additive module `backtest/source_audit.py` (no change to existing loaders or prepared files) that reads the RAW sources
+>     **before** any merge/dedup/intersection, for window + 21 warm-up days:
+>     - archive CSV rows in range: per open_ms count (duplicates), rows with empty/non-finite mark fields, misaligned timestamps;
+>     - REST `klines` and `markPriceKlines` pages for the REST-filled ranges, kept separately: duplicate open_ms within each source,
+>       mark-only minutes (mark present, kline absent), kline-only minutes, misaligned timestamps;
+>     - REST `fundingRate` records: per funding_ms duplicates, per boundary-minute-bucket count, non-finite rate/mark.
+>     Output = `source_audit.json` (counts + the offending timestamps), written in the post-push validity pass.
+> C12 STOP rule (pre-registered here, before any data is read): if the audit reports ANY of — duplicate open_ms with differing
+>     mark values, mark-only minutes in the window/warm-up, duplicate or conflicting funding at an 08:00/16:00 boundary of a window
+>     day, non-finite mark/rate — then no strategy run starts; the finding goes to the user as a correction doc + registry row.
+>     Exact duplicate rows (identical values) are reported and collapsed (not a stop). Kline-only minutes (mark absent) are reported
+>     only — those minutes are mark-missing and already make the day invalid under C2.
+> C13 `days.py` computes V_A/V_B from the prepared bars (C2 grid) AND the funding list, and additionally takes the audit's per-day
+>     flags: a day touched by a (non-stop) exact-duplicate collapse stays valid; any day flagged by C12 cannot exist because the
+>     run stops. Funding "exactly one" (C5) is evaluated on the RAW funding records from the audit, not the deduplicated list.
+>     Finite = Decimal.is_finite() for rate and mark.
+> Tests (synthetic, fake client + temp archive CSV): each C11 category detected, C12 stop conditions raise, exact duplicates collapse
+> with report, audit never mutates inputs.
+
+### Codex 원문(verbatim · task-mufjw1kz-dmtf39)
+> | Before-pass blocker | Status | Narrow re-check |
+> |---|---|---|
+> | 1. Range history tied to eligibility | **CLOSED** | C1 retains `R_d` for every complete mark day, including a funding-invalid day, and tests its use on the next day. |
+> | 2. Exact UTC mark grid | **PARTIAL** | C2 defines the right check, but the current loader removes duplicate timestamps before `days.py` can see them. A prepared 1,440-minute grid could therefore pass after conflicting source rows were collapsed. Check duplicates before that merge. [data.py](/home/cms/project/BTC_Futures_E2E/backtest/data.py:145) |
+> | 3. Mark availability independent of kline availability | **PARTIAL** | C3’s stop rule is appropriate. The current REST loader discards mark-only minutes at the intersection, so the proposed post-push count cannot be recovered from prepared bars. Specify how the pre-intersection count is retained and checked before a strategy run. [data.py](/home/cms/project/BTC_Futures_E2E/backtest/data.py:145) |
+> | 4. 23:59 cross accounting | **CLOSED** | C4 excludes that bar’s high/low and its crosses, while preserving `late_cross` at 23:58. This matches the time-exit rule. [preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:44) |
+> 
+> **New verdict-relevant issue in C5:** “Exactly one” funding record must be checked before `fetch_funding` deduplicates equal timestamps; otherwise conflicting records can become one apparently valid record. Require finite rate and mark values as well as parseable ones. [data.py](/home/cms/project/BTC_Futures_E2E/backtest/data.py:159)
+> 
+> The remaining C1–C10 changes raise no further verdict-relevant ambiguity in this narrow review. No market data or `var/` was accessed.
+> 
+> **VERDICT: FIX-PLAN-FIRST.** Pin the raw-source checks and their retained diagnostics before implementing the validity pass.
+> 
+> Codex session ID: 01a0d38a-c069-7f03-86c7-696b5773d05e
+> Resume in Codex: codex resume 01a0d38a-c069-7f03-86c7-696b5773d05e
