@@ -4757,3 +4757,173 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d384-3b34-7141-88f0-f951aa21c709
 > Resume in Codex: codex resume 01a0d384-3b34-7141-88f0-f951aa21c709
+
+## 2026-09-24 — 트라이얼 #2 단계 2d·2e **before-pass**(advisor + Codex task-mufjq08e-jiwk3t **FIX-PLAN-FIRST**) → 설계 r2
+| 출처 | # | 입장 | 반영(설계 r2) |
+|---|---|---|---|
+| advisor | 1 | ✅ | C7 · 규약 7 |
+| advisor | 2 | ✅ | C8 · 규약 12 |
+| advisor | 3 | ✅ | C9 · 규약 13 |
+| advisor | 4 | ◐ | C10 — Codex #1로 R은 유효성과 분리되므로 "무효일 X의 봉을 바꿔도 불변"은 X의 R을 통해서만 달라질 수 있다 · 그 경로만 허용하는 형태로 테스트 |
+| advisor | 5 | ✅ | Q1~Q4 Codex와 같음 |
+| advisor | 6 | ✅ 확인 | `intent.sl`을 읽는 다른 코드 없음(db/record · 재생 루프 grep) |
+| advisor | 7 | ✅ | — |
+| advisor | 과정 | ✅ | `docs/trials/trial_02_conventions_draft.md`(커밋) · 수수료 기준은 다음 보고에 공시 |
+| Codex | 1 | ✅ | C1 — R 이력은 완전한 mark 격자 날마다 · 적격성과 분리 |
+| Codex | 2 | ✅ | C2 — 정확한 1,440분 격자 |
+| Codex | 3 | ✅ | C3 — 실행 전 데이터 점검(REST 구간 mark-only 분 = 0이어야 · 아니면 중단 → 정정) |
+| Codex | 4 | ✅ | C4 — 23:59 봉 고저 미사용 · 23:58 첫 교차 = late_cross |
+| Codex | Q1~Q4 | ✅ | C5(펀딩 경계당 정확히 1건) · 보고 순서 · Decimal 중앙값 · B = A + 날 필터 |
+| Codex | 테스트 | ✅ | C6 |
+
+### 설계 r1(원문)
+> # Trial #2 steps 2d (day validity) + 2e (strategy) — design for the before-pass
+> 
+> Binding: docs/trials/trial_02_preregistration.md §1 (rows 27–53), §3-1 (V_A/V_B), §4 (P2/P3/P4), §5, §7-3, §9, §11-1/-7.
+> Engine/replay (2b/2c): Trail(dist_r), SlFromFill(mirror), sizing_capital, SizingLimits(leverage_range=(10,30),
+> liq_fee_on_liq_price=True), exit_at_bar_open hook. All tests synthetic; no real-data execution before the evaluator push.
+> 
+> ## 2d `backtest/days.py` (strategy-independent, pure)
+> - Input: bars (window + 21 warm-up days), fundings. Output: `DayValidity` = {day_index: reasons} and immutable sets
+>   V_A, V_B over window days only.
+> - A-day d valid ⇔ 1,440 bars with all four mark fields for d AND d−1 AND funding records for d 08:00 and d 16:00.
+>   B-day d valid ⇔ A-valid AND 1,440 mark bars on each of d−21..d−2.
+> - Funding "present at boundary b" ⇔ exists record with b ≤ funding_ms < b + 60,000 (REST fundingTime can carry ms offsets; same
+>   minute-bucket rule the replay uses to settle). CONVENTION ROW.
+> - Reasons reported per excluded day: missing_bars_d, missing_bars_prev, missing_funding_08, missing_funding_16, missing_bars_window_B.
+> - Days are UTC: day_index = open_ms // 86,400,000 (§1).
+> - Tests: synthetic gaps at each position; the §5 example (gap on day X) invalidates X, X+1 (A,B) and B for X+2..X+21.
+> 
+> ## 2e `strategies/trial02/`
+> Files: `anchor.py` (done), `config.py` (bo_v1 values as Decimal: K=0.5, SL_FLOOR=0.0030, SL_CEIL=0.0500, TRAIL_ARM_R=1,
+> TRAIL_DIST_R=1, TP_R=2, RISK_PCT=0.01, L=(10,30), E_REF=1000, N_STAT=1000), `strategy.py`, `run.py` (isolated CLI later, 2f/2g).
+> Imports nothing from strategies/trial01.
+> 
+> State per UTC day d (reset at the first bar of d, i.e. the 00:00 bar):
+> - O_d = that bar's mark_open, captured BEFORE the bar's completed OHLC is used for crosses.
+> - R_{d−1} = max(mark_high) − min(mark_low) over day d−1's bars, accumulated by a per-day accumulator (reset at day boundary);
+>   frozen for d. History of daily R kept as dict day_index → R (only complete days are used — invalid days are skipped anyway).
+> - Arm B contraction: R_{d−1} < median(R_{d−21}..R_{d−2}) (20 values; numpy-free exact Decimal median: mean of the two middle).
+> - Bands U = O_d + k·R_{d−1}, D = O_d − k·R_{d−1} (k = 0.5, or P4 k*_d). Fixed all day.
+> - Skip whole day (no crosses evaluated, no consumption bookkeeping beyond reasons): d ∉ V_arm → `invalid_day`(counted separately,
+>   outside §7-3 denominator); R_{d−1} < tick → `no_range` (outside denominator); Arm B non-contraction day → `not_contraction`
+>   (report only, outside denominator).
+> - consumed = {LONG: False, SHORT: False}.
+> 
+> At each bar close (on_minute_closed; bar i of day d, minute-of-day mm):
+> 1 new crosses: LONG if not consumed and mark_high ≥ U; SHORT if not consumed and mark_low ≤ D. Mark each crossing direction consumed.
+> 2 both new in same bar → both `conflict_cross`. Else for the single new cross (dir):
+> 3 exclusive first-failure order (CONVENTION ROW): `position_busy` (engine position or pending) → `late_cross`
+>   (fill_ts = bar close + 1 ms = next open ≥ 23:59:00, i.e. mm ≥ 1438) → `sl_wrong_side` (sl_dist ≤ 0 with m = mark_close) →
+>   `sl_dist_out_of_range` (floor / ceiling split) → emit EntryIntent.
+>   Engine-side reasons (sl_crossed_before_fill, sizing_rejected, normalization) are read from EntrySkipped (engine SkipReason +
+>   SizingDecision.reason: MIN_QTY/MIN_NOTIONAL/step → `normalization`, else `sizing_rejected`).
+> - Intent: direction dir, sl = O_d, tp None, tp_rule TpFromFill(level=None, min_r=2, fallback_r=2), trail Trail(arm_r=1, dist_r=1),
+>   regime RegimeSizing("trial02_<arm>", 0.01, 10, 30), decided_ms = bar close, decision_mark = m.
+> - exit_at_bar_open(bar) ⇔ minute-of-day == 1439 (23:59). The 23:59 bar's on_minute_closed still runs → a first cross there is
+>   consumed and recorded `late_cross`.
+> - Denominator for §7-3 = first crosses per direction on valid, ranged (and for B: contraction) arm-days.
+> 
+> P2 (delay k ∈ {1, 5}) — CONVENTION ROW (Codex before-pass #5): at the cross bar i consume + enqueue (dir, i, day d) regardless of
+> position; at close of bar i+k: resolve opposing due candidates → `conflict_cross`; then position_busy; then if next open ≥ day d
+> 23:59:00 → `dropped` (never carried to next day; uses day d's O_d, R); then price gates with m = mark_close of bar i+k. If bar i+k
+> lies beyond day d's 23:58 close the candidate is `dropped` at day d's 23:59 bar close (evaluated no later than that bar).
+> P3 (invert): gates in the original direction; intent direction flipped; sl = O_d with sl_rule SlFromFill(O_d, mirror=True);
+> tp_rule 2R, trail dist_r 1 (R = |F − O_d| by the mirror identity).
+> P4 (draw d = 0..199): per valid, ranged day: rng = Generator(PCG64(SeedSequence([20260924, 4, d, day_index]))); q =
+> rng.integers(1, floor(R/tick) + 1) (one call); k* = q·tick/R. no_range and invalid days consume no RNG. Same k* for both bands.
+> 
+> Invariants (§9) as tests: ① same (O_d, R_{d−1}) histories → same bands; ② perturbing day d's later highs/lows leaves bands unchanged;
+> ③ static check over strategies/trial02/*.py: no `.rolling(`, no `deque`, no names containing donchian/channel, no max()/min() over
+> bar-window slices (AST: max/min whose argument is a Subscript slice or a generator over a slice); the per-day accumulator is the
+> only extreme tracker; ④ after a first cross the direction never triggers again that day.
+> §11-7 tests: liquidation/funding order (via engine), 23:59 handling, first-cross consumption, simultaneous crosses, P2 drop at
+> fill ≥ 23:59, P4 seed reproduction, B trades ≡ A trades on contraction days (fill, qty, leverage, exits, net_bps).
+> Look-ahead tests: perturb d's future bars, R_{d−1}'s day (must change bands), each median member, invalid-day future gaps
+> (validity is injected — strategy output for a valid day must not depend on other days' validity), P4 future bars, P2 fill bar.
+> 
+> Open questions for reviewers:
+> Q1 exclusive-failure order position_busy → late_cross → price gates (vs §7-3 list order) — any verdict impact? (report-only)
+> Q2 funding presence minute-bucket rule.
+> Q3 median exact Decimal vs numpy float — choose Decimal (exact, strict < comparison).
+> Q4 Arm B implemented as the same strategy with a day filter (B ⊂ A by construction) — acceptable?
+
+### 설계 r2 변경
+> # 2d/2e design r2 — changes vs r1 (after advisor + Codex before-pass)
+> 
+> C1 (Codex #1) Range history is independent of eligibility: R_d is recorded for EVERY day whose mark grid is complete (exact
+>    1,440-minute grid, below), regardless of V_A/V_B, funding, contraction or warm-up. Eligibility (V_A/V_B, no_range, contraction)
+>    is applied only when deciding whether day d trades. A day whose mark grid is incomplete has no R_d → the next day (needs R_{d−1})
+>    and B days whose median window contains it are invalid — exactly the §1 rule, which already demands those days' grids.
+>    Test: funding-only-invalid day X followed by valid X+1 → X+1 trades with R_X.
+> C2 (Codex #2) Mark completeness = exactly one bar at each aligned minute start 00:00..23:59 of the UTC day (open_ms % 60,000 == 0,
+>    no duplicates), all four mark fields present and finite Decimals. Tests: duplicate + gap (count 1,440), misaligned ts,
+>    missing/non-finite mark field.
+> C3 (Codex #3) Mark source independence: the prepared bar list is the union of archive rows and REST (kline ∩ mark). Pre-run data
+>    check (run in the post-push validity pass, before any strategy run): for the window + warm-up, fetch-free comparison is not
+>    possible for archive rows, so the check is: every archive row used has non-empty mark fields (load_archive already drops rows
+>    without mark) AND for REST-filled ranges the count of mark-kline minutes lacking a last-price kline is reported; must be 0,
+>    otherwise STOP → correction doc (mark-only minutes would need a mark-only bar path). Recorded in the validity report.
+> C4 (Codex #4) 23:59 bar: the strategy does NOT inspect its high/low (no cross detection, no consumption, no late_cross). The last
+>    evaluable cross bar is 23:58: its first cross is consumed and recorded late_cross (fill would be 23:59). Cross at 23:57 → fill
+>    23:58 is the last legal entry. §7-3 denominator excludes 23:59 bars. (Replay still calls on_minute_closed for the hook bar;
+>    the strategy returns None there.)
+> C5 (Codex Q2) Funding validity per boundary b ∈ {08:00, 16:00} of d: exactly one record with b ≤ funding_ms < b+60,000 and
+>    parseable rate & mark; zero or ≥2 → d invalid (missing_funding_* / duplicate_funding_*).
+> C6 (Codex tests) EntrySkipped → §7-3 mapping via replay on_event (SizingDecision.reason: normalization set = MIN_QTY / MIN_NOTIONAL /
+>    STEP-related RejectReasons; others sizing_rejected). Default replay decision records unchanged (no golden change).
+>    Tick source = registry #36 snapshot only (strategies/trial02 loads rules from anchor.RULES_SNAPSHOT_DIR, verifying SHA256).
+>    Added boundary tests: 23:57/23:58/23:59, 00:00 cross, opposite entry after same-day exit, busy-consumed, P2 simultaneous
+>    sources and due ≥ 23:59 drop, P3 mirror both directions.
+> C7 (advisor #1) conflict_cross only when both directions are unconsumed and first-cross in the same bar; convention row 7.
+> C8 (advisor #2) warm-up days: R only, no intents, no denominator; O_d only from the day's 00:00 bar (else day already invalid).
+> C9 (advisor #3) placebos P1–P4 run on Arm A only.
+> C10 (advisor #4) invalid-day leak test: perturb bar contents of an invalid-for-trading day X (grid kept complete so R_X exists and IS
+>    used, or grid incomplete so R_X absent) → assert valid days' outputs change only through R_X per C1, never through X's intraday
+>    path otherwise.
+
+### advisor 원문(verbatim)
+> **1. One trade-affecting ambiguity the brief treats as settled — pin it.** §1 row 36 "한 봉에서 롱·숏 교차가 **동시에** 서면". Your rule: conflict only if *both* directions are fresh (unconsumed) in that bar; if LONG was already consumed, a wide bar hitting both bands yields a plain SHORT setup. The other reading (bar touches both bands → conflict regardless) kills more setups → different trades. Your reading follows row 35 ("방향별 첫 교차 하나만 셋업" — no setup, no conflict), but it's a convention row + test, not implicit. Raise with Codex.
+> **2. Warm-up suppression is missing from the brief.** Strategy needs `trade_from_day_index`; warm-up days accumulate R (and feed B's median) but emit no intents and count in no denominator. Also state: O_d is defined only when the day's first bar *is* the 00:00 bar — otherwise the day is already invalid, but say so.
+> **3. Placebos are Arm A only** (§4 "원판 = Arm A · IS"). P2/P3/P4 never run under the B filter. Say it.
+> **4. Invalid-day test — rephrase to what you actually want:** perturb bar *contents* of an invalid day X (keep it invalid) → every valid arm-day's trades byte-identical. That's the property that makes "partial R_X never leaks" true.
+> **5. Q1–Q4:** Q1 no verdict impact (order changes only the recorded reason; every gate must pass for an intent). Q2 minute-bucket rule = the replay's settlement rule — one row. Q3 Decimal, yes. Q4 yes, B ⊂ A structurally (fixed capital + no cross-day positions → each day independent); keep the separate B run *and* the equality test — the test is the deliverable. Equality set = days ∈ V_B ∧ contraction.
+> **6. P3 placeholder check:** `sl = O_d` sits on the wrong side for the inverted direction. `request_entry` validates TP side only (confirmed), `_execute_entry` uses the resolved SL′ — fine, but grep `db/record.py` and `ReplayContext` for any SL-side assumption on `intent.sl` before relying on it.
+> **7. Arithmetic spot-checks pass:** late_cross at mm ≥ 1438 (cross 23:57 → fill 23:58 is the last legal); §5's B-invalid range X+2..X+21 = 08-14..09-02 ✓; median strict `<` ✓; P4 `integers(1, ⌊R/tick⌋+1)` ✓; trail R under mirror = |F−(2F−O_d)| = R ✓.
+> **Process:** start `scratchpad/2i_conventions.md` now (rows owed: fee basis, sl == anchor placeholder, P2 queue, item 1, funding bucket, failure order, P4 draw, Decimal median, warm-up, static-check scope, bootstrap table). Surface the fee-basis call to the user in the next status report as a disclosed decision (§1 row 46; #2 doesn't specify the basis). No blocker on the design itself.
+
+### Codex 원문(verbatim · task-mufjq08e-jiwk3t)
+> ## Before-pass findings
+> 
+> 1. **BLOCKER — range history is coupled to trading eligibility.** The design says invalid days are skipped, but a day can have all 1,440 mark bars and be invalid only because its funding record is missing. Its range is still required by the next A day and by later B median windows. Skipping that range can remove valid trades and change the verdict. **Fix:** accumulate and retain `R_d` for every complete mark day, independently of `V_A`, `V_B`, funding validity, and contraction. Apply eligibility only when deciding whether to trade on day `d`. Test a funding-only invalid day followed by a valid day. [Binding rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30)
+> 
+> 2. **BLOCKER — “1,440 bars” needs an exact UTC grid check.** A count of 1,440 can hide a duplicate minute and a missing minute. **Fix:** require exactly one bar at each aligned minute start from 00:00 through 23:59, with all four finite mark fields. Test duplicate-plus-gap, misaligned timestamps, and missing fields. This directly controls `V_A`, `V_B`, trades, and the statistical sample. [Binding rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30)
+> 
+> 3. **BLOCKER — the current data loader can make mark eligibility depend on kline availability.** REST loading keeps only timestamps present in *both* last-price klines and mark klines. A missing last-price kline could therefore make a complete mark day appear invalid, although §1 requires mark completeness. **Fix:** give `days.py` a mark-completeness source independent of that intersection, or establish and test that the prepared input preserves every available mark minute. [Loader](/home/cms/project/BTC_Futures_E2E/backtest/data.py:145) · [Binding rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30)
+> 
+> 4. **Binding-text conflict — 23:59 cross accounting.** The design evaluates that bar’s high/low to record a new `late_cross`; §1 and §11 say the 23:59 bar’s high/low are used for no judgment. This changes the §7-3 denominator, though it cannot create a trade. **Fix:** do not inspect 23:59 high/low for crosses. A first cross at 23:58 is consumed as `late_cross` because its next open is 23:59. Record this interpretation in the pre-run convention row. [§1 time exit](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:44) · [§11-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:204)
+> 
+> ## Look-ahead
+> 
+> The bands and contraction test use only completed prior days; the delayed P2 gate uses the delayed bar’s close; and the P4 draw uses prior range. I found no strategy-price look-ahead in those rules. Whole-day validity does use later completeness to exclude an earlier signal, but that retrospective eligibility is expressly required for the backtest; it must not be reused as a forward-paper decision rule. [§1 completeness](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30) · [§5 forward rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:143)
+> 
+> ## Q1–Q4
+> 
+> | Question | Review decision |
+> |---|---|
+> | **Q1 failure order** | Accept the proposed exclusive order as a **reporting convention**. It should not change execution. Pin one reason per first cross, including engine rejection at the next open. |
+> | **Q2 funding bucket** | Accept the replay’s `[boundary, boundary + 60,000)` bucket, with **exactly one usable confirmed rate and mark per boundary**. Reject missing or conflicting duplicates rather than settling two records. The replay currently settles every record in a minute, so an existence-only validity test is insufficient. [Replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:75) |
+> | **Q3 median** | Accept exact `Decimal` median of the middle two of 20 values and strict `<`. Pin equality and near-equality tests. [§1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:49) |
+> | **Q4 B filter** | Accept one strategy with a B day filter, provided both arms use the same complete-day range history and B’s trades on eligible contraction days match A’s fills and outcomes. Use `V_B` for the A/B policy comparison. [§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:107) |
+> 
+> ## Tests and convention rows to add
+> 
+> - Pin the base strategy’s 23:57, 23:58, and 23:59 boundary behavior; a 00:00 cross; opposite-direction entry after a same-day exit; and a first cross while busy that stays consumed.
+> - Pin P2 simultaneous source crosses, delayed gates, and drops when the due bar is 23:59 or later. Pin P3’s mirrored SL, fill-derived R, TP, and trail in both directions.
+> - Pin the `EntrySkipped` mapping. The replay decision record currently omits `SizingDecision.reason`, which is needed to distinguish `normalization` from other `sizing_rejected` cases; capture the event through `on_event` or preserve that reason in the replay record. [Replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:105) · [§7-3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:179)
+> - Pin the tick’s source to registry #36’s single snapshot, with no fixture fallback. [Registry #36](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:44)
+> 
+> **VERDICT: FIX-PLAN-FIRST.** The range-history and mark-completeness issues can change trades and verdicts; the 23:59 rule also needs a binding-consistent convention before implementation.
+> 
+> Codex session ID: 01a0d386-741a-7341-8660-f30704b48ca0
+> Resume in Codex: codex resume 01a0d386-741a-7341-8660-f30704b48ca0
