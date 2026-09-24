@@ -4393,3 +4393,154 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - `bo_v1` = §1 표(25~53행 · LF + 끝 개행) SHA256 `1b8a41a8e6fe983b1982d9775451f93cb3f27b8d3f520102963c8913d1ba56f7`(앵커 직전 재계산 일치).
 - `OOS_end = 2026-09-23T23:59:59.999Z`(createdTime 전 마지막 완전 UTC 일 · 기계적) · OOS 85일 · N = 4 · 시드 20260924 · 트라이얼 #1 OOS 영구 닫힘 재확인.
 - 다음: 단계 2(하네스·전략 구현) before-pass(advisor + Codex) — 코드는 그 뒤.
+
+## 2026-09-24 — 트라이얼 #2 **단계 2(하네스·전략 구현) before-pass**(advisor + Codex task-mufe4mmm-ehihrg · **FIX-PLAN-FIRST**)
+- 계획 초안: 2a 앵커 모듈 · 2b 엔진/사이징(TIME_EXIT · Trail R배수 · E_ref · 레버리지 범위 · 시가 갭 청산) · 2c 재생 루프 23:59 훅 · 2d 유효일 · 2e 전략 · 2f 플라시보 · 2g 판정기(푸시 후 실행) · 2h 런타임 규칙 스냅샷 · 2i 구현 규약 행.
+- 사전 확인: `paper/*.py`·`sizing/*.py`·`backtest/*.py`·`exchange/*.py`에 PROVENANCE 헤더 없음(복사 파일 아님 · 공유 계층 변경은 이 로그에 기록).
+
+### 항목별 입장(Claude Code)
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 | ✅ 동의 | 진입마다 실행 지갑을 E_ref로 리셋 · Δ지갑 = 청산 후 − E_ref · 누적은 보고용 원장(Codex #1과 같음) |
+| advisor | 2 | ✅ 동의 | "전역 지금 변경" 선택지 삭제 · 명시적 limits 범위(Codex #2 방식) |
+| advisor | 3 | ✅ 동의 | `Trail.dist_r`(dist와 배타) · trail_r = \|체결 − SL\| 이미 설정됨(engine.py:448) · 상태 직렬화(276·295)에도 반영 |
+| advisor | 4 | ✅ 확인 | 헤더 없음 — 위 사전 확인 |
+| advisor | 5 | ✅ 동의 | 2i에서 삭제 · kline 종가로 구현·테스트(Codex #8) |
+| advisor | 6 | ◐ 부분 | 주입 방식은 동의 · 실데이터 유효일 계산 **시점은 Codex #9 채택**(판정기 푸시 뒤) |
+| advisor | 7 | ✅ 동의 | 판정기 푸시 = 사용자 체크포인트 |
+| advisor | 8 | ◐ 부분 | Codex #7: 지금 캡처도 앵커 **뒤**라 문언과 다름 → 정정 문서 + 레지스트리 행 · 출처 하나만(대체 경로 없음) · **사용자 결정** |
+| advisor | 9 | ✅ 동의 | Codex #4의 7단계 순서로 고정 |
+| advisor | 10 | ✅ 동의 | `strategies/trial02/` 정적 검사(롤링 max/min·rolling·deque 극값) |
+| Codex | 1 | ✅ 동의 | advisor 1과 동일 · 실패한 진입 시도는 리셋하지 않음 · 전진은 복리 그대로 |
+| Codex | 2 | ✅ 동의 | RegimeSizing 생성 검사도 고침: 등록된 정책 대역(50–100 · 10–30) 중 하나에 포함 · size_entry에서 limits.leverage_range 포함 검사 · 기본 (50,100) |
+| Codex | 3 | ✅ 동의 | P3용 `SlFromFill(anchor=O_d, mirror=True)` — SL′ = 2F − O_d · 사이징 전에 확정 · 결정 게이트는 원 방향 |
+| Codex | 4 | ✅ 동의 | 23:59 봉 7단계(펀딩 → 대기 없음 단언 → 시가 갭 청산(경계 포함) → time_exit → bar_events → on_bar 생략 → on_minute_closed 호출) · 훅 없는 경로 불변 |
+| Codex | 5 | ✅ 동의 | P2 큐 규칙(원 교차에서 소비·대기열 · i+k 마감 판정 · conflict → position_busy → 가격 게이트 · 원래 날에 묶임 · 체결 ≥ 23:59면 dropped) → 구현 규약 행 |
+| Codex | 6 | ✅ 동의 | placebo 헬퍼를 명시 설정 객체로 · 트라이얼 #1 래퍼가 기존 기본값 유지 · #2 경로에 #1 앵커 import 없음 |
+| Codex | 7 | ✅ 동의 | 정정 문서 + 행 · 출처 하나 · 원시 3종 SHA256 고정 · taker = 5 bps 단언(다르면 §2 정정) · **사용자 결정 대기** |
+| Codex | 8 | ✅ 동의 | advisor 5와 같음 |
+| Codex | 9 | ✅ 동의 | 실데이터 유효일 계산은 판정기 푸시 뒤 |
+| Codex | 10 | ✅ 동의 | 트라이얼 #1 SR̂ 테스트는 커밋된 고정 파일(값 + report SHA) · 원 report 대조는 별도 감사 명령 |
+
+### advisor 원문(verbatim)
+> 1. **E_ref vs execution wallet is under-specified — blocks 2b design.** §1: "매 진입 E_ref = 1,000 · 복리 없음". If sizing uses E_ref but margin is drawn from a compounding wallet, a drawdown can make margin > wallet and the engine rejects entries → path-dependent eligibility the doc doesn't intend. Trial #1 P1 solved this with per-trade fixed capital (#19 ④; see `backtest/placebo_exec.py`). Recommend: reset the execution wallet to E_ref before each entry for Arm A/B too; report the compounding path only. Registry convention row + Codex question.
+> 2. **Leverage "open item" is already decided.** §11-3: global changes at activation; backtest uses [10,30]. Per-`SizingLimits` override is right; drop "or change the global now" — don't reopen.
+> 3. **Trail:** `arm_r * trail_r` already uses fill-R; only `dist` is absolute. Minimal change: `Trail.dist_r` alternative (exactly one of dist/dist_r), default path untouched. Verify in `_execute_entry`/`_post_fill` that `trail_r = |fill − sl|` is set when `tp_rule` is present — that's your R = |fill − O_d|.
+> 4. **PROVENANCE check before touching `paper/engine.py`, `paper/types.py`, `sizing/*`.** If any carries the header, every change needs an `ops_log` entry (CLAUDE.md). Grep first.
+> 5. **B&H close = kline close is explicit in §3-1** ("kline 종가"). Remove it from the 2i "open conventions" list.
+> 6. **Day validity must be injected, never computed inside the strategy.** Validity of d depends on all 1,440 bars of d — unknowable at 00:00. §1 scopes it to backtest; 2d must feed `V_A/V_B` to the strategy as a set. Computing V_A on real bars before the evaluator push is not P&L and §5 pre-states the expected days — allowed, but log it as the only pre-push real-data touch, and if the enumeration differs from §5 that's a correction doc + registry row, not a silent fix.
+> 7. **Evaluator push conflicts with "push only on explicit request".** §4-1 step 3 requires a push before any run. Treat it as a user checkpoint: request the push explicitly when 2g is ready; nothing runs until it lands.
+> 8. **2h snapshot is time-bound.** §1/§11-6 say "앵커 시점 캡처". Anchor day is today UTC; capture after Codex returns (read-only GET, no funds). Check `.env` has the read-only key without printing it; if absent, fixture 2026-09-02 with a disclosure row.
+> 9. **23:59 handling:** your "assert no pending entry" is sound (late_cross + P2 drop guarantee it). Still call `on_minute_closed` for the 23:59 bar so a cross there registers as `late_cross` for §7-3 counts; skip only `on_bar`. Set `ctx.bar_events` to the `close_now` events so the strategy sees the exit.
+> 10. **§9 ③ test ("no rolling channel") — decide the mechanism now**, not during implementation: a static check on `strategies/trial02/` for rolling-window max/min over bars is the only enforceable form. Weak but pre-committed beats post-hoc.
+> Sequence: 2a (anchor module + tests) → 2h → 2b/2c with Codex on the engine diff → 2d → 2e → 2f → 2g → after-pass → push request → 2i rows → IS run. No smoke run on real bars at any point before 2g is pushed — your plan says this; hold it.
+
+### Codex 원문(verbatim · task-mufe4mmm-ehihrg)
+> ## Findings
+> 
+> 1. **BLOCKER — `E_ref` needs a dual-ledger definition, not merely a sizing flag.**  
+>    The anchor says every backtest entry uses fixed `E_ref = 1,000`, with no compounding, and defines `net_bps` from the trade’s wallet delta ([preregistration:52](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:52), [preregistration:53](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:53), [preregistration:197](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:197)). Currently the engine sizes from and mutates one cumulative wallet ([engine.py:395](/home/cms/project/BTC_Futures_E2E/paper/engine.py:395), [engine.py:441](/home/cms/project/BTC_Futures_E2E/paper/engine.py:441)), while replay records that cumulative value as the trade baseline ([engine_replay.py:71](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:71), [engine_replay.py:96](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:96)).
+> 
+>    Exact fix: for Trial #2 IS/OOS, reset the synthetic execution wallet to `E_ref` immediately before every accepted entry, then calculate `Δwallet = wallet_after − E_ref`. Accumulate trade results in a separate reporting/statistical ledger that never controls eligibility or size. Failed entry attempts must not reset it. Forward paper remains explicitly compounding under §3 ([preregistration:99](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:99)).
+> 
+>    This is the correct reading of §1 + §3. “Fixed sizing capital but cumulative execution wallet” is an alternative, but it contradicts “execution ledger / no compounding” and can create impossible margin states. A new engine per trade is economically equivalent but unnecessarily disrupts replay state. The dual-ledger/reset implementation is the faithful choice.
+> 
+> 2. **BLOCKER — the proposed leverage override cannot work as described.**  
+>    `RegimeSizing(…, 10, 30)` is rejected during construction against the global `(50, 100)` range ([config.py:32](/home/cms/project/BTC_Futures_E2E/sizing/config.py:32)), before `SizingLimits` can affect anything. The sizing loop then reads the regime range directly ([position.py:184](/home/cms/project/BTC_Futures_E2E/sizing/position.py:184)). The plan’s “field on `SizingLimits`” alone is therefore incomplete.
+> 
+>    Exact fix:
+> 
+>    - Keep `PERMITTED_LEVERAGE == (50, 100)` unchanged.
+>    - Add `SizingLimits.leverage_range`, defaulting to `(50, 100)`, with the only presently allowed override `(10, 30)`.
+>    - Let `RegimeSizing` accept ranges contained within either registered policy band.
+>    - At `size_entry`, require the regime range to be contained in `limits.leverage_range`.
+>    - Trial #2 passes `(10, 30)` explicitly; bot and Trial #1 use defaults.
+>    - Do not reopen registry #30’s activation decision ([trial_registry.md:38](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:38)).
+> 
+> 3. **BLOCKER — P3 cannot be implemented correctly through the current `EntryIntent`.**  
+>    P3 requires the reversed SL and TP to be mirrored about the eventual fill ([preregistration:121](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:121)). But `EntryIntent.sl` is fixed before the next bar exists ([engine.py:110](/home/cms/project/BTC_Futures_E2E/paper/engine.py:110)), and `_execute_entry` uses that fixed SL for pre-fill checks and sizing ([engine.py:385](/home/cms/project/BTC_Futures_E2E/paper/engine.py:385), [engine.py:395](/home/cms/project/BTC_Futures_E2E/paper/engine.py:395)).
+> 
+>    Exact fix: add a mutually exclusive fill-derived SL rule, e.g. `SlFromFill(anchor=O_d, mirror=True)`. For the inverted fill `F`, resolve `SL′ = 2F − O_d`; then `R = |F − O_d|`, TP is `F ± 2R` in the inverted profit direction, and trail distance is `R`. Resolve it before sizing. Tests must cover both directions, adverse fill rounding, and the decision gate remaining in the original direction.
+> 
+> 4. **BLOCKER — the time-exit replay contract needs a fully specified call sequence.**  
+>    Current replay always calls `on_bar`, then `on_minute_closed` ([engine_replay.py:65](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:65), [engine_replay.py:101](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:101)). “Skip `on_bar`” could accidentally also skip the 23:59 strategy callback, losing `late_cross` observations.
+> 
+>    Exact sequence for a hook-positive bar:
+> 
+>    1. Settle funding.
+>    2. Assert there is no pending entry.
+>    3. Test open-gap liquidation inclusively: long `open <= liq`, short `open >= liq`, timestamped at `open_ms`.
+>    4. If alive, `close_now(open, open_ms, TIME_EXIT)`.
+>    5. Put those close/liquidation events in `ctx.bar_events`.
+>    6. Do not call `Engine.on_bar`.
+>    7. Still call `strategy.on_minute_closed` for that 23:59 bar so crosses are consumed and counted as late.
+> 
+>    The hook-absent branch must remain the existing sequence byte-for-byte.
+> 
+> 5. **BLOCKER — P2 scheduling is not deterministic enough in the plan.**  
+>    The anchor says consumption occurs at the original cross, while position/conflict state is evaluated at the delayed decision time ([preregistration:120](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:120)). The plan does not say whether a cross observed while busy is queued, how opposing queued signals are resolved, or whether a delayed candidate may roll into the next UTC day.
+> 
+>    Exact fix for the registry row:
+> 
+>    - Consume the direction and enqueue at the original cross regardless of current position.
+>    - Candidate from bar index `i` is decided at close of `i+k`.
+>    - At that delayed close, resolve opposing due candidates as `conflict_cross`, then check `position_busy`, then the decision-price gates.
+>    - The candidate remains tied to its original UTC day.
+>    - If its next-open fill timestamp is `>= original_day 23:59:00`, record P2 `dropped`; never carry it into the next day or switch to the next day’s `O_d/R`.
+>    - Pin the mutually exclusive failure priority in a test and registry row.
+> 
+> 6. **BLOCKER — Trial #2 cannot safely reuse `backtest/placebo.py` as currently parameterized.**  
+>    The shared module imports Trial #1’s anchor directly ([placebo.py:34](/home/cms/project/BTC_Futures_E2E/backtest/placebo.py:34)); its P1/P4 defaults are bound to those constants ([placebo.py:76](/home/cms/project/BTC_Futures_E2E/backtest/placebo.py:76), [placebo.py:231](/home/cms/project/BTC_Futures_E2E/backtest/placebo.py:231)). That conflicts with the explicit prohibition on importing Trial #1 anchor constants and risks silently using seed `20260921`.
+> 
+>    Exact fix: refactor generic placebo helpers to require an explicit seed/config object, with no Trial #1 import or default on the Trial #2 path. Keep a Trial #1 wrapper preserving its current defaults. Trial #2 must pass `20260924`, explicit draw counts, explicit `V_A`, and its same-day/23:58 eligibility predicate.
+> 
+> 7. **BLOCKER — the promised “anchor-time runtime snapshot” no longer exists.**  
+>    The binding text requires an anchor-time snapshot ([preregistration:52](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:52), [preregistration:210](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:210)). Capturing it now is post-anchor; the 2026-09-02 fixture is pre-anchor. Neither is literally the registered rule.
+> 
+>    This requires a correction document plus append-only registry row before P&L. Select exactly one source prospectively—preferably a newly captured, timestamped post-anchor snapshot—and pin the raw `exchangeInfo`, `leverageBracket`, and `commissionRate` hashes. Do not retain a discretionary “new capture, else fixture” fallback. Also assert that the execution taker cost is exactly the preregistered 5 bps; otherwise §2 needs an explicit correction rather than silently using an account-specific fee.
+> 
+> 8. **BLOCKER — B&H close is not an open implementation convention.**  
+>    The anchor explicitly requires the last 1m **kline close** ([preregistration:96](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:96), [preregistration:110](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110)). Remove “mark-open vs kline” from 2i and implement/test the kline rule verbatim. It can change the eventual ACCEPT label, so leaving it open is verdict-relevant.
+> 
+> 9. **NON-BLOCKING — actual `V_A/V_B` computation should be moved after the evaluator push.**  
+>    Computing validity is not P&L and is not statistical look-ahead; the eligibility rule expressly depends on whole-day completeness. Nevertheless, §4-1 says evaluator committed and pushed before “all runs” ([preregistration:126](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:126)). The clean ordering is: implement `days.py` and synthetic tests in 2d, commit evaluator and convention rows, push only on explicit user instruction, then execute the real-data validity pass. This avoids needing an exception to the literal staging text.
+> 
+> 10. **NON-BLOCKING — provenance and regression pinning need to be explicit.**  
+>     The four proposed shared-layer files currently have no copied-module `PROVENANCE` header. Record that check and each shared change in `docs/ops_log.md`; do not invent a copied-file header. The Trial #1 report consistency test should not make the normal unit suite depend on `var/`: pin the two literal SR values and report SHA in a committed provenance fixture, with a separate audit command that verifies the original report when deliberately supplied.
+> 
+> ## Look-ahead assessment
+> 
+> There is no inherent look-ahead if these rules are pinned:
+> 
+> - `O_d`: take only the 00:00 bar’s `mark_open`; initialize before evaluating that same bar’s completed OHLC.
+> - `R_{d−1}`: compute only from the 1,440 closed prior-day mark bars and freeze it for day `d`.
+> - Arm B: median is exactly `R_{d−21}…R_{d−2}`; `R_{d−1}` is the comparison value and must not enter the median.
+> - `V_A/V_B`: compute outside the strategy and inject immutable day eligibility. Whole-day availability is an explicitly preregistered ex-post sample rule, not a signal. Never apply that mechanism to forward execution, where a missing bar is G-F failure.
+> - P4: derive `q` only from prior-day `R`, anchor snapshot tick, draw id, and UTC `day_index`. For `R < tick`, apply `no_range` before RNG consumption.
+> - P2: delayed gates use only the close of bar `i+k`; fill uses `i+k+1` open. Nothing from that fill bar may enter the decision.
+> 
+> Tests should perturb current-day future highs/lows, `R_{d−1}`, each median member, invalid-day future gaps, P4 future bars, and P2’s eventual fill bar independently.
+> 
+> ## Tests that must pin default behavior
+> 
+> At minimum:
+> 
+> - Existing full suite and all Trial #1 replay/strategy tests.
+> - Golden synthetic replay equality with no `exit_at_bar_open` hook.
+> - Two sequential default-engine trades proving `E_ref=None` still compounds exactly as today.
+> - Existing positional `Trail(arm_r, dist)` behavior, snapshot serialization/restoration, and fixed-distance results.
+> - `dist`/`dist_r` XOR validation plus resolved `1R` distance.
+> - Default `(50,100)` sizing decisions byte/value-identical; `(10,30)` works only with explicit limits.
+> - Tick/bar liquidation priority, funding refresh, and wallet conservation unchanged.
+> - 23:59 long/short gap liquidation, equality boundary, time exit at open, ignored high/low, callback still invoked.
+> - Arm B contraction-day trades exactly equal Arm A trades in fill, quantity, leverage, exits, and `net_bps`.
+> - Explicit `V_A/V_B` bootstrap sets: invalid days excluded, not zero-filled.
+> - All §11-7 cases plus P2 queue/day-boundary cases, P3 fill mirroring, P4 `R<tick`, P4 exact RNG reproduction, P1 same-day/23:58/`V_A`.
+> - Evaluator degeneracy, survival and staged precedence, P2/P3 zero trades = 0 bps, P4 `<190`, defined-SR subset with `n_trials=4`, A/B report-only status, MDE, and B&H kline close.
+> 
+> No files were changed, no `var/` content was read, and no market/backtest command was run.
+> 
+> VERDICT: FIX-PLAN-FIRST
+> 
+> Codex session ID: 01a0d2f7-17c9-77b2-8f8c-aba134907ef4
+> Resume in Codex: codex resume 01a0d2f7-17c9-77b2-8f8c-aba134907ef4
