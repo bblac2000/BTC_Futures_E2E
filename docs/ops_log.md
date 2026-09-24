@@ -5212,3 +5212,15 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d3ae-7e9a-7113-bf83-5f9b2202d0a5
 > Resume in Codex: codex resume 01a0d3ae-7e9a-7113-bf83-5f9b2202d0a5
+
+## 2026-09-24 — 2d·2e 재확인 r4(Codex task-muflhuva-ebkqug) **MERGE** — 2d·2e 완료
+
+### Codex 원문(verbatim)
+> **Narrow r4 re-check: no verdict-relevant issue found.** The median test now changes each of the 20 window members individually and checks both excluded neighbors. The [day-boundary guard](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:123) runs through `before_minute` before funding; a synthetic carried position triggered that guard before a 00:00 settlement.
+> 
+> The revised median and boundary tests passed. Both the no-hook replay and live-engine results matched their unchanged golden fixtures. This was read-only; I accessed neither `var/` nor market data.
+> 
+> **VERDICT: MERGE**
+> 
+> Codex session ID: 01a0d3b3-e8ed-7de3-a821-61f3d5f750ab
+> Resume in Codex: codex resume 01a0d3b3-e8ed-7de3-a821-61f3d5f750ab
