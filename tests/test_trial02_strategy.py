@@ -346,10 +346,12 @@ def test_arm_b_median_window_excludes_the_tested_day():
 
 
 def test_position_carried_into_next_day_is_an_error():
-    """거래일의 23:59 봉이 없는데(잘못 주입된 거래일 집합) 포지션이 있으면 다음 날 첫 봉에서 멈춘다."""
+    """거래일의 23:59 봉이 없는데(잘못 주입된 거래일 집합) 포지션이 있으면 다음 날 첫 봉을 **엔진이 처리하기 전에** 멈춘다 —
+    다음 날 00:00 봉이 SL을 치는 경우에도(Codex 2d·2e r2)."""
     d0 = [b for b in day(D0, LONG_UP, LONG_BARS) if (b.open_ms % DAY) // MIN != 1439]
-    with pytest.raises(AssertionError):
-        run(history() + d0 + day(D0 + 1, [(0, "60650")]), {D0})     # 다음 날도 SL 위 → 포지션이 살아 넘어온다
+    for nxt in (day(D0 + 1, [(0, "60650")]), day(D0 + 1)):                   # SL 위 / SL(60,000)을 치는 00:00 봉
+        with pytest.raises(AssertionError):
+            run(history() + d0 + nxt, {D0})
 
 
 def test_strategy_ranges_match_days_complete_mark_days():

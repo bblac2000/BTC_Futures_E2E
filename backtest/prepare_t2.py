@@ -363,11 +363,11 @@ def verify_rebuild(out: Path, expect_range: tuple[int, int] | None = None) -> di
     return m
 
 
-def load_prepared(out: Path, *, pinned_raw: dict[str, str] | None = None,
-                  expect_range: tuple[int, int] | None = None) -> tuple[list[BD.Bar1m], list[BD.Funding]]:
-    """소비자 입구: 매니페스트 해시 + 원시에서 다시 빌드한 해시 일치 + (주면) 고정된 원시 해시 일치."""
+def load_prepared(out: Path, *, pinned_raw: dict[str, str],
+                  expect_range: tuple[int, int]) -> tuple[list[BD.Bar1m], list[BD.Funding]]:
+    """소비자 입구(필수 고정): 매니페스트 해시 + 원시에서 다시 빌드한 해시 일치 + 고정된 원시 해시 일치 + 범위 일치."""
     m = verify_rebuild(out, expect_range)
-    if pinned_raw is not None and m["raw"] != pinned_raw:
+    if m["raw"] != pinned_raw:
         raise ValueError("원시 해시가 레지스트리에 고정된 값과 다르다")
     return read_bars(out / "bars_1m.parquet"), [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
 

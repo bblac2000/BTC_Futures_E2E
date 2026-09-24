@@ -107,6 +107,7 @@ class Trial02:
         self._o = self._r = self._u = self._d = Decimal(0)
         self._consumed: dict[Direction, bool] = {LONG: False, SHORT: False}
         self._queue: list[_Cand] = []
+        self._engine: Any = None                         # 첫 콜백에서 받는 엔진 참조(날 경계 가드용 · 읽기만)
 
     # ── 도우미(테스트가 직접 부른다) ─────────────────────────────────────
     @staticmethod
@@ -121,13 +122,17 @@ class Trial02:
 
     # ── 재생 루프 훅 ────────────────────────────────────────────────────
     def exit_at_bar_open(self, bar: Bar1m) -> bool:
+        """재생 루프가 **그 봉의 엔진 처리 전에** 부른다 — 날 경계 가드도 여기서(Codex 2d·2e r2: 00:00 봉 on_bar가 넘어온
+        포지션을 먼저 청산하면 전략 콜백의 가드는 늦다)."""
+        if self._engine is not None and bar.open_ms // DAY != self._day:
+            assert self._engine.position is None and self._engine.pending is None, \
+                f"날 {bar.open_ms // DAY} 첫 봉 처리 전에 포지션/대기 진입이 남아 있다(23:59 청산이 없던 날)"
         return (bar.open_ms % DAY) // MIN == self.p.exit_minute
 
     def on_minute_closed(self, bar: Bar1m, ctx: ReplayContext) -> EntryIntent | None:
         di, mm = bar.open_ms // DAY, (bar.open_ms % DAY) // MIN
+        self._engine = ctx.engine
         if di != self._day:
-            #  주입된 거래일 집합이 틀려 23:59 봉이 없던 날의 포지션이 다음 날로 넘어가면 조용히 position_busy가 되지 않게
-            assert ctx.engine.position is None and ctx.engine.pending is None, f"날 {di} 시작에 포지션/대기 진입이 남아 있다"
             self._new_day(di, bar)
         assert self._acc is not None
         self._acc.add(bar)

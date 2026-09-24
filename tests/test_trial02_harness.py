@@ -140,7 +140,8 @@ def test_prepared_input_days_and_strategy_agree(tmp_path):
     fs = [fund(start + k * 8 * HOUR) for k in range(12)]
     P.capture(out / "raw", FakeRest(fund=fs), arch, start, start + 4 * 1440 * MIN - MIN)
     P.build(out)
-    bars, fundings = P.load_prepared(out)
+    from tests.test_prepare_t2 import lp
+    bars, fundings = lp(out)
     comp = DY.complete_mark_days(bars)
     run = H.run_t2(bars, fundings, set(), Variant("A"))
     assert set(run.strategy.ranges) == comp - {D0} and D0 - 2 not in comp
@@ -165,3 +166,81 @@ def test_verify_rebuild_catches_prepared_edit_with_updated_manifest(tmp_path):
         P.verify_rebuild(out)
     with pytest.raises(ValueError):
         P.analyze(out / "raw", expect_range=(T0, T0 + 10 * MIN))                          # 범위 밖 캡처 거부
+
+
+def test_verdict_entry_requires_is_range_and_pins(tmp_path):
+    import json
+
+    from backtest import prepare_t2 as P
+    from tests.test_prepare_t2 import T0, FakeRest, arow, write_archive
+    arch = write_archive(tmp_path / "arch", [arow(T0 + i * MIN) for i in range(10)])
+    out = tmp_path / "out"
+    P.capture(out / "raw", FakeRest(), arch, T0, T0 + 9 * MIN)
+    P.build(out)
+    pins = json.loads((out / "manifest.json").read_text())["raw"]
+    with pytest.raises(ValueError):
+        H.run_prepared_is(out, pins, Variant("A"))                        # 합성 캡처 범위 ≠ IS + 21일
+    with pytest.raises(ValueError):
+        H._run_prepared(out, pins | {"funding.jsonl": "0" * 64}, Variant("A"), (T0, T0 + 9 * MIN), D0, D0)
+
+
+def test_verdict_entry_runs_on_verified_prepared_input(tmp_path):
+    import datetime as dt
+    import json
+
+    from backtest import prepare_t2 as P
+    from tests.test_prepare_t2 import FakeRest, fund
+    start = (D0 - 22) * DAY
+    arch = tmp_path / "arch"
+    arch.mkdir()
+    hdr = ("timestamp,Open,High,Low,Close,Volume,quote_volume,trades,taker_buy_base,taker_buy_quote,funding_rate,"
+           "mark_open,mark_high,mark_low,mark_close")
+    rows = []
+    for b in history() + day(D0, LONG_UP, LONG_BARS):
+        t = dt.datetime.fromtimestamp(b.open_ms / 1000, dt.UTC).strftime("%Y-%m-%d %H:%M:%S")
+        rows.append(f"{t},{b.open},{b.high},{b.low},{b.close},1,100,5,0.5,50,,{b.mark_open},{b.mark_high},{b.mark_low},{b.mark_close}")
+    for y in (2023, 2024):
+        (arch / f"BTCUSDT_1m_{y}.csv").write_text(hdr + "\n" + "\n".join(rows) + "\n")
+    out = tmp_path / "out"
+    fs = [fund(start + k * 8 * HOUR, mp="60000") for k in range(3 * 23)]
+    P.capture(out / "raw", FakeRest(fund=fs), arch, start, (D0 + 1) * DAY - MIN)
+    P.build(out)
+    pins = json.loads((out / "manifest.json").read_text())["raw"]
+    run, v = H._run_prepared(out, pins, Variant("A"), (start, (D0 + 1) * DAY - MIN), D0, D0)
+    assert v.v_a == {D0} and len(run.result.trades) == 1 and run.crosses[0]["final_reason"] is None
+
+
+def test_median_is_exactly_the_registered_window():
+    """각 창 구성원: 날마다 다른 범위 → 전략 중앙값 = R_{d−21}…R_{d−2}의 Decimal 중앙값 · R_{d−1}·R_{d−22}는 들어가지 않는다."""
+    ranges: dict[int, tuple[str, str, str, str]] = {}
+    vals: dict[int, Decimal] = {}
+    for j, di in enumerate(range(D0 - 23, D0)):
+        half = 300 + 37 * ((j * 7) % 23)                          # 서로 다른 반폭
+        ranges[di] = ("60000", str(60000 + half), str(60000 - half), "60000")
+        vals[di] = D(2 * half)
+    r = H.run_t2(history(n=23, ranges=ranges) + day(D0), [], {D0}, Variant("B"))
+    got = [x["median"] for x in r.strategy.log if x["event"] == "day" and x["day"] == D0][0]
+    window = sorted(vals[D0 - j] for j in range(2, 22))
+    assert D(got) == (window[9] + window[10]) / 2
+    for j in range(2, 22):                                        # 구성원 하나씩: 창 목록에 있고 d−1·d−22는 없다
+        assert vals[D0 - j] in window
+    assert r.strategy.ranges[D0 - 1] == vals[D0 - 1] and r.strategy.ranges[D0 - 22] == vals[D0 - 22]
+
+
+def test_no_funding_settled_event_at_0000(monkeypatch):
+    """C20: 엔진 `on_funding`의 반환 이벤트를 직접 본다 — 00:00 경계에서는 FundingSettled가 없다."""
+    from paper.engine import Engine
+    from paper.types import FundingSettled
+    seen: list[object] = []
+    orig = Engine.on_funding
+
+    def spy(self, *, ts_ms, rate, mark):
+        ev = orig(self, ts_ms=ts_ms, rate=rate, mark=mark)
+        seen.extend(ev)
+        return ev
+    monkeypatch.setattr(Engine, "on_funding", spy)
+    fs = [Funding(D0 * DAY + 3, "0.01", "60000"), Funding(D0 * DAY + 8 * HOUR + 3, "0.001", "60650"),
+          Funding((D0 + 1) * DAY + 3, "0.01", "60000")]
+    H.run_t2(history() + day(D0, LONG_UP, LONG_BARS) + day(D0 + 1), fs, {D0}, Variant("A"))
+    settled = [e for e in seen if isinstance(e, FundingSettled)]
+    assert [e.ts_ms % DAY for e in settled] == [8 * HOUR + 3]

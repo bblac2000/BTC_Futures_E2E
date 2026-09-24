@@ -5161,3 +5161,33 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d39e-552f-71d0-bb74-60cb2435c174
 > Resume in Codex: codex resume 01a0d39e-552f-71d0-bb74-60cb2435c174
+
+## 2026-09-24 — 2d·2e 재확인 r2(Codex task-mufl2dox-hk6p0f **FIX-FIRST**) → 수정
+| # | Codex | 입장 | 반영 |
+|---|---|---|---|
+| 1 | CLOSED | — | — |
+| 2 | PARTIAL — 판정 경로가 출처 고정을 강제하지 않음 | ✅ | `load_prepared`의 `pinned_raw`·`expect_range` 필수 · 판정 입구 `harness.run_prepared_is`(IS + 21일 고정 · 원시 해시 고정 필수 · 다시 빌드 대조 · V_A/V_B 계산) · 합성 캡처로 거부/통과 테스트 |
+| 3 | CLOSED | — | — |
+| 4 | PARTIAL — 중앙값 구성원 · C20 이벤트 | ✅ | 날마다 다른 범위로 중앙값 = 창 20개의 Decimal 중앙값(d−1·d−22 제외) · 엔진 `on_funding` 반환 이벤트를 직접 관찰 — 00:00 FundingSettled 없음 |
+| C13 | 대체 수용 | — | — |
+| 새 | 날 경계 가드가 00:00 봉 엔진 처리 뒤 | ✅ | 가드를 `exit_at_bar_open`(재생이 봉 처리 **전**에 부름)으로 이동 · 00:00 봉이 SL을 치는 경우 포함 테스트(이전 위치 코드에서 실패 확인) |
+
+### Codex 원문(verbatim · task-mufl2dox-hk6p0f)
+> ## Narrow re-check
+> 
+> | Item | Status | Result |
+> |---|---|---|
+> | 1. Rules, tick, and sizing pins | **CLOSED** | [The harness](/home/cms/project/BTC_Futures_E2E/strategies/trial02/harness.py:37) checks all four #36 snapshot hashes and fixes tick, limits, and `E_ref` for `run_t2`. |
+> | 2. Raw-to-prepared verification | **PARTIAL** | Rebuilding and comparing prepared hashes closes the original divergence. But [the consumer loader](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:366) still makes the pinned raw hashes and IS range optional, and [the harness](/home/cms/project/BTC_Futures_E2E/strategies/trial02/harness.py:61) accepts arbitrary bars without using that loader. The verdict path does not yet enforce provenance. |
+> | 3. Completeness and funding defenses | **CLOSED** | Duplicate valid minutes now raise in the strategy; funding buckets reject duplicates and non-finite values in [days.py](/home/cms/project/BTC_Futures_E2E/backtest/days.py:49). Cross-module tests were added. |
+> | 4. C6 reporting and specified coverage | **PARTIAL** | The harness joins `EntrySkipped` to first crosses. The new median test changes a group of window members, not each member; the C20 test compares PnL but does not assert the absence of a 00:00 `FundingSettled` event. |
+> | C13 | **Accept supersession** | [Preparation](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:281) stops before writing prepared outputs when an audit stop condition exists, so passing those flags into `days.py` is unnecessary. |
+> 
+> **New verdict-relevant issue:** The new day-boundary assertion runs in [the strategy callback](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:126), after replay has processed the 00:00 bar ([replay order](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:75)). In a read-only synthetic reproduction, a position carried past a missing 23:59 bar was stopped by the next day’s 00:00 bar; the assertion did not fire. Check for a carried position or pending entry before processing that bar.
+> 
+> Pytest could not start: the read-only sandbox has no writable temporary directory. The synthetic reproduction ran directly; no `var/` or market data was accessed.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0d3a8-e44f-7d92-8cb7-ff9d0b397668
+> Resume in Codex: codex resume 01a0d3a8-e44f-7d92-8cb7-ff9d0b397668

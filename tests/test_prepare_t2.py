@@ -61,6 +61,13 @@ def fund(ms: int, rate: str = "0.0001", mp: str = "100") -> dict[str, Any]:
     return {"symbol": "BTCUSDT", "fundingTime": ms, "fundingRate": rate, "markPrice": mp}
 
 
+def lp(out: Path):
+    """테스트용 소비자 호출 — 고정값을 캡처 자체에서 읽는다(실행 경로는 레지스트리 고정값을 쓴다)."""
+    m = json.loads((out / "manifest.json").read_text())
+    fr = json.loads((out / "raw" / "fill_ranges.json").read_text())
+    return P.load_prepared(out, pinned_raw=m["raw"], expect_range=(fr["start_ms"], fr["end_ms"]))
+
+
 def run(tmp: Path, rows: list[str], rest: FakeRest, start: int = T0, end: int = T0 + 9 * MIN):
     arch = write_archive(tmp / "arch", rows)
     out = tmp / "out"
@@ -79,7 +86,7 @@ def test_complete_archive_needs_no_rest_and_builds_identically(tmp_path):
     assert json.loads((out / "raw" / "fill_ranges.json").read_text())["ranges"] == []
     assert not [c for c in rest.calls if "lines" in c[0] or "Klines" in c[0]]
     m = P.build(out)
-    bars, fundings = P.load_prepared(out)
+    bars, fundings = lp(out)
     assert len(bars) == 10 and {b.source for b in bars} == {"archive"} and len(fundings) == 1
     m2 = P.build(out)                                           # 재현: 같은 원시 → 같은 해시
     assert {k: m[k] for k in ("bars_1m.parquet", "funding.json", "source_audit.json")} == \
@@ -93,7 +100,7 @@ def test_archive_row_with_mark_but_empty_kline_is_filled_from_rest(tmp_path):
     out = run(tmp_path, rows, rest)
     assert json.loads((out / "raw" / "fill_ranges.json").read_text())["ranges"] == [[T0 + 3 * MIN, T0 + 3 * MIN]]
     P.build(out)
-    bars, _ = P.load_prepared(out)
+    bars, _ = lp(out)
     b3 = [b for b in bars if b.open_ms == T0 + 3 * MIN][0]
     assert b3.source == "rest" and b3.mark_open == "200" and b3.open == "200"   # 분 하나 = 출처 하나(혼합 없음)
     audit = json.loads((out / "source_audit.json").read_text())
@@ -120,7 +127,7 @@ def test_nothing_anywhere_is_a_missing_minute(tmp_path):
     rows = [arow(T0 + i * MIN) for i in range(10) if i != 4]
     out = run(tmp_path, rows, FakeRest({T0 + 4 * MIN: kline(T0 + 4 * MIN)}, {}))
     P.build(out)
-    bars, _ = P.load_prepared(out)
+    bars, _ = lp(out)
     assert len(bars) == 9 and json.loads((out / "source_audit.json").read_text())["minutes_missing"] == 1
 
 
@@ -144,7 +151,7 @@ def test_duplicate_plus_gap_does_not_look_complete(tmp_path):
     rows = [arow(T0 + i * MIN) for i in range(10) if i != 7] + [arow(T0 + 3 * MIN)]
     out = run(tmp_path, rows, FakeRest())
     P.build(out)
-    bars, _ = P.load_prepared(out)
+    bars, _ = lp(out)
     assert sorted(b.open_ms for b in bars) == [T0 + i * MIN for i in range(10) if i != 7]
 
 
@@ -156,7 +163,7 @@ def test_misaligned_archive_timestamp_is_not_used(tmp_path):
     out = tmp_path / "out"
     P.capture(out / "raw", FakeRest(), arch, T0, T0 + 9 * MIN)
     P.build(out)
-    bars, _ = P.load_prepared(out)
+    bars, _ = lp(out)
     assert T0 + 6 * MIN not in {b.open_ms for b in bars}
 
 
@@ -178,7 +185,7 @@ def test_funding_bucket_rules(tmp_path, records, ok):
     (out / "raw" / "funding.jsonl").write_text(json.dumps({"page": records}) + "\n")
     if ok:
         P.build(out)
-        _, f = P.load_prepared(out)
+        _, f = lp(out)
         assert len(f) == 1
     else:
         with pytest.raises(P.SourceStop):
@@ -190,7 +197,7 @@ def test_manifest_mismatch_stops_consumer(tmp_path):
     P.build(out)
     (out / "funding.json").write_text("[]\n")
     with pytest.raises(ValueError):
-        P.load_prepared(out)
+        lp(out)
 
 
 def test_window_is_is_plus_21_day_warmup_only():

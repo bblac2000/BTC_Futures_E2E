@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from backtest import days as DY
+from backtest import prepare_t2 as PT
 from backtest.data import Bar1m, Funding
 from backtest.engine_replay import ReplayResult, replay
 from exchange.loader import rules_from_snapshot_dir
@@ -83,3 +85,15 @@ def run_t2(bars: Sequence[Bar1m], fundings: Sequence[Funding], trade_days: set[i
         c["final_reason"] = None if kind == "entered" else why
     return T2Run(r, s, crosses)
 
+
+
+def _run_prepared(out: Path, pinned_raw: dict[str, str], variant: Variant, expect_range: tuple[int, int],
+                  first_day: int, last_day: int) -> tuple[T2Run, DY.Validity]:
+    bars, fundings = PT.load_prepared(out, pinned_raw=pinned_raw, expect_range=expect_range)
+    v = DY.validity(bars, fundings, first_day, last_day)
+    return run_t2(bars, fundings, v.v_a if variant.arm == "A" else v.v_b, variant), v
+
+
+def run_prepared_is(out: Path, pinned_raw: dict[str, str], variant: Variant) -> tuple[T2Run, DY.Validity]:
+    """판정 경로의 유일한 입구 — IS 창(+21일)만 · 원시 해시 고정 필수 · 다시 빌드 대조 · V_A/V_B를 여기서 계산."""
+    return _run_prepared(out, pinned_raw, variant, PT.window_range(), A.IS_START_MS // A.DAY_MS, A.IS_END_MS // A.DAY_MS)
