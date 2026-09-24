@@ -343,3 +343,30 @@ def test_arm_b_median_window_excludes_the_tested_day():
     _, s = run(history(ranges=rng) + day(D0), {D0}, Variant("B"))
     d = [x for x in s.log if x["event"] == "day" and x["day"] == D0][0]
     assert d["status"] == "not_contraction" and D(d["median"]) == D("1150")
+
+
+def test_position_carried_into_next_day_is_an_error():
+    """거래일의 23:59 봉이 없는데(잘못 주입된 거래일 집합) 포지션이 있으면 다음 날 첫 봉에서 멈춘다."""
+    d0 = [b for b in day(D0, LONG_UP, LONG_BARS) if (b.open_ms % DAY) // MIN != 1439]
+    with pytest.raises(AssertionError):
+        run(history() + d0 + day(D0 + 1, [(0, "60650")]), {D0})     # 다음 날도 SL 위 → 포지션이 살아 넘어온다
+
+
+def test_strategy_ranges_match_days_complete_mark_days():
+    """days.py와 전략의 완결성·범위 정의가 같다(C1·C2): 결손 날 · NaN mark 날 · 어긋난 시각 · 펀딩만 무효인 날."""
+    from backtest.days import complete_mark_days
+    bars = history(n=8, last=D0 - 1)
+    gap = D0 - 6
+    bars = [b for b in bars if not (b.open_ms // DAY == gap and (b.open_ms % DAY) // MIN == 700)]
+    nan_day = D0 - 4
+    bars = [Bar1m(b.open_ms, b.open, b.high, b.low, b.close, b.volume, b.quote_volume, b.trades, b.taker_buy_base,
+                  b.taker_buy_quote, "NaN", b.mark_high, b.mark_low, b.mark_close, b.source)
+            if (b.open_ms // DAY == nan_day and (b.open_ms % DAY) // MIN == 5) else b for b in bars]
+    mis = D0 - 3
+    from dataclasses import replace
+    bars = [replace(b, open_ms=b.open_ms + 1) if (b.open_ms // DAY == mis and (b.open_ms % DAY) // MIN == 9) else b
+            for b in bars]
+    bars += day(D0)                                               # 마지막 날(범위는 다음 날 시작에 확정되므로 비교에서 뺀다)
+    _, s = run(bars, set())
+    assert set(s.ranges) == complete_mark_days(bars) - {D0}
+    assert {gap, nan_day, mis}.isdisjoint(s.ranges)

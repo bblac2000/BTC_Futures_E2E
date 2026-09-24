@@ -47,8 +47,17 @@ def complete_mark_days(bars: Iterable[Bar1m]) -> set[int]:
 
 
 def funding_boundaries(fundings: Iterable[Funding]) -> set[int]:
-    """확정 펀딩 이벤트가 있는 분 버킷의 시작 시각."""
-    return {f.funding_ms - f.funding_ms % MIN for f in fundings}
+    """확정 펀딩 이벤트가 있는 분 버킷의 시작 시각. 입력은 `prepare_t2`가 검증한 이벤트여야 한다 — 버킷당 둘 이상이거나
+    율·mark가 유한하지 않으면 `ValueError`(C5·C18 방어선)."""
+    out: set[int] = set()
+    for f in fundings:
+        b = f.funding_ms - f.funding_ms % MIN
+        if b in out:
+            raise ValueError(f"펀딩 버킷 {b}에 이벤트가 둘 이상 — 검증된 입력이 아니다")
+        if not (_finite(f.rate) and _finite(f.mark)):
+            raise ValueError(f"펀딩 {f.funding_ms} 율/mark가 유한하지 않다")
+        out.add(b)
+    return out
 
 
 @dataclass

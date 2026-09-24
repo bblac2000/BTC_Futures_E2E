@@ -73,7 +73,10 @@ class _DayAcc:
             self.bad = True
             return
         h, lo = vals[1], vals[2]
-        self.minutes.add((b.open_ms % DAY) // MIN)
+        mm = (b.open_ms % DAY) // MIN
+        if mm in self.minutes:
+            raise ValueError(f"중복 분 {b.open_ms} — 준비 단계에서 없어져야 한다(days.py와 같은 규칙)")
+        self.minutes.add(mm)
         if self.hi is None or h > self.hi:
             self.hi = h
         if self.lo is None or lo < self.lo:
@@ -123,6 +126,8 @@ class Trial02:
     def on_minute_closed(self, bar: Bar1m, ctx: ReplayContext) -> EntryIntent | None:
         di, mm = bar.open_ms // DAY, (bar.open_ms % DAY) // MIN
         if di != self._day:
+            #  주입된 거래일 집합이 틀려 23:59 봉이 없던 날의 포지션이 다음 날로 넘어가면 조용히 position_busy가 되지 않게
+            assert ctx.engine.position is None and ctx.engine.pending is None, f"날 {di} 시작에 포지션/대기 진입이 남아 있다"
             self._new_day(di, bar)
         assert self._acc is not None
         self._acc.add(bar)

@@ -5107,3 +5107,57 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - **TDD 이탈(공개)**: `prepare_t2.py`는 테스트보다 먼저 썼다 → 보완으로 돌연변이 검사(규칙 5개를 하나씩 깨서 테스트가 모두 잡는지) — 5/5 잡음. `days.py`·전략은 테스트 먼저.
 - 전략 돌연변이 검사: 10개 중 9개 잡음 · 1개(23:59 봉 관측)는 동등 돌연변이(그 봉은 앞에서 먼저 돌아간다) · 처음 놓친 2개(sl_dist 경계 · 중앙값 창)는 경계 테스트를 더해 잡음.
 - 보고할 구조 사실: 기본 전략에서 `position_busy`는 생기지 않는다 — 반대 띠 교차는 O_d(= SL)를 지나므로 같은 봉 `on_bar`가 먼저 SL 청산(테스트로 고정) · P2 지연 결정에서만 가능.
+
+## 2026-09-24 — 트라이얼 #2 2d·2e **after-pass**(advisor + Codex task-mufknjra-35c5c1 **FIX-FIRST**) → 수정
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 | ✅ | 새 날 첫 봉 가드(포지션·대기 진입) + 테스트(가드 없는 코드에서 실패 확인) |
+| advisor | 2 | ✅ | 동등성 테스트 2개(합성 봉 · prepare_t2 빌드 경유) |
+| advisor | 3 | ✅ | `strategies/trial02/harness.py` `run_t2` — §7-3 결합 + 규칙 해시 검증(Codex #1·#4와 같음) |
+| advisor | 4·5·6 | ✅ | 규약 초안 17~24 · 2 공시 |
+| advisor | 7 | ✅ | 이 단계 뒤 사용자 보고 |
+| Codex | 1 | ✅ | `harness.load_rules` = #36 파일 4개 SHA256 대조(불일치 → 중단 · 대체 없음) · tick·limits·E_ref를 호출자가 줄 수 없게 `run_t2`에 고정 |
+| Codex | 2 | ✅ | `verify_rebuild`(임시 디렉터리에서 원시로 다시 빌드 → 산출물 해시 대조 · 덮어쓰지 않음) · `load_prepared`가 호출 + `pinned_raw`(레지스트리에 고정할 원시 해시) · `expect_range`(IS + 21일만) · CLI `--rebuild-only` 삭제 → `--verify` · 이미 준비된 출력이면 재캡처 거부 · REST 어긋난 시각 보고 |
+| Codex | 3 | ✅ | 전략 누적기: 중복 분 → ValueError(days.py와 같은 규칙) · days.funding_boundaries: 버킷 중복·비유한 → ValueError · 교차 모듈 테스트 |
+| Codex | 4 | ✅ | C6 결합(`run_t2`) · 테스트: C10 경로 교란 · 중앙값 창 경계 · P2 체결 봉 교란 · C20(00:00 펀딩 무정산 · 08:00 정산) · 매핑 |
+| Codex | C13 | ◐ | C13(감사 플래그를 days 입력으로)은 C14·C15의 중단 규칙으로 대체됨 — 중단 조건이 있으면 준비 산출물 자체가 없다 |
+
+### advisor 원문(verbatim)
+> **1. Strategy has no guard against a position surviving into a new day.** The only assert is at minute 1439. If a trade day's 23:59 bar were absent (impossible via V_A, but `trade_days` is an injected set — a wrong set is exactly the failure mode), the hook never fires, the position carries into d+1, and `_gate` silently reports `position_busy` all day. Pass `ctx` into `_new_day` and assert `ctx.engine.position is None and ctx.engine.pending is None`. One test: complete history + trade day with bar 1439 dropped, `trade_days={D0}` forced → must raise, not trade.
+> **2. Codex asked "days.py vs strategy completeness — identical?" — answer it with a test, not prose.** Same synthetic bars (gap day, NaN-mark day, misaligned bar, funding-only-invalid day) → `set(strategy.ranges) == complete_mark_days(bars) − {last_day}`.
+> **3. §7-3 exclusive reason is half-implemented and lives nowhere yet.** The join is run.py's job (C6). Write it into the 2f scope now. Same for tick source: run.py must load from `anchor.RULES_SNAPSHOT_DIR` and verify the four SHA256s.
+> **4. Position_busy claim — agree, with the precise reason for the log:** opposite band D < O_d = initial SL, trail only tightens toward profit, engine order in `on_bar` is fill → liq → SL → TP, so any bar reaching the opposite band has already closed the position before `on_minute_closed`. Reachable in P2 (tested). `pending` in `has_position` is dead in the base path for the same reason. Say both in the convention row.
+> **5. P3 disclosure for convention #2:** mirroring about the inverted fill makes R_inv = R_orig − 2·slippage (~4 bps). State it once.
+> **6. Conventions draft is behind the design.** Add C2, C1, C4, C12/C15/C17/C19, C18/C20, items 4–5.
+> **7. Status report to the user is overdue.** Include the fee-basis decision (§1 row 46 over #2's unspecified basis, opt-in flag, default path untouched), the TDD deviation on prepare_t2 with the mutation result, and what's next. Send it after Codex returns.
+> **Procedure:** don't touch 2f until Codex returns. If FIX-FIRST → fix, full suite + goldens, narrow re-check, then 2f.
+
+### Codex 원문(verbatim · task-mufknjra-35c5c1)
+> ## Findings
+> 
+> 1. **BLOCKER — the runtime tick and rules are not pinned.** [Trial02](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:95) accepts any `tick`, and the [test fixture](/home/cms/project/BTC_Futures_E2E/tests/test_trial02_strategy.py:28) loads the snapshot without checking its SHA256; [the loader](/home/cms/project/BTC_Futures_E2E/exchange/loader.py:101) performs no hash check either. C6 and [§11-6](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:210) require the anchored snapshot. A different tick changes the no-range guard, P4 draws, bands, and trades. The fixed sizing capital is likewise a caller argument to [replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:65), not enforced by the strategy’s otherwise correct [intent fields](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:237). The later runner must pin and verify both before any run.
+> 
+> 2. **BLOCKER — raw-to-prepared verification is incomplete.** [verify_manifest](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:334) checks each file against hashes in the same mutable manifest; it does not rebuild from raw and compare prepared hashes. [`--rebuild-only`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:349) overwrites the outputs and manifest instead of performing C14’s promised verification. A changed prepared bar plus an updated manifest can therefore pass while the raw capture is unchanged. The same CLI also accepts an arbitrary raw window in rebuild mode, bypassing C14’s [IS-only boundary](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4979). This is an audit/build divergence and a binding staging gap.
+> 
+> 3. **The two completeness definitions are not identical.** [days.py](/home/cms/project/BTC_Futures_E2E/backtest/days.py:33) rejects duplicate `open_ms`; the strategy’s [_DayAcc](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:63) puts duplicate minutes in a set and can include their highs and lows in `R_d`. [days.py’s funding check](/home/cms/project/BTC_Futures_E2E/backtest/days.py:49) also reduces events to a presence set, so it cannot itself enforce C5’s cardinality or finite values. The current prepared path collapses exact bar duplicates and validates funding first, which contains these differences **if every caller uses verified prepared input**. Add a cross-module test and make that dependency enforceable.
+> 
+> 4. **C6 reporting and several specified tests are missing.** The strategy [records an intent](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:237) but never reconciles it with `EntrySkipped`; [replay decisions](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:105) omit `SizingDecision.reason`. Thus §7-3 cannot distinguish `normalization` from other `sizing_rejected` cases as C6 requires. The permitted test files also lack the C10 invalid-day path perturbation, prior-range and each-median-member look-ahead checks, P2 fill-bar perturbation, and C20’s no-00:00-`FundingSettled` assertion. These are required coverage gaps; I found no price look-ahead in the implemented band, gate, or delay calculations.
+> 
+> ## C1–C20 check
+> 
+> | Clauses | Result |
+> |---|---|
+> | C1–C2 | Range is retained independently of trade eligibility at [day rollover](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:148); exact grids are checked in [days.py](/home/cms/project/BTC_Futures_E2E/backtest/days.py:33). Strategy duplicate handling differs as noted above. |
+> | C3–C5 | Separate REST mark/kline capture and mark-only stop are in [prepare_t2](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:174); 23:59 crosses are excluded at [line 129](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:129); funding validation is in [_funding](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:217). |
+> | C6–C10 | Fresh-only conflict, warm-up suppression through injected trade days, and A-only implemented variants are at [strategy lines 45–49](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:45), [158–160](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:158), and [190–207](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:190). C6 is incomplete; C10’s specified test is absent. |
+> | C11–C16 | Superseded raw-capture rules are mainly implemented by [capture/analyze](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:166). C14 verification is incomplete. C13’s audit flags are not an input to [validity](/home/cms/project/BTC_Futures_E2E/backtest/days.py:68). REST rows outside an aligned fill timestamp are silently ignored at [_rest_rows](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:194), so C11’s misaligned REST timestamp category is not reported. |
+> | C17–C20 | Single-source fill and REST stop rules are at [analyze](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:259); raw funding bucket cardinality and off-grid stop are at [_funding](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:227). C20’s replay assertion is absent. |
+> 
+> The disclosed **`position_busy` structural fact is correct for the base strategy**: an opposite-band cross passes the open-anchored SL, and replay processes that bar’s exit before the strategy checks the cross ([replay order](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:83), [gate](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:225)). P2 can reach `position_busy`, as its delayed candidate is checked later.
+> 
+> **Tests:** I attempted the three permitted files with the project virtualenv and cache disabled. Pytest could not start because the read-only environment has no writable temporary directory; no test result is claimed.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0d39e-552f-71d0-bb74-60cb2435c174
+> Resume in Codex: codex resume 01a0d39e-552f-71d0-bb74-60cb2435c174

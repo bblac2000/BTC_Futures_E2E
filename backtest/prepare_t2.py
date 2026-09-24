@@ -1,6 +1,7 @@
 """트라이얼 #2 데이터 준비(단계 2d · 설계 C14~C20 · ops_log 2026-09-24) — **원시 캡처 하나 → 감사 → 빌드 → 매니페스트**.
 
-    uv run python -m backtest.prepare_t2 --out var/backtest/t2/IS     # 판정기 푸시 뒤에만(사용자 체크포인트)
+    uv run python -m backtest.prepare_t2 --out var/backtest/t2/IS            # 판정기 푸시 뒤에만(사용자 체크포인트) · 한 번만
+    uv run python -m backtest.prepare_t2 --out var/backtest/t2/IS --verify   # 원시에서 다시 빌드해 대조(덮어쓰지 않음)
 
 1 캡처(`capture`): 창 + 워밍업 21일의 아카이브 CSV 행을 **거르지 않고** `raw/archive_rows.jsonl`로 · 완전한 아카이브 봉이 없는
   모든 정렬 분 = 보충 분(`raw/fill_ranges.json`) → REST `klines`·`markPriceKlines`를 그 구간만 · `fundingRate`는 전 구간 —
@@ -194,6 +195,9 @@ def _rest_rows(raw: Path, name: str, fill: set[int], idx: tuple[int, ...], kind:
     for rec in _jsonl(raw / name):
         for r in rec["page"]:
             t = int(r[0])
+            if t % MIN:
+                findings.append({"kind": f"rest_{kind}_misaligned_ts", "ts_ms": t, "stop": False})
+                continue
             if t in fill:
                 by[t].append(r)
     out: dict[int, list[Any]] = {}
@@ -243,10 +247,12 @@ def _funding(raw: Path, findings: list[dict[str, Any]]) -> list[BD.Funding]:
     return events
 
 
-def analyze(raw: Path) -> tuple[list[BD.Bar1m], list[BD.Funding], dict[str, Any]]:
+def analyze(raw: Path, expect_range: tuple[int, int] | None = None) -> tuple[list[BD.Bar1m], list[BD.Funding], dict[str, Any]]:
     """원시 파일만 읽는다. 중단 조건이 있으면 감사와 함께 `SourceStop`."""
     meta = json.loads((raw / "fill_ranges.json").read_text())
     start, end = meta["start_ms"], meta["end_ms"]
+    if expect_range is not None and (start, end) != expect_range:
+        raise ValueError(f"원시 캡처 범위 {(start, end)} ≠ 기대 {expect_range}(IS + 워밍업 21일만)")
     usable, findings = usable_archive(_jsonl(raw / "archive_rows.jsonl"))
     fr = fill_ranges(usable, start, end)
     if fr != meta["ranges"]:
@@ -313,11 +319,11 @@ def _commit() -> str:
         return "unknown"
 
 
-def build(out: Path) -> dict[str, Any]:
+def build(out: Path, expect_range: tuple[int, int] | None = None) -> dict[str, Any]:
     """`out/raw`의 원시 파일 → 감사·산출물·매니페스트. 중단이면 감사만 쓰고 SourceStop을 다시 던진다."""
     raw = out / "raw"
     try:
-        bars, fundings, audit = analyze(raw)
+        bars, fundings, audit = analyze(raw, expect_range)
     except _StopWithAudit as e:
         (out / "source_audit.json").write_text(json.dumps(e.audit, sort_keys=True, indent=1))
         raise
@@ -341,24 +347,50 @@ def verify_manifest(out: Path) -> dict[str, Any]:
     return m
 
 
-def load_prepared(out: Path) -> tuple[list[BD.Bar1m], list[BD.Funding]]:
-    verify_manifest(out)
+def verify_rebuild(out: Path, expect_range: tuple[int, int] | None = None) -> dict[str, Any]:
+    """원시 파일에서 **다시 빌드**해 산출물 해시가 매니페스트와 같은지 확인한다(덮어쓰지 않는다 · 임시 디렉터리).
+    매니페스트 자체의 원시 해시는 캡처 직후 레지스트리 행에 고정된 값과 호출자가 대조한다(`pinned_raw`)."""
+    import shutil
+    import tempfile
+    m = verify_manifest(out)
+    with tempfile.TemporaryDirectory() as td:
+        t = Path(td)
+        shutil.copytree(out / "raw", t / "raw")
+        m2 = build(t, expect_range)
+    bad = [n for n in ("source_audit.json", "bars_1m.parquet", "funding.json") if m2[n] != m[n]]
+    if bad:
+        raise ValueError(f"원시에서 다시 빌드한 산출물이 다르다: {bad}")
+    return m
+
+
+def load_prepared(out: Path, *, pinned_raw: dict[str, str] | None = None,
+                  expect_range: tuple[int, int] | None = None) -> tuple[list[BD.Bar1m], list[BD.Funding]]:
+    """소비자 입구: 매니페스트 해시 + 원시에서 다시 빌드한 해시 일치 + (주면) 고정된 원시 해시 일치."""
+    m = verify_rebuild(out, expect_range)
+    if pinned_raw is not None and m["raw"] != pinned_raw:
+        raise ValueError("원시 해시가 레지스트리에 고정된 값과 다르다")
     return read_bars(out / "bars_1m.parquet"), [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="트라이얼 #2 IS 데이터 준비(원시 캡처 → 감사 → 빌드)")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--rebuild-only", action="store_true", help="캡처 없이 raw/에서 다시 빌드(재현 검사)")
+    ap.add_argument("--verify", action="store_true", help="캡처·덮어쓰기 없이 raw/에서 다시 빌드해 산출물 해시를 대조")
     a = ap.parse_args(argv)
     out = Path(a.out)
-    start, end = window_range()
-    if not a.rebuild_only:
-        from exchange.ccxt_rest import CcxtRestClient
-        from exchange.client import ReadOnlyClient
-        capture(out / "raw", ReadOnlyClient(CcxtRestClient()), BD.ARCHIVE_DIR, start, end)
+    rng = window_range()
+    if a.verify:
+        m = verify_rebuild(out, rng)
+        print(json.dumps({"verified": True} | m, sort_keys=True, indent=1))
+        return 0
+    if (out / "manifest.json").exists():
+        print("🚫 이미 준비된 출력이 있다 — 다시 캡처하지 않는다(--verify로 대조만)", file=sys.stderr)
+        return 5
+    from exchange.ccxt_rest import CcxtRestClient
+    from exchange.client import ReadOnlyClient
+    capture(out / "raw", ReadOnlyClient(CcxtRestClient()), BD.ARCHIVE_DIR, *rng)
     try:
-        m = build(out)
+        m = build(out, rng)
     except SourceStop as e:
         print(f"🚫 {e}", file=sys.stderr)
         return 3
