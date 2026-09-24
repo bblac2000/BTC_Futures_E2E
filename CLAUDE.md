@@ -36,3 +36,10 @@ TDD: write the test, see it fail, then implement.
 - Anything touching deletion, live trading, funds, or the E2E collector host needs Codex review before deploy.
 - Thresholds, windows and gates are pre-committed. Never change them after seeing results; add a registry row instead.
 - No Donchian code in this repo. Any Donchian proposal must first state how it differs from E2E #74.
+
+## Standing rule — two-reviewer passes (user, 2026-09-24)
+For every significant task (pre-registration draft, anchor, harness or engine change, evaluator, deploy) run an **advisor + Codex in-depth pass BEFORE starting and AFTER finishing**.
+- Before: scope, risks, what could invalidate the result, what must be pre-committed.
+- After: what was actually done vs planned, what a second reviewer would object to, what to record in the registry.
+- Log both passes **verbatim** in `docs/ops_log.md`, with a per-point agree/disagree from Claude Code.
+- If Codex is over quota, queue the after-pass; nothing that depends on it proceeds until it lands.
