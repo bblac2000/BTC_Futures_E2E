@@ -1,0 +1,7 @@
+{
+ "_meta": {"source": "var/backtest/IS/step_e/report.json (trial #1 IS step e, registry #25)",
+           "report_sha256": "11c8845295823c24b107ab6ddd3b4d60c695eff5898b0a1cc89d05869b935e0d",
+           "keys": "GB.sr_A, GB.sr_B", "series": "per-trade net_bps", "copied": "2026-09-24"},
+ "sr_A": -0.23802981743207333,
+ "sr_B": -0.23471514010093758
+}
