@@ -5100,3 +5100,10 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d392-bffd-7363-b069-2c996b308ba7
 > Resume in Codex: codex resume 01a0d392-bffd-7363-b069-2c996b308ba7
+
+## 2026-09-24 — 트라이얼 #2 단계 2d·2e 구현(3bf0705 · 이 커밋)
+- 2d: `backtest/prepare_t2.py`(원시 캡처 → 순수 감사·빌드 → 매니페스트 · 중단 규칙 C12·C18~C20) · `backtest/days.py`(정확한 mark 격자 · V_A/V_B).
+- 2e: `strategies/trial02/config.py`(bo_v1 값) · `strategy.py`(설계 r1 + C1~C20 · 규약 초안 7·8·10~14).
+- **TDD 이탈(공개)**: `prepare_t2.py`는 테스트보다 먼저 썼다 → 보완으로 돌연변이 검사(규칙 5개를 하나씩 깨서 테스트가 모두 잡는지) — 5/5 잡음. `days.py`·전략은 테스트 먼저.
+- 전략 돌연변이 검사: 10개 중 9개 잡음 · 1개(23:59 봉 관측)는 동등 돌연변이(그 봉은 앞에서 먼저 돌아간다) · 처음 놓친 2개(sl_dist 경계 · 중앙값 창)는 경계 테스트를 더해 잡음.
+- 보고할 구조 사실: 기본 전략에서 `position_busy`는 생기지 않는다 — 반대 띠 교차는 O_d(= SL)를 지나므로 같은 봉 `on_bar`가 먼저 SL 청산(테스트로 고정) · P2 지연 결정에서만 가능.
