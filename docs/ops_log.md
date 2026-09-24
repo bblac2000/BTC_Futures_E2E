@@ -5086,3 +5086,17 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d390-d5c5-78c2-9522-a89dc6f38776
 > Resume in Codex: codex resume 01a0d390-d5c5-78c2-9522-a89dc6f38776
+
+## 2026-09-24 — 2d·2e 설계 r6 재확인(Codex task-mufk7a1b-k2gdge) **PROCEED**
+- C19·C20 해결 · 전체 설계(r1 + C1~C20) 구현 준비 완료.
+- 구현 메모(Codex): 재생이 `on_funding` 이벤트를 버린다 → ◐ 방법 변경: 기본 재생의 `on_event` 흐름을 바꾸면 무훅 골든이 깨지므로, 트라이얼 #2 실행에서 **23:59 청산 뒤 포지션 없음**을 매일 단언(펀딩은 포지션이 있을 때만 정산 → 00:00 정산 불가를 같은 강도로 보장).
+
+### Codex 원문(verbatim · task-mufk7a1b-k2gdge)
+> C19 resolves the source-quality pin: incomplete archive rows go to REST fill, while malformed REST rows stop the run. C20 resolves the funding pin: validated events outside the 00:00/08:00/16:00 UTC grid stop before replay. I found no new verdict-relevant ambiguity in either clause. The complete r1 + C1–C20 design is ready to implement.
+> 
+> One implementation detail needs care: [replay currently discards the events returned by `on_funding`](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:77). Expose or capture those events so C20’s “no `FundingSettled` at 00:00” assertion is meaningful.
+> 
+> VERDICT: PROCEED
+> 
+> Codex session ID: 01a0d392-bffd-7363-b069-2c996b308ba7
+> Resume in Codex: codex resume 01a0d392-bffd-7363-b069-2c996b308ba7
