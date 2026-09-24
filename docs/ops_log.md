@@ -5224,3 +5224,128 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d3b3-e8ed-7de3-a821-61f3d5f750ab
 > Resume in Codex: codex resume 01a0d3b3-e8ed-7de3-a821-61f3d5f750ab
+
+## 2026-09-24 — 트라이얼 #2 단계 2f **before-pass**(advisor + Codex task-muflm2wp-51o5aj **FIX-PLAN-FIRST**) → 설계 r2
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 0 | ✅ | 상태 보고를 이 차례에 보냄 |
+| advisor | 1 | ✅ | G7 |
+| advisor | 2 | ◐ | G8 — 결정은 Codex에게(재확인에서) |
+| advisor | 3 | ✅ | G9 |
+| advisor | 4 | ✅ | P1 포화 위험 공시(상태 보고) |
+| advisor | 5 | ✅ | G6 |
+| advisor | 6 | ✅ | 테스트 목록 |
+| advisor | 7 | ✅ | G2 |
+| Codex | 1 | ✅ | G1 |
+| Codex | 2 | ✅ | G2 |
+| Codex | 3 | ✅ | G3 |
+| Codex | 4 | ✅ | G4 |
+| Codex | 5 | ✅ | G5 |
+| Codex | Q1·Q2 | ✅ | G6 · 이탈 없음 |
+
+### 설계 r1
+> # Trial #2 step 2f — placebos + isolated run CLI + stage orchestrator (design for the before-pass)
+> 
+> Binding: prereg §4 (P1 (a)–(f) + same-day/23:58/V_A eligibility, seed 20260924 spawn(1000); P2 +1/+5; P3; P4 200 draws, <190 defined → 폐기),
+> §4-1 staging, §10/§11-4/-8, §3-1 (P1/P4 p95 = numpy linear quantile of per-draw mean net_bps; P2/P3 0 trades → 0 bps).
+> Merged pieces: harness.run_prepared_is (pins + rebuild + V_A/V_B), strategy variants, engine fixed capital, P1 executor
+> backtest/placebo_exec.run_time_exit (canonical engine, restore_position, liquidation + funding only, time exit at t+h−1 mark close).
+> 
+> F1 `backtest/p1_core.py` — generic P1 machinery with NO trial import: SourceTrade, PlacedSlot, P1Draw, occupancy, `P1Config(master_seed,
+>    draws, slot_attempts=1000, fail_limit=10)`, `p1_rng(cfg, d) = Generator(PCG64(SeedSequence(cfg.master_seed).spawn(cfg.draws)[d]))`,
+>    `p1_draw_generic(d, cfg, source, eligible_for_h, sizing_ok)` implementing (c)(d)(e) exactly as trial #1 (slots all first: pair →
+>    direction; placement h desc, slot no.; ≤1000 tries; empty eligible list → slot fails without RNG; pair never redrawn),
+>    canonical JSON, `p95` (numpy linear). `backtest/placebo.py` keeps its public names as thin trial #1 wrappers over p1_core
+>    (defaults from trial #1 anchor) — trial #1 behaviour pinned by a golden generated from the current tree before the refactor.
+> F2 `backtest/p1_t2.py` — trial #2 eligibility: for h, eligible minutes = ascending concatenation over days d ∈ sorted(V_A) of
+>    t = d·DAY + m·MIN, m ∈ [0, 1439 − h] (so t and t+h−1 same UTC day and t+h−1 ≤ 23:58; V_A days have all 1,440 minutes);
+>    h ≥ 1440 → empty. Lazy indexable view (len = |V_A|·(1440−h)). sizing_ok = placebo_exec.sizing_decision with harness.LIMITS
+>    ((10,30), liq fee on liq price), E_ref 1,000, RegimeSizing("trial02_P1", 0.01, 10, 30). Execution = run_time_exit with the same
+>    limits/E_ref/regime (fixed capital per trade; fee basis flag reaches the engine via limits). Source = Arm A trades.jsonl
+>    (trade_id, entry_ms, exit_ms, sl_dist = post-fill sl_dist); h = ceil((exit_ms − entry_ms)/MIN), min 1.
+>    Output per successful draw: mean net_bps (Decimal string) + n; failed draws listed; summary counts only.
+> F3 `strategies/trial02/run.py` — isolated entry (`python -m strategies.trial02.run --arm A|B [--delay k] [--invert] [--p4-draw d]
+>    --prepared DIR --pins FILE --out DIR`): harness.run_prepared_is → writes trades.jsonl, crosses.jsonl (with final_reason),
+>    days.jsonl (strategy day log), validity.json (V_A/V_B + reasons), meta.json (variant, manifest + pins + rules-snapshot hashes,
+>    bo_v1 SHA, git HEAD, counts only). stdout = counts only. 🚫 no wallet/return aggregates.
+> F4 `backtest/p1_t2_run.py` — P1 CLI (parts by draw range + merge that must cover 0..999 exactly once) reading only
+>    (trade_id, entry_ms, exit_ms, sl_dist) from the A run; V_A recomputed from the pinned prepared input and asserted equal to A's
+>    validity.json; stdout counts only.
+> F5 `backtest/t2_stages.py` — orchestrator (isolated subprocesses via backtest.replay.run_isolated, verbatim records, resumable):
+>    stages `prepare` (capture+build once; prints manifest), `A`, `base` (B, P2_delay1, P2_delay5, P3_invert), `p1` (parts) +
+>    `p1-merge`, `p4` (P4_draw000..199). Never opens outputs. IS only; no OOS path exists.
+> F6 Pins: after `prepare`, the raw hashes (manifest["raw"]) are committed to `strategies/trial02/data_pins.json` + registry row
+>    BEFORE any strategy stage; run.py/p1_t2_run.py read only that committed file (test: registry row contains the same hashes).
+> F7 Evaluator inputs (2g contract): A, B, P2×2, P3, P4×200 run dirs + P1 merged null; "defined P4 draw" = ≥1 trade.
+> Tests: p1_core golden (trial #1 byte-identical); same-day eligibility view == brute-force list on small synthetic V_A; sizing/exec
+> use (10,30) + liq-fee flag; P1 RNG reproduction for trial #2 seed; CLI outputs + no aggregates; merge coverage; pins file ↔ registry;
+> orchestrator never imports strategies.trial02 (assert_not_imported).
+> Cost estimate (disclosed): P1 = 1,000 draws × n_A trades × up to 1,439 engine minutes — hours; parallel parts.
+> Open: Q1 is running_time_exit's use of `ExitReason.MANUAL` for the P1 time exit acceptable (placebo only; reason recorded as
+> time_exit)? Q2 anything in F2 that departs from (a)–(f)?
+
+### 설계 r2 변경
+> # 2f design r2 — changes vs r1 (advisor + Codex before-pass)
+> 
+> G1 (Codex #1) Push preflight for EVERY stage incl. `prepare`: orchestrator takes `--evaluator-commit H`; refuses unless (i) H is an
+>    ancestor of HEAD, (ii) H is contained in origin/main after `git fetch` (read-only), (iii) `backtest/evaluate_t2.py` (+ its
+>    imports' files listed in a frozen tuple) is byte-identical at HEAD and at H, (iv) the working tree is clean. H is written in every
+>    verbatim record. After `prepare`: `strategies/trial02/data_pins.json` (raw hashes + the three prepared hashes) + registry row are
+>    committed, and stage A/base/p1/p4 additionally refuse unless that file is tracked, clean, and contained in origin/main (a second
+>    push = user checkpoint; its commit hash is recorded in each record).
+> G2 (Codex #2) P1 placement AND execution use `harness.load_rules()` (#36 snapshot, SHA256-verified) and
+>    `P1Config(master_seed=20260924, draws=1000, slot_attempts=1000, fail_limit=10)` passed explicitly; no default.
+>    (advisor #7) limits/regime come from `strategies/trial02/config.py` (LIMITS moves there; harness re-exports).
+> G3 (Codex #3) Resume = a stage is "done" only if its record's command, variant, evaluator commit, pins commit, prepared manifest hash,
+>    and EVERY recorded output hash match the current files (missing/changed → error, not rerun silently). `p1-merge` is its own
+>    isolated recorded stage that verifies each part's record + output hashes and exact 0..999 coverage. The evaluator (2g) verifies
+>    the same provenance for all inputs (A, B, P2×2, P3, P4×200, P1 merged).
+> G4 (Codex #4) Variant whitelist enforced in `Variant.__post_init__`: at most one of {delay ∈ {1,5}, invert, p4_draw ∈ 0..199};
+>    B has none. Run name ↔ variant is a fixed table in the orchestrator (A, B, P2_delay1, P2_delay5, P3_invert, P4_draw000..199);
+>    meta.json stores the exact variant; evaluator rejects any name/meta mismatch.
+> G5 (Codex #5) n_A = 0 → P1 writes `{"computable": false, "reason": "n_A=0"}` and no null; evaluator applies §7 priority (IS trade 0 →
+>    REJECT first) without a P1 mean. 2g contract: all 200 P4 IDs exactly once; zero-trade P4 draws excluded (count reported);
+>    < 190 defined → 폐기; P2/P3 zero trades → 0 bps.
+> G6 (Codex Q1 · advisor #5) `run_time_exit(..., reason=ExitReason.MANUAL)` parameter (trial #1 default unchanged — golden); trial #2
+>    passes TIME_EXIT; P1 output keeps per-draw counts of time_exit vs liquidation (report).
+> G7 (advisor #1) run.py / p1_t2_run.py take no pins argument — they read only the committed `data_pins.json` (tracked + clean).
+> G8 (advisor #2 — cost; for Codex to rule) Per-run rebuild of ~1.3M rows × ~210 runs is hours of overhead. Proposal: per-run check =
+>    manifest hashes + prepared file hashes equal to `data_pins.json` (raw AND prepared hashes pinned); full rebuild-verify runs once
+>    in a recorded `verify` stage right after `prepare` and once inside the evaluator. The chain raw→prepared stays proven.
+> G9 (advisor #3) B&H input: the evaluator reads prepared bars via `load_prepared` (pins) and takes each UTC day's last 1m kline close
+>    (§3-1); no strategy-run file needed.
+> Tests added: h ∈ {1, 1438, 1439, 1440} eligible view vs brute force over non-adjacent V_A days; seeded P1 golden for 20260924;
+> sizing refusal + exhausted attempts; P1 liquidation under trial #2 limits with liq-price fee; P1 funding + time_exit reason;
+> n_A = 0; forbidden variant combos; resume tampering / missing files / stale pins / unpushed evaluator (git state faked via a
+> temp repo); trial #1 placebo golden generated before the refactor.
+
+### Codex 원문(verbatim · task-muflm2wp-51o5aj)
+> ## Before-pass findings
+> 
+> The P1 eligibility formula in F2 is correct: `m ≤ 1439 − h` permits an exit close at 23:58 and excludes 23:59. The slot draw order, occupancy, 1,000 attempts, no-redraw rule, seed, and successful-draw p95 also match [§4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:119) and the [trial #1 implementation](/home/cms/project/BTC_Futures_E2E/backtest/placebo.py:166). I found no specified change to P2, P3, or P4’s trading rules; the existing strategy implements their delay, mirror, and daily seed paths in [strategy.py](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:188).
+> 
+> **Fix these before making the 2f stages runnable:**
+> 
+> 1. **BLOCKER — evaluator push order.** F5 allows `prepare` without a stated preflight proving that the trial #2 evaluator was committed and pushed. The binding order puts that push before *every* run, and the project log explicitly defers the real-data validity pass until then ([§4-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:126), [§10](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:196)). Make every stage, including `prepare`, refuse to start until it verifies the pushed evaluator commit and records its hash. Freeze the evaluator’s decision rules before that push. After preparation, commit and push the raw hash pins and registry row before A or any placebo run; record those commit hashes too.
+> 
+> 2. **BLOCKER — P1’s rules source is unspecified.** F2 fixes the limits and capital but does not say where `sizing_decision` and `run_time_exit` get `RuntimeRules`. Copying [trial #1’s runner](/home/cms/project/BTC_Futures_E2E/backtest/p1_run.py:43) would load trial #1 rules and change accepted placements and returns. Require [trial #2 `harness.load_rules()`](/home/cms/project/BTC_Futures_E2E/strategies/trial02/harness.py:39), which verifies the four registered snapshot hashes, for both placement and execution. Instantiate P1Config explicitly with seed `20260924` and `draws=1000`.
+> 
+> 3. **BLOCKER — resumption and merge provenance.** “Verbatim records” alone do not define safe resumption. Trial #1’s [`done()`](/home/cms/project/BTC_Futures_E2E/backtest/step_e.py:38) checks only exit code; [`run_isolated()`](/home/cms/project/BTC_Futures_E2E/backtest/replay.py:53) hashes outputs when a run finishes, but does not verify them on resume. Require a resumed stage to match its command, pins, prepared manifest, relevant commit hashes, and every recorded output hash; fail on missing or changed files. Run and record `p1-merge` as an isolated stage, verify its part-file hashes and exact draw coverage, and have the evaluator verify the same provenance across **all** A/B/P2/P3/P4 inputs, not only P1’s `V_A`.
+> 
+> 4. **BLOCKER — permitted variant combinations.** F3’s flags and the current [`Variant` validation](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:38) allow an A run combining delay, inversion, and P4, or a delay other than 1 or 5. Such output could be mislabeled as a registered placebo. Accept only A, B, A+delay1, A+delay5, A+invert, or A+one P4 draw; store the exact variant in metadata and reject a mismatch between run name, arguments, and metadata.
+> 
+> 5. **BLOCKER — zero-trade and defined-draw contract.** With zero A source trades, trial #1’s draw loop produces empty “successful” draws, while [`p1_null_distribution()`](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:108) divides by zero. Specify an explicit non-computable P1 output for `n_A=0`; the evaluator must still apply the registered G0 failure in its priority order, without inventing a P1 mean. In the 2g contract, require all 200 P4 IDs exactly once, exclude zero-trade P4 draws, discard if fewer than 190 are defined, and assign **0 bps** to zero-trade P2/P3 runs ([§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:112)).
+> 
+> **Q1.** `MANUAL` does not appear to change P1 PnL: the engine passes the reason through the same close path ([engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:621)). It is an inaccurate engine event for a registered time exit, and F2 does not yet retain the required liquidation-versus-time-exit report. Use `ExitReason.TIME_EXIT` for P1’s mark-close call, retain `time_exit`/`liquidation` counts, and test that prices and returns stay identical. The current call is in [placebo_exec.py](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:94).
+> 
+> **Q2.** F2’s same-day view and P1 (a)–(f) mechanics have no substantive departure. The unresolved rules source and exit reporting above are the departures that must be closed. P2/P3/P4 match the registered strategy paths, provided the CLI restricts variants as stated.
+> 
+> **Missing tests:** boundary minutes for `h=1`, `1439`, and `1440` across nonadjacent `V_A` days; seeded placement with sizing refusal and exhausted attempts; trial #2 snapshot use and liquidation-fee basis; P1 funding and time-exit reason; zero A trades; P4 defined counts at 189/190 and P2/P3 zero trades; exact p95 interpolation and equality rejection; forbidden flag combinations; and resume/merge tampering, missing files, stale pins, and an unpushed evaluator. Keep the trial #1 golden plus a trial #2 seeded golden. These are synthetic, read-only tests; I did not run market-data stages or read `var/`.
+> 
+> VERDICT: FIX-PLAN-FIRST.
+> 
+> Codex session ID: 01a0d3b6-ea93-78b0-8e88-d5e4e268373c
+> Resume in Codex: codex resume 01a0d3b6-ea93-78b0-8e88-d5e4e268373c
+
+### advisor 원문 요지(verbatim 항목 0~7)
+> 0 status report now (fee basis, sl==anchor, 23:59 H/L, position_busy, TDD+mutation, pipeline; ask whether data_pins needs a push before stage A) · 1 F3 --pins contradicts F6 → committed tracked clean file only · 2 per-run rebuild cost → pin prepared hashes, rebuild once in verify stage + evaluator (Codex's call) · 3 F7 missing B&H input · 4 disclose P1 saturation risk · 5 Q1: reason param, TIME_EXIT · 6 tests: h ∈ {1,1438,1439,1440}, liquidation under LIMITS, seed reproduction, source reader · 7 limits/regime from config not harness.
