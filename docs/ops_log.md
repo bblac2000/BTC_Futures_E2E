@@ -5436,3 +5436,64 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - F2 `backtest/p1_t2.py`(같은 날 적격 보기 · #36 규칙 · config.LIMITS · E_ref · TIME_EXIT · CFG 20260924/1000/1000/10) · F3 `strategies/trial02/run.py`(변형 이름 고정 표 · 커밋·푸시된 data_pins만 · 집계 없음) · F4 `backtest/p1_t2_run.py`(쌍 입력만 · V_A 재계산 대조 · n_A=0 계산 불가 · 병합 = 조각 기록 해시 + 0..999 정확히 한 번) · F5 `backtest/t2_stages.py`(모든 단계 푸시 선행 · verify 영수증 문 · 검증된 이어 하기) · `backtest/t2_provenance.py`(G1·G7·G10~G13) · G4 변형 화이트리스트 · G12 해시 전용 로더(`load_prepared_pinned` · 범위 대조) · LIMITS/P1_REGIME을 config로.
 - **TDD 이탈(공개)**: `t2_provenance.py`·`t2_stages.py`는 테스트보다 먼저 썼다 → 돌연변이 검사: provenance 6개 중 5개 잡음 → 놓친 1개(깨끗한 트리 검사)는 테스트를 더해 잡음 · stages 4/4 잡음.
 - 테스트 격리 결함 발견·수정: 전체 실행 순서에서만 트라이얼 #1 P1 골든의 28번째 자리가 달라짐 — 앞선 테스트가 전역 10진 문맥을 바꿔 남김 → `conftest` 자동 픽스처로 테스트마다 기본 문맥 · 트라이얼 #2 CLI 두 개는 시작 때 기본 문맥 고정(결정론).
+
+## 2026-09-24 — 트라이얼 #2 단계 2f **after-pass**(advisor + Codex task-mufmldej-t9bzsa **FIX-FIRST**) → 수정
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 0 | ◐ | 상태 보고는 이 차례 중간 텍스트로 사용자에게 두 번 나갔다(기록 정확) — 새 항목(10진 문맥 발견)은 다음 보고에 |
+| advisor | 1 | ✅ | `fingerprint_at(H)` == `fingerprint(HEAD)` 선행 검사 · 판정기 파일을 지문 집합에 · 테스트(앵커 수정 커밋 → 거부 · 새 H → 통과) |
+| advisor | 2 | ✅ | prepare/verify도 검증된 이어 하기(기록 있으면 대조 · 불일치 오류 · 덮어쓰지 않음) |
+| advisor | 3 | ✅ | (a) 확인: trial01 run·p1_run·step_e·evaluate는 ccxt를 import하지 않는다 → **트라이얼 #1 기록 실행은 영향 없음** · (b) 2g 규약 |
+| advisor | 4 | ✅ | 자식에 `T2_NO_FETCH=1` |
+| advisor | 5 | ✅ | 2g 설계서로 이월 |
+| Codex | 1 | ✅ | `check_record`가 모듈·인자·필수 출력 이름까지 대조 · 테스트(인자 변경 · 출력 누락 · 변조) |
+| Codex | 2 | ✅ | 영수증은 성공한 verify 실행 기록(명령·출처·준비 파일 해시)과 함께만 · 건너뛴 이어 하기에서도 준비 파일 변경 거부 · 위조 영수증 테스트 |
+| Codex | 3 | ✅ | p1-merge·prepare·verify 모두 done 검사 · 병합 기대값 불일치 오류 · 병합 변조 테스트 |
+| Codex | 4 | ✅ | fetch 실패 → 오류(자식은 부모 성공 뒤 fetch 생략) · 테스트 |
+| Codex | 5 | ✅ | meta.json에 매니페스트 해시·핀·HEAD·문 결과 · `load_pins`가 레지스트리에 핀 해시 전부 있는지 대조 · 직접 CLI도 `gate_cli`(영수증 판정기 커밋으로 선행 검사 + verify 기록·영수증) |
+| Codex | 골든 | ✅ | 골든 세 개를 파싱 비교 → **문자열(바이트) 비교**로 |
+
+### advisor 원문(verbatim 요지 항목 0~5)
+> 0. The status report was logged as sent but never sent — do both: a correction line in ops_log and the report (fee basis; sl==anchor + R − 2·slippage; 23:59 H/L → 23:58 late_cross; position_busy unreachable; TDD deviations with mutation results; decimal-context finding; data pipeline; P1 saturation risk; ~25 unpushed commits; push checkpoint contents; data_pins second push before stage A).
+> 1. require_evaluator_frozen freezes the wrong set (EVALUATOR_FILES only) — the evaluator imports anchor/config; preflight should require fingerprint at H == fingerprint(HEAD) (git show H:path per file). Test: commit + push, edit anchor, commit → refused.
+> 2. Stages.prepare() has no done-guard — a second prepare overwrites the successful record with a failed one. Refuse if the record exists.
+> 3. Decimal-context finding — scope it: (a) log whether trial #1's recorded runs could have been affected (grep: p1_run.main and trial01.run.main never construct CcxtRestClient) — "checked, not affected"; (b) convention row: every trial #2 P&L-touching process (run.py, p1_t2_run.py, evaluate_t2) starts with setcontext(Context()) — into the 2g brief.
+> 4. 200 P4 subprocesses × git fetch — pass T2_NO_FETCH=1 to children (stale refs only cause false refusal, never false accept).
+> 5. 2g brief must carry forward: G3 evaluator-side provenance over all records + receipt; G5 (P4 all 200 once, zero-trade excluded, <190 → 폐기; P2/P3 zero trades → 0 bps; P1 not-computable → §7 priority); fingerprint uniformity; 3(b); B&H daily close via load_prepared_pinned (G9); final_wallet never read.
+
+### Codex 원문(verbatim · task-mufmldej-t9bzsa)
+> ## After-pass findings
+> 
+> **The 2f implementation needs fixes before merge.** I reviewed `git diff ac23d03 HEAD` and the specified code, tests, log, and preregistration. I did not read `var/` or market data, edit files, or run tests.
+> 
+> 1. **BLOCKER — resume does not validate the command or complete output set.** [Stages.done](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:68) calls [check_record](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:112), which checks provenance fields and hashes *listed in the record*. It never compares `run.module` or `run.args` with the stage’s expected command, nor requires the expected output filenames. A record for a different command, or one with an output omitted from its hash list, can be accepted as done. This conflicts with **G3** and leaves the variant and output provenance needed for a verdict unproved.
+> 
+> 2. **BLOCKER — the verify receipt does not prove that verification ran.** [receipt_ok](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:56) accepts `verify_receipt.json` by comparing its fields with current pins and the manifest. It never checks the [verify run record](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:100), its command, exit status, or output hashes. It also does not hash the current prepared files when resuming a completed stage. Thus a fabricated receipt can satisfy the later-stage gate without a recorded rebuild, and changed prepared files can pass that gate when a run is skipped. This leaves **G8/G11**’s raw-to-prepared proof incomplete. The hash-only loader does check files when a subprocess actually runs ([prepare_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:353)).
+> 
+> 3. **BLOCKER — `p1-merge` silently reruns over an existing result.** [p1_merge](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:128) validates part records, then calls `run_one` without calling `done` for `P1_merge`. A missing or altered merged output is overwritten instead of causing the **G3** resume error. `prepare` and `verify` also bypass the common `done` check ([t2_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:90)).
+> 
+> 4. **BLOCKER — the push check can use a stale remote reference.** [require_pushed](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:46) ignores a failed `git fetch`, then tests the locally cached `origin/main`. **G1** requires the check *after* a successful fetch. A network failure can therefore leave a formerly pushed evaluator or pins commit appearing valid.
+> 
+> 5. **Binding r1/F3 and F6 gaps.** [run.py’s `meta.json`](/home/cms/project/BTC_Futures_E2E/strategies/trial02/run.py:51) lacks the specified manifest hash, pins hashes, and git HEAD. The [pins gate](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:84) proves the file is tracked, clean, and pushed, but no 2f check establishes that the registry row contains the same hashes, as r1/F6 requires. The direct [strategy CLI](/home/cms/project/BTC_Futures_E2E/strategies/trial02/run.py:59) and [P1 CLI](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:101) also lack an evaluator-commit or receipt gate; only the orchestrator enforces that staging order. These routes need to be closed or shown unable to enter the evaluator’s accepted input set.
+> 
+> ## Gate and P1 accounting
+> 
+> | Clause | Review result |
+> |---|---|
+> | G1 | **Partial:** orchestrator preflight exists at [t2_stages.py:52](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:52); failed fetch and direct CLI routes remain. |
+> | G2 | **Implemented:** explicit P1 config, sizing limits, and regime at [p1_t2.py:23](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2.py:23); snapshot-verified rules are loaded at [p1_t2_run.py:44](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:44). |
+> | G3 | **Partial:** record and part checks exist at [t2_stages.py:68](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:68) and [t2_stages.py:128](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:128); findings 1 and 3 remain. Evaluator-side checks belong to 2g. |
+> | G4 | **Implemented in 2f:** variant whitelist and fixed names at [strategy.py:45](/home/cms/project/BTC_Futures_E2E/strategies/trial02/strategy.py:45) and [run.py:24](/home/cms/project/BTC_Futures_E2E/strategies/trial02/run.py:24). Evaluator name/meta rejection remains for 2g. |
+> | G5 | **Implemented for P1’s zero-trade output** at [p1_t2_run.py:53](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:53); verdict priority and P2/P3/P4 defined-draw rules remain for 2g. |
+> | G6–G7 | **Implemented:** TIME_EXIT and exit counts at [p1_t2.py:58](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2.py:58); committed pins are loaded at [run.py:68](/home/cms/project/BTC_Futures_E2E/strategies/trial02/run.py:68) and [p1_t2_run.py:124](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:124). |
+> | G8–G9 | **G8 partial** because of finding 2; G9’s buy-and-hold reader is a 2g evaluator contract, with no evaluator present in this diff. |
+> | G10 | **Implemented for stage records:** fingerprint definition at [t2_provenance.py:20](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:20), storage at [t2_stages.py:79](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:79). Evaluator-wide equality remains for 2g. |
+> | G11–G13 | Receipt, manifest SHA, and last-changing pins commit comparisons exist at [t2_provenance.py:98](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:98). **G11 remains partial** for finding 2; evaluator validation under G13 remains for 2g. |
+> | P1 (a)–(f) | The reviewed mechanics match: duration and paired source values at [p1_core.py:33](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:33), RNG and slot/placement order at [p1_core.py:77](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:77), and same-day `V_A` eligibility through 23:58 at [p1_t2.py:28](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2.py:28). The Trial #1 wrapper retains its defaults at [placebo.py:49](/home/cms/project/BTC_Futures_E2E/backtest/placebo.py:49). |
+> 
+> The tests do not cover a changed recorded command, an omitted output hash, a fabricated receipt without a valid verify record, a changed prepared file during a skipped resume, a tampered existing P1 merge, or failed-fetch behavior. The [Trial #1 golden test](/home/cms/project/BTC_Futures_E2E/tests/test_p1_core.py:11) compares parsed JSON values, so it does not establish the claimed byte identity. The evaluator is intentionally scheduled for 2g; its absence is a remaining integration limit, not evidence that its verdict rules are correct.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0d3d0-0a96-7461-bf9a-d4abf22d644e
+> Resume in Codex: codex resume 01a0d3d0-0a96-7461-bf9a-d4abf22d644e

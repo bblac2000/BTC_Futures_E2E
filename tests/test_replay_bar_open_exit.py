@@ -65,14 +65,14 @@ def rules():
 def test_no_hook_path_matches_pre_2b_golden():
     """골든 = 이 본문을 2b 이전 트리(bdf0554)에서 실행한 출력(`tests/fixtures/golden_replay_nohook.json`).
     다시 만들려면 `git archive bdf0554`로 푼 트리에서 같은 호출을 돌린다 — 기본 경로를 바꾸는 변경은 골든을 고치지 않는다."""
-    gold = json.loads((ROOT / "tests" / "fixtures" / "golden_replay_nohook.json").read_text())
+    gold = (ROOT / "tests" / "fixtures" / "golden_replay_nohook.json").read_text()
     evs: list[list] = []
     r = replay(bars(2400), [Funding(T0 + 480 * MINUTE_MS, "0.0001", "60000"), Funding(T0 + 960 * MINUTE_MS, "-0.0002", "60100"),
                             Funding(T0 + 1440 * MINUTE_MS, "0.0003", "59900")], Every30(), rules=rules(),
                limits=SizingLimits(), equity=D("1000"), on_event=lambda e: evs.append([type(e).__name__, getattr(e, "ts_ms", None)]))
-    got = json.loads(json.dumps({"trades": r.trades, "decisions": r.decisions, "final_wallet": str(r.final_wallet),
-                                 "open_at_end": r.open_at_end, "events": evs}, sort_keys=True, default=str))
-    assert got == gold
+    got = json.dumps({"trades": r.trades, "decisions": r.decisions, "final_wallet": str(r.final_wallet),
+                      "open_at_end": r.open_at_end, "events": evs}, sort_keys=True, default=str) + "\n"
+    assert got == gold                                                        # 바이트(문자열) 동일
 
 
 def test_time_exit_at_open_ignores_that_bars_high_low_and_still_calls_strategy():

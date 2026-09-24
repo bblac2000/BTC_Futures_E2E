@@ -60,10 +60,13 @@ def test_fingerprint_changes_with_execution_code(repo):
     assert PV.fingerprint(repo) != a
 
 
-def pins_file(repo: Path, raw: str = "r") -> dict:
-    pins = {"raw": {"archive_rows.jsonl": raw}, "prepared": {"bars_1m.parquet": "b", "funding.json": "f", "source_audit.json": "s"}}
+def pins_file(repo: Path, raw: str = "r1", registry: bool = True) -> dict:
+    pins = {"raw": {"archive_rows.jsonl": raw}, "prepared": {"bars_1m.parquet": "b1", "funding.json": "f1",
+                                                             "source_audit.json": "s1"}}
     (repo / PV.PINS_REL).parent.mkdir(parents=True, exist_ok=True)
     (repo / PV.PINS_REL).write_text(json.dumps(pins))
+    (repo / PV.REGISTRY_REL).parent.mkdir(parents=True, exist_ok=True)
+    (repo / PV.REGISTRY_REL).write_text("| 99 | pins " + (" ".join([raw, "b1", "f1", "s1"]) if registry else "") + " |\n")
     return pins
 
 
@@ -77,7 +80,7 @@ def test_pins_must_be_tracked_clean_and_pushed(repo):
         PV.load_pins(repo)                                        # 푸시 전
     push(repo)
     p, c = PV.load_pins(repo)
-    assert p["raw"] == {"archive_rows.jsonl": "r"} and c == PV.head(repo)
+    assert p["raw"] == {"archive_rows.jsonl": "r1"} and c == PV.head(repo)
     pins_file(repo, raw="x")
     with pytest.raises(PV.ProvenanceError):
         PV.load_pins(repo)                                        # 커밋 안 된 변경
@@ -123,3 +126,38 @@ def test_dirty_non_evaluator_file_refused(repo):
     (repo / "strategies/trial02/strategy.py").write_text("# uncommitted\n")
     with pytest.raises(PV.ProvenanceError):
         PV.require_evaluator_frozen(repo, h)
+
+
+def test_execution_code_changed_after_evaluator_push_refused(repo):
+    h = PV.head(repo)
+    push(repo)
+    PV.require_evaluator_frozen(repo, h)
+    (repo / "strategies/trial02/anchor.py").write_text("N_TRIALS = 5\n")          # 판정기가 import하는 상수를 바꾼 커밋
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "edit anchor")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.require_evaluator_frozen(repo, h)
+    PV.require_evaluator_frozen(repo, PV.head(repo))                                # 새 판정기 커밋이면 통과
+
+
+def test_fingerprint_at_matches_worktree_fingerprint(repo):
+    assert PV.fingerprint_at(repo, PV.head(repo)) == PV.fingerprint(repo)
+
+
+def test_pins_must_appear_in_registry(repo):
+    pins_file(repo, registry=False)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins without registry")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)
+
+
+def test_failed_fetch_is_an_error(repo):
+    h = PV.head(repo)
+    push(repo)
+    git(repo, "remote", "set-url", "origin", "/nonexistent/origin.git")
+    with pytest.raises(PV.ProvenanceError):
+        PV.require_pushed(repo, h)                                   # 오래된 origin/main으로 통과하지 않는다
+    PV.require_pushed(repo, h, fetch=False)                           # 자식 프로세스 경로(부모가 fetch 성공한 뒤)

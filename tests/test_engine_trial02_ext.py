@@ -214,8 +214,8 @@ def test_live_default_path_matches_pre_2b_golden():
     from pathlib import Path
 
     from tests.fixtures.live_golden_scenario import run
-    gold = json.loads((Path(__file__).resolve().parent / "fixtures" / "golden_live_engine.json").read_text())
-    assert json.loads(json.dumps(run(), sort_keys=True)) == gold
+    gold = (Path(__file__).resolve().parent / "fixtures" / "golden_live_engine.json").read_text()
+    assert json.dumps(run(), sort_keys=True) + "\n" == gold                  # 바이트(문자열) 동일
 
 
 def test_default_engine_has_no_fixed_capital_and_compounds(rules):

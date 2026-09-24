@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def test_trial01_p1_matches_pre_refactor_golden():
     from tests.fixtures.p1_golden_scenario import run
-    gold = json.loads((ROOT / "tests" / "fixtures" / "golden_p1_trial01.json").read_text())
-    assert json.loads(json.dumps(run(), sort_keys=True)) == gold
+    gold = (ROOT / "tests" / "fixtures" / "golden_p1_trial01.json").read_text()
+    assert json.dumps(run(), sort_keys=True) + "\n" == gold                  # 바이트(문자열) 동일
 
 
 def test_p1_core_imports_no_trial():

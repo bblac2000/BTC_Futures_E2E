@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -39,7 +40,8 @@ def variant_meta(v: Variant) -> dict[str, Any]:
     return {"arm": v.arm, "delay": v.delay, "invert": v.invert, "p4_draw": v.p4_draw}
 
 
-def execute(name: str, prepared: Path, out: Path, pins: dict[str, Any], pins_commit: str) -> dict[str, Any]:
+def execute(name: str, prepared: Path, out: Path, pins: dict[str, Any], pins_commit: str,
+            gate: dict[str, Any] | None = None, head: str | None = None) -> dict[str, Any]:
     v = variant_for(name)
     run, validity = H.run_prepared_is(prepared, pins, v)
     out.mkdir(parents=True, exist_ok=True)
@@ -48,7 +50,10 @@ def execute(name: str, prepared: Path, out: Path, pins: dict[str, Any], pins_com
     write_jsonl(out / "days.jsonl", [x for x in run.strategy.log if x["event"] == "day"])
     (out / "validity.json").write_text(json.dumps(validity.as_dict(), sort_keys=True) + "\n")
     assert run.result.open_at_end is None, "창 끝 열린 포지션(23:59 청산 규칙 위반)"
+    import hashlib
     meta = {"variant_name": name, "variant": variant_meta(v), "bo_v1_sha256": A.BO_V1_SHA256, "pins_commit": pins_commit,
+            "pins": pins, "manifest_sha256": hashlib.sha256((prepared / "manifest.json").read_bytes()).hexdigest(),
+            "git_head": head, "gate": gate,
             "rules_snapshot_sha256": A.RULES_SNAPSHOT_SHA256, "n_trades": len(run.result.trades),
             "n_first_cross": len(run.crosses), "reason_counts": dict(sorted(Counter(str(c["final_reason"]) for c in run.crosses).items())),
             "n_v_a": len(validity.v_a), "n_v_b": len(validity.v_b)}
@@ -65,8 +70,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prepared", required=True)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    pins, pc = PV.load_pins(ROOT)
-    meta = execute(a.variant, Path(a.prepared), Path(a.out), pins, pc)
+    from backtest.t2_stages import gate_cli
+    gate = gate_cli(Path(a.prepared))                          # 판정기 푸시 · 핀 · verify 기록·영수증 · 지문
+    pins, pc = PV.load_pins(ROOT, fetch=os.environ.get("T2_NO_FETCH") != "1")
+    meta = execute(a.variant, Path(a.prepared), Path(a.out), pins, pc, gate=gate, head=PV.head(ROOT))
     print(json.dumps({k: meta[k] for k in ("variant_name", "n_trades", "n_first_cross", "n_v_a", "n_v_b")}, sort_keys=True))
     return 0
 
