@@ -3990,3 +3990,114 @@ Codex: r1 지적 11 CLOSED · 1 PARTIAL(#3 → §11 순서) · r2 지적 4 CLOSE
 > 
 > Codex session ID: 01a0d2af-114a-7952-bc07-acdcce0bf349
 > Resume in Codex: codex resume 01a0d2af-114a-7952-bc07-acdcce0bf349
+
+
+## 2026-09-24 — 트라이얼 #2 초안 r4(bd912e6) **사후 검토 4차** · Codex(task-mufbhifz-yvjbrb) FIX-FIRST → r5 반영
+Codex: r1 11 CLOSED · 1 PARTIAL(#5 ← L97) · r3 5 CLOSED · 1 PARTIAL · advisor 1~9 "no finding materially misapplied" · 새 지적 5개.
+| 지적 | 입장 · r5 반영 |
+|---|---|
+| #1 HIGH "모든 단계 즉시 FAIL" 대 전진 우선순위 | ✅ §3 행을 "트레이드 0건 · 겹칠 때는 §7 단계별 우선순위"로 |
+| #2 HIGH G-B의 n 대상 · SR̂_B 미정의 | ✅ n_A ≥ 30 · SR̂_B 미정의면 SR* := 0 + 보고 · §12-12 확인 |
+| #3 MEDIUM 전진 부분일 | ✅ UTC 00:00 정각 활성화 · 완전한 30일 · §12-13 확인 |
+| #4 MEDIUM §12 R 기하가 체결가 의존 | ✅ "명목 거리"로 · 실제 R = |체결가 − SL| 명시 |
+| #5 LOW 매수보유 창 수익률 식 · §7 부등호 | ✅ 창 수익률 = 마지막 종가/첫 종가 − 1 · §7에 IS 창 엄격 `<` |
+
+### Codex 원문(verbatim · task-mufbhifz-yvjbrb)
+> ## Numbered findings
+> 
+> 1. **HIGH — [L97, L159–162](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:97)** — “모든 단계 즉시 FAIL” makes zero trades first, but forward precedence puts survival and execution defects before zero trades.  
+>    **Fix:** remove “즉시/모든 단계” or explicitly defer to §7’s stage-specific precedence.
+> 
+> 2. **HIGH — [L91](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:91)** — G-B’s `n ≥ 30` does not say A, B, or both; `SR̂_B` can be undefined with too few/zero-variance B trades. That leaves an IS gate without a verdict.  
+>    **Fix:** define the sample requirement and the verdict for undefined `SR̂_B`/`SR*`.
+> 
+> 3. **MEDIUM — [L138](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:138)** — Forward starts at an arbitrary activation time, but the strategy is UTC-day based. A partial first day can be skipped, replayed, or entered after an earlier cross. The final partial day is likewise unclear.  
+>    **Fix:** activate at 00:00 UTC, or define first/last partial-day treatment and cross-consumption bootstrap.
+> 
+> 4. **MEDIUM — [L42, L208](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:42)** — §12 says `SL=O_d` means `R=0.5·R_prev`, but actual `R=|fill−O_d|`; retraces and gaps make those unequal. The opposite-band alternative is similarly not exactly `1.0·R_prev`.  
+>    **Fix:** call these nominal band distances and state the actual fill-dependent geometry.
+> 
+> 5. **LOW — [L93, L106–107, L163](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:93)** — B&H daily returns and label window are fixed, but “창 수익률” lacks an exact aggregate formula; L163’s “못 이기면” is less exact than L93’s strict `<`.  
+>    **Fix:** define `last_close / first_close − 1` and copy the strict IS-Sharpe predicate into §7.
+> 
+> ## Answers
+> 
+> ### 1. Round-1 findings 1–12
+> 
+> 1. **CLOSED** — r2 `cb99254` L39; retained at [L39](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:39).
+> 2. **CLOSED** — r2 L53–54, L93–94; retained at [L53–54](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:53), [L93–94](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:93).
+> 3. **CLOSED** — r2 L47 was partial; r3 fixed semantics, r4 fixed implementation at [L45–47](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:45), [L196](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:196).
+> 4. **CLOSED** — r2 L83–84, L111–115; current [L83–84](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:83), [L121–125](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:121).
+> 5. **PARTIAL** — r2 L96, L143–152 supplied verdicts, but current L97 conflicts with forward precedence.
+> 6. **CLOSED** — r2 L104 removed the original collision; r3 completed eligibility; current [L114](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:114).
+> 7. **CLOSED** — r2 L40/L105; current [L40](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:40), [L115](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:115).
+> 8. **CLOSED** — r2 L28/L107/L189; current [L28](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:28), [L117](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:117), [L200](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:200).
+> 9. **CLOSED** — r2 L31/L124 were partial; r3/current [L31](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:31), [L134](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:134) complete it.
+> 10. **CLOSED** — r2 L95/L145/L155–158; current [L95](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:95), [L154–158](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:154).
+> 11. **CLOSED** — r2 L35; current [L35](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:35).
+> 12. **CLOSED** — r2 L53/L56/L189–192; current [L53–56](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:53), [L195–203](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:195).
+> 
+> ### 2. Entry-reference deviation
+> 
+> **Acceptable.** Next-minute mark open plus adverse-fill adjustment matches the declared historical/paper path better than inventing a worse-of-band fill after retracement.
+> 
+> It remains a model approximation—not necessarily the first executable quote. §2 discloses that limitation, and §12-9 correctly requires user confirmation.
+> 
+> ### 3. Advisor findings 1–9
+> 
+> 1. Correctly applied.
+> 2. Correctly applied; P1 is deterministic and §12-7 surfaces the choice.
+> 3. Correctly applied.
+> 4. Correctly surfaced in §12-3, subject to finding 4’s geometry correction.
+> 5. Corrected properly; the overstatement is gone.
+> 6. Correctly surfaced in §12-5.
+> 7. Correctly applied with explicit OOS precedence.
+> 8. Correctly applied in r4 at L196/L202.
+> 9. Correctly applied.
+> 
+> No advisor finding is materially misapplied now. The remaining precedence problem arose from retaining generic L97 after adding forward-specific ordering.
+> 
+> ### 4. Ambiguities/contradictions
+> 
+> - §3/§4-1/§7 staging is aligned except L97 versus forward priority.
+> - P1 eligibility is singular: same UTC day, exit by 23:58, and `V_A`.
+> - Strict completeness and the known two-minute gap are consistent and explicitly enumerated.
+> - Flat, daily statistical PnL, A/B dates, and P1/P4 statistics are fixed.
+> - G-B’s `n` and undefined-B behavior remain open.
+> - B&H label window is fixed; total window-return formula remains unstated.
+> - 23:59 order is now unambiguous: gap liquidation, otherwise time exit, no high/low evaluation.
+> 
+> ### 5. Single implementation?
+> 
+> **No.** Different implementations remain possible for:
+> 
+> - Forward zero trades combined with a safety/data failure.
+> - G-B’s sample requirement and undefined `SR̂_B`.
+> - Forward partial first/last UTC days.
+> - B&H aggregate window return.
+> - §12’s fill-dependent R geometry description.
+> 
+> ### 6. Hidden user decisions
+> 
+> The current r4 lists **11**, not six, plus two later procedural approvals.
+> 
+> Two further design decisions should be surfaced:
+> 
+> - G-B behavior when B has insufficient or zero-variance trades.
+> - Forward activation alignment and partial-day treatment.
+> 
+> The B&H aggregate formula and verdict-precedence correction are technical rules, not user preferences.
+> 
+> ### 7. Round-3 findings 1–6
+> 
+> 1. **CLOSED** — L196/L202.
+> 2. **CLOSED** — L123/L150.
+> 3. **PARTIAL** — L159–162 adds precedence, but L97 contradicts it.
+> 4. **CLOSED** — L96/L189/L215.
+> 5. **CLOSED** for the requested label window, endpoints, first return, and missing-day handling; finding 5 above is a smaller reporting-formula residue.
+> 6. **CLOSED** — L108.
+> 
+> VERDICT: FIX-FIRST — blockers: zero-trade versus forward-failure precedence; undefined G-B sample/SR behavior; forward partial-day boundaries; correct §12’s fill-dependent R geometry.
+> 
+> Codex session ID: 01a0d2b3-602a-7e83-bf08-945da744b5fa
+> Resume in Codex: codex resume 01a0d2b3-602a-7e83-bf08-945da744b5fa
