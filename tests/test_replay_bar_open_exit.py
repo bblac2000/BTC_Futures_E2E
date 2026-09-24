@@ -117,6 +117,21 @@ def test_gap_liquidation_boundary_exit_ref_is_refreshed_liq_price(direction):
     assert t["exit_reason"] == "liquidation" and D(t["exit_ref"]) == liq
 
 
+def test_replay_liq_fee_option_reaches_realized_pnl():
+    """재생 수준: 같은 갭 청산에서 두 기준의 순손익 차이 = 수량 × (진입 체결가 − 추정 청산가) × liquidationFee(롱)."""
+    b = flat(8, overrides={5: ("40000", "40000", "40000", "40000")})
+    rs = {}
+    for on in (False, True):
+        lim = SizingLimits(leverage_range=(10, 30), liq_fee_on_liq_price=on)
+        rs[on] = replay(b, [], EnterThenExitAt(1, 5), rules=rules(), limits=lim, equity=D("1000"),
+                        sizing_capital=D("1000")).trades[0]
+    t0, t1 = rs[False], rs[True]
+    assert t0["exit_reason"] == t1["exit_reason"] == "liquidation" and t0["exit_ref"] == t1["exit_ref"]
+    fee = rules().symbol_rules.liquidation_fee
+    diff = D(t1["net_pnl"]) - D(t0["net_pnl"])                # net_pnl 문자열은 28자리 문맥에서 만들어진다 → 1e-20 USDT 허용
+    assert abs(diff - D(t0["qty"]) * (D(t0["entry_fill"]) - D(t0["exit_ref"])) * fee) < D("1e-20") and diff > 0
+
+
 def test_intent_emitted_on_the_hook_bar_is_an_error():
     class Late(EnterThenExitAt):
         def on_minute_closed(self, bar: Bar1m, ctx: ReplayContext):

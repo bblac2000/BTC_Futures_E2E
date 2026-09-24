@@ -199,6 +199,25 @@ def test_fixed_capital_not_reset_on_sizing_rejection_or_zero_fill(rules):
     assert e2.position is None and e2.wallet == D("700") and not [x for x in ev if isinstance(x, WalletResynced)]
 
 
+def test_fixed_capital_not_reset_on_leverage_band_refusal(rules):
+    from paper.engine import EntryRefused
+    e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("700"), limits=L2, sizing_capital=E_REF)
+    with pytest.raises(EntryRefused):
+        e.request_entry(EntryIntent(LONG, D("59400"), None, RegimeSizing("t", D("0.01"), 50, 100), T0 - 1, D("60000")))
+    ev = e.on_bar(bar(0, "60000", "60000", "60000", "60000"))
+    assert ev == [] and e.wallet == D("700") and e.pending is None
+
+
+def test_live_default_path_matches_pre_2b_golden():
+    """LIVE 기본 경로 — `tests/fixtures/live_golden_scenario.py`를 2b 이전 트리(bdf0554)에서 돌린 출력과 같다."""
+    import json
+    from pathlib import Path
+
+    from tests.fixtures.live_golden_scenario import run
+    gold = json.loads((Path(__file__).resolve().parent / "fixtures" / "golden_live_engine.json").read_text())
+    assert json.loads(json.dumps(run(), sort_keys=True)) == gold
+
+
 def test_default_engine_has_no_fixed_capital_and_compounds(rules):
     e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("700"), limits=SizingLimits())
     assert e.sizing_capital is None
@@ -249,16 +268,21 @@ def test_no_gap_liquidation_inside(rules, direction):
 @pytest.mark.parametrize("on_liq", [False, True])
 def test_liquidation_loss_fee_basis(rules, direction, on_liq):
     """기본 = 진입 명목 × fee(봇·트라이얼 #1) · 옵션 = 수량 × 추정 청산가 × fee(트라이얼 #2 §1) · 펀딩 뒤에도."""
-    e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=L2, sizing_capital=E_REF,
-               liq_fee_on_liq_price=on_liq)
+    lim = SizingLimits(leverage_range=(10, 30), liq_fee_on_liq_price=on_liq)
+    e = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=D("1000"), limits=lim, sizing_capital=E_REF)
     sl = D("58800") if direction is LONG else D("61200")
     e.request_entry(EntryIntent(direction, sl, None, R2, T0 - 1, D("60000")))
     e.on_bar(bar(0, "60000", "60000", "60000", "60000"))
     e.on_funding(ts_ms=T0 + 2 * M, rate=D("0.001"), mark=D("60000"))
+    from exchange.decimal_context import exec_context
     pos = e.position
     assert pos is not None
+    assert pos.decision is not None and pos.decision.liq_price_est is not None
+    est = pos.decision.loss_at_liquidation_usdt                       # 사이징 추정도 같은 기준(펀딩 전 · 진입 시점 값)
+    with exec_context():
+        assert est == pos.decision.margin + (pos.decision.qty * pos.decision.liq_price_est if on_liq
+                                             else pos.decision.notional) * rules.symbol_rules.liquidation_fee
     w0, n, liq = e.wallet, pos.qty * pos.entry_price, pos.liq_price_est
-    from exchange.decimal_context import exec_context
     with exec_context():                              # 엔진과 같은 10진 문맥(EXEC_CTX)
         fee_n = pos.qty * liq if on_liq else n
         expected = n / D(pos.leverage) - pos.entry_commission - pos.funding_paid + fee_n * rules.symbol_rules.liquidation_fee
@@ -270,7 +294,8 @@ def test_liquidation_loss_fee_basis(rules, direction, on_liq):
 
 def test_liq_fee_option_is_paper_only(rules):
     with pytest.raises(ValueError):
-        Engine(rules, PaperSender(rules), mode=Mode.LIVE, wallet=D("1000"), limits=L2, liq_fee_on_liq_price=True)
+        Engine(rules, PaperSender(rules), mode=Mode.LIVE, wallet=D("1000"),
+               limits=SizingLimits(leverage_range=(10, 30), liq_fee_on_liq_price=True))
 
 
 def test_new_events_record_in_db(rules):

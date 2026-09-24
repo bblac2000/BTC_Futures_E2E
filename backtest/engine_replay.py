@@ -15,7 +15,7 @@
 - `sizing_capital`(E_ref): 엔진이 체결된 진입마다 실행 지갑을 E_ref로 리셋 → 트레이드 기준 지갑 = E_ref ·
   보고 원장 = `report_ledger(trades)`(트레이드 순손익 누적 · 사이징·적격성에 쓰이지 않는다 · `final_wallet`은 이 모드에서 의미 없음).
 - 훅 분에는 `on_minute_closed` 뒤에도 대기 진입이 없어야 한다(날을 넘는 진입 금지 — late_cross가 막아야 한다).
-- `liq_fee_on_liq_price`: 엔진 옵션 그대로 전달(트라이얼 #2 §1).
+- 청산 수수료 기준은 `limits.liq_fee_on_liq_price`(트라이얼 #2 §1)로 엔진·사이징에 함께 들어간다.
 """
 from __future__ import annotations
 
@@ -64,9 +64,8 @@ class ReplayResult:
 
 def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strategy, *, rules: RuntimeRules,
            limits: SizingLimits, equity: Decimal, on_event: Callable[[object], None] | None = None,
-           sizing_capital: Decimal | None = None, liq_fee_on_liq_price: bool = False) -> ReplayResult:
-    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital,
-                 liq_fee_on_liq_price=liq_fee_on_liq_price)
+           sizing_capital: Decimal | None = None) -> ReplayResult:
+    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital)
     exit_hook: Callable[[Bar1m], bool] | None = getattr(strategy, "exit_at_bar_open", None)
     ctx = ReplayContext(eng)
     trades: list[dict[str, Any]] = []

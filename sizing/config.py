@@ -53,6 +53,9 @@ class SizingLimits:
     pos_pct_min: Decimal = POS_PCT_MIN_DEFAULT
     loss_tolerance: Decimal = LOSS_TOLERANCE_DEFAULT
     leverage_range: tuple[int, int] = PERMITTED_LEVERAGE   # 레짐 [l_min, l_max]는 이 안에 있어야 한다(size_entry가 검사)
+    #  청산 수수료 명목: False = 진입 명목(봇·트라이얼 #1) · True = 수량 × 추정 청산가(트라이얼 #2 §1 "청산 시점 남은 명목").
+    #  사이징의 `loss_at_liquidation_usdt`와 PAPER 엔진 청산 손실이 같은 기준을 쓴다 — PAPER(백테스트) 전용(엔진이 검사).
+    liq_fee_on_liq_price: bool = False
 
     def __post_init__(self):
         if tuple(self.leverage_range) not in REGISTERED_LEVERAGE_BANDS:

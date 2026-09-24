@@ -261,7 +261,9 @@ def _size_entry(entry: Decimal, sl: Decimal, direction: Direction, equity: Decim
         liq_tier_basis_notional=fe.tier_basis_notional, notional=final, margin=margin, pos_pct=pos_pct,
         pos_pct_capped=capped, pos_pct_below_min=below, qty=q.qty,
         chunks=tuple(split_market_qty(q.qty, rules.symbol_rules, ref_price=entry, reduce_only=False)),
-        loss_at_sl_usdt=loss, loss_at_liquidation_usdt=margin + final * fee, liquidation_fee=fee)
+        loss_at_sl_usdt=loss,
+        loss_at_liquidation_usdt=margin + (q.qty * fe.price if limits.liq_fee_on_liq_price else final) * fee,
+        liquidation_fee=fee)
 
 
 def post_entry_liquidation_check(decision: SizingDecision, rules: RuntimeRules, *, entry_price: Decimal, qty: Decimal,

@@ -4709,3 +4709,33 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d322-d769-7740-a6ac-3a97f830c309
 > Resume in Codex: codex resume 01a0d322-d769-7740-a6ac-3a97f830c309
+
+## 2026-09-24 — 트라이얼 #2 2b·2c 좁은 재확인 r2(Codex task-mufgblck-kmknws **FIX-FIRST**) → 수정
+| # | Codex | 입장 | 반영 |
+|---|---|---|---|
+| 1 | PARTIAL — `loss_at_liquidation_usdt`가 진입 명목 | ✅ 동의 | 옵션을 `SizingLimits.liq_fee_on_liq_price`로 옮김 — 사이징 추정과 PAPER 엔진 손실이 **한 설정** · 엔진 kwarg 제거 · PAPER 전용 검사 유지 |
+| 2 | CLOSED | — | — |
+| 3 | CLOSED(`sl == anchor` 규약 수용) | — | 2i 규약 행 |
+| 4 | PARTIAL — 테스트 3개 부족 | ✅ 동의 | 레버리지 대역 거부 시 비리셋 · **LIVE 골든**(`tests/fixtures/live_golden_scenario.py` — 2b 이전 트리 bdf0554 출력 = 현재 · 롱 SL/숏 TP/트레일 · 이벤트 + 송신기 호출) · 재생 수준 수수료 기준 차이 = qty × (체결 − 청산가) × fee |
+
+### Codex 원문(verbatim · task-mufgblck-kmknws)
+> 1. Finding #1 — PARTIAL. Actual liquidation accounting is fixed via the default-off `liq_fee_on_liq_price` option, including long/short and funding tests. However, `SizingDecision.loss_at_liquidation_usdt` still records `margin + entry_notional × fee` at [sizing/position.py](/home/cms/project/BTC_Futures_E2E/sizing/position.py:264). That value is persisted to the decisions table, so Trial #2 would record a liquidation-loss estimate inconsistent with its actual `qty × liq_price_est` accounting. The selected basis must propagate into this field without changing the default path.
+> 
+> 2. Finding #2 — CLOSED. `ReplayResult` has its original four fields at [engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:57); reporting accumulation moved to the additive `report_ledger()` helper. The field-list regression test confirms compatibility.
+> 
+> 3. Finding #3 — CLOSED. Keeping `sl == sl_rule.anchor` as the registered placeholder convention is acceptable. Equality is enforced, and the engine deterministically replaces it with the fill-derived SL before sizing. There is no discretionary path or verdict ambiguity.
+> 
+> 4. Finding #4 — PARTIAL. Most requested coverage was added: both liquidation directions/bases after funding, equality-boundary replay and refreshed exit reference, sizing-rejection/zero-fill non-reset, DB persistence, hook-bar guard, and result-schema compatibility. Still absent are:
+> 
+>    - An explicit fixed-capital wallet assertion for leverage-band refusal.
+>    - The requested LIVE default-path call/event regression pin.
+>    - A replay-level test proving `liq_fee_on_liq_price=True` reaches realized Trial #2 P&L.
+> 
+> No unintended valid default-path behavior change found. Defaults remain entry-notional liquidation fees, compounding wallet, unchanged `ReplayResult`, and no exit hook. The earlier leverage-band failure is intentionally moved to `EntryRefused`.
+> 
+> Verification: 39 changed-module tests and 114 sizing/paper-engine tests passed; focused Ruff and Pyright passed; `git diff --check` passed. The broader regression selection was blocked for five `tmp_path`-dependent tests because no writable temporary directory exists.
+> 
+> VERDICT: FIX-FIRST
+> 
+> Codex session ID: 01a0d32f-4e3a-77a3-9d1e-dd0e2bca19f9
+> Resume in Codex: codex resume 01a0d32f-4e3a-77a3-9d1e-dd0e2bca19f9
