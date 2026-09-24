@@ -5416,3 +5416,18 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d3be-7064-71e0-ae0c-ea57ada29ffb
 > Resume in Codex: codex resume 01a0d3be-7064-71e0-ae0c-ea57ada29ffb
+
+## 2026-09-24 — 2f 설계 r4 재확인(Codex task-mufm01gd-k35w1g) **PROCEED** — 설계 r1 + G1~G13 확정
+
+### Codex 원문(verbatim)
+> G13 closes the G11 gap. It requires later stages, resumes, and evaluator input validation to match the current manifest’s SHA256 and the pins file’s last-changing commit against the verify receipt and run record. The two added tests cover the previously missing mismatch cases. I found no new verdict-relevant ambiguity in the full 2f design ([r1 and G1–G13](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:5247)).
+> 
+> This was a read-only design review; I did not run market-data stages or access `var/`.
+> 
+> VERDICT: PROCEED.
+> 
+> Codex session ID: 01a0d3c0-dad6-7423-94d3-ddf733f3016b
+> Resume in Codex: codex resume 01a0d3c0-dad6-7423-94d3-ddf733f3016b
+
+## 2026-09-24 — 2f F1: P1 공통 기계 분리(`backtest/p1_core.py` · 트라이얼 import 없음) + `run_time_exit(reason=)`(G6)
+- `backtest/placebo.py`는 트라이얼 #1 래퍼(공개 이름·기본값 유지) · 골든 `tests/fixtures/golden_p1_trial01.json`은 **리팩터 전 트리**에서 생성 → 바이트 동일 · 기존 placebo 테스트 통과.

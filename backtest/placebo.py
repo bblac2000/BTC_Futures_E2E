@@ -20,65 +20,40 @@ tick 격자 균등추출(결정 시점 정보만 · Codex #6).
 """
 from __future__ import annotations
 
-import bisect
-import json
-import math
+import math  # noqa: F401 — 공개 이름 유지(하위 호환)
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Protocol
 
 import numpy as np
 
 from backtest.data import MINUTE_MS
+from backtest.p1_core import (  # noqa: F401 — 트라이얼 #1 공개 이름(하위 호환 · 단계 2f F1 리팩터)
+    LONG,
+    SHORT,
+    Indexable,
+    Occupancy,
+    P1Config,
+    P1Draw,
+    PlacedSlot,
+    SizingOk,
+    SourceTrade,
+    canonical_json,
+    p1_draw_generic,
+    p95,
+    sort_source,
+)
+from backtest.p1_core import p1_rng as _core_rng
 from strategies.trial01 import anchor as A
 
 P1_SLOT_ATTEMPTS = 1000
 P1_FAIL_LIMIT = 10                        # > 10 실패(>1%) → 평가 불가
-LONG, SHORT = 0, 1
-
-
-@dataclass(frozen=True)
-class SourceTrade:
-    """원판 Arm A 트레이드 — P1이 쓰는 기하(쌍)만."""
-    trade_id: int
-    entry_ms: int
-    exit_ms: int
-    sl_dist: Decimal
-
-    @property
-    def h(self) -> int:
-        return max(1, math.ceil((self.exit_ms - self.entry_ms) / MINUTE_MS))
-
-
-@dataclass(frozen=True)
-class PlacedSlot:
-    slot: int
-    pair: int                              # 정렬된 원판 트레이드 인덱스
-    direction: int                         # 0 LONG · 1 SHORT
-    h: int
-    sl_dist: Decimal
-    entry_ms: int
-
-    @property
-    def exit_minute_ms(self) -> int:
-        return self.entry_ms + (self.h - 1) * MINUTE_MS
-
-
-@dataclass(frozen=True)
-class P1Draw:
-    draw: int
-    ok: bool
-    placed: tuple[PlacedSlot, ...]
-    failed_slot: int | None = None
+TRIAL01_P1 = P1Config(master_seed=A.P1_MASTER_SEED, draws=A.P1_DRAWS, slot_attempts=P1_SLOT_ATTEMPTS, fail_limit=P1_FAIL_LIMIT)
+_Occupancy = Occupancy
 
 
 def p1_rng(draw: int, *, master: int = A.P1_MASTER_SEED, draws: int = A.P1_DRAWS) -> np.random.Generator:
-    return np.random.Generator(np.random.PCG64(np.random.SeedSequence(master).spawn(draws)[draw]))
-
-
-def sort_source(trades: Sequence[SourceTrade]) -> list[SourceTrade]:
-    return sorted(trades, key=lambda t: (t.entry_ms, t.trade_id))
+    return _core_rng(P1Config(master, draws, P1_SLOT_ATTEMPTS, P1_FAIL_LIMIT), draw)
 
 
 def eligible_minutes(grid: Sequence[int], h: int, start_ms: int, end_ms: int) -> list[int]:
@@ -86,33 +61,6 @@ def eligible_minutes(grid: Sequence[int], h: int, start_ms: int, end_ms: int) ->
     have = set(grid)
     return [t for t in sorted(grid)
             if start_ms <= t and t + (h - 1) * MINUTE_MS <= end_ms and (t + (h - 1) * MINUTE_MS) in have]
-
-
-class _Occupancy:
-    """배치된 반열린 구간 `[t, t+h)`(ms)의 겹침 검사."""
-
-    def __init__(self) -> None:
-        self.starts: list[int] = []
-        self.ends: list[int] = []
-
-    def free(self, a: int, b: int) -> bool:
-        i = bisect.bisect_right(self.starts, a)
-        if i > 0 and self.ends[i - 1] > a:
-            return False
-        return not (i < len(self.starts) and self.starts[i] < b)
-
-    def add(self, a: int, b: int) -> None:
-        i = bisect.bisect_right(self.starts, a)
-        self.starts.insert(i, a)
-        self.ends.insert(i, b)
-
-
-SizingOk = Callable[[int, int, Decimal], bool]      # (entry_ms, direction, sl_dist) → B2 사이징 수락?
-
-
-class Indexable(Protocol):
-    def __len__(self) -> int: ...
-    def __getitem__(self, j: int, /) -> int: ...
 
 
 class EligibleIndex:
@@ -165,33 +113,15 @@ class _EligView:
 
 def p1_draw(draw: int, source: Sequence[SourceTrade], grid: Sequence[int], start_ms: int, end_ms: int,
             sizing_ok: SizingOk, *, index: EligibleIndex | None = None) -> P1Draw:
-    src = sort_source(source)
-    n = len(src)
-    rng = p1_rng(draw)
-    slots = []
-    for k in range(n):                                   # (c) 슬롯 전부 먼저: 쌍 → 방향
-        pair = int(rng.integers(0, n))
-        direction = int(rng.integers(0, 2))
-        slots.append((k, pair, direction, src[pair].h, src[pair].sl_dist))
-    order = sorted(slots, key=lambda s: (-s[3], s[0]))  # (d) h 내림차순 · 동률 슬롯 번호
+    """트라이얼 #1 래퍼 — 적격 = 규약 (b)(창 안 · 양 끝 mark 관측) · 설정 = TRIAL01_P1."""
     elig_cache: dict[int, list[int]] = {}
-    occ = _Occupancy()
-    placed: list[PlacedSlot] = []
-    for k, pair, direction, h, sl_dist in order:
-        elig: Indexable = index.get(h) if index is not None \
-            else elig_cache.setdefault(h, eligible_minutes(grid, h, start_ms, end_ms))     # 게으른 색인 = 같은 목록
-        ok = False
-        if len(elig):
-            for _ in range(P1_SLOT_ATTEMPTS):
-                t = elig[int(rng.integers(0, len(elig)))]
-                if occ.free(t, t + h * MINUTE_MS) and sizing_ok(t, direction, sl_dist):
-                    occ.add(t, t + h * MINUTE_MS)
-                    placed.append(PlacedSlot(k, pair, direction, h, sl_dist, t))
-                    ok = True
-                    break
-        if not ok:
-            return P1Draw(draw, False, tuple(placed), failed_slot=k)
-    return P1Draw(draw, True, tuple(sorted(placed, key=lambda p: p.slot)))
+
+    def eligible_for(h: int) -> Indexable:
+        if index is not None:
+            return index.get(h)
+        return elig_cache.setdefault(h, eligible_minutes(grid, h, start_ms, end_ms))
+
+    return p1_draw_generic(draw, TRIAL01_P1, source, eligible_for, sizing_ok)
 
 
 def p1_all(source: Sequence[SourceTrade], grid: Sequence[int], start_ms: int, end_ms: int, sizing_ok: SizingOk,
@@ -205,14 +135,7 @@ def p1_evaluable(results: Sequence[P1Draw]) -> bool:
 
 
 def p1_canonical_json(results: Sequence[P1Draw]) -> str:
-    """결정론 검사용 정본 직렬화(바이트 비교)."""
-    return json.dumps([{"draw": r.draw, "ok": r.ok, "failed_slot": r.failed_slot,
-                        "placed": [[p.slot, p.pair, p.direction, p.h, str(p.sl_dist), p.entry_ms] for p in r.placed]}
-                       for r in results], sort_keys=True, separators=(",", ":"))
-
-
-def p95(values: Sequence[float]) -> float:
-    return float(np.quantile(np.asarray(values, dtype=float), 0.95))
+    return canonical_json(results)
 
 
 # ── P4 ──────────────────────────────────────────────────────────────────────

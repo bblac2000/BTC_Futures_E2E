@@ -56,7 +56,8 @@ class TimeExitResult:
 
 def run_time_exit(bars: dict[int, Bar1m], fundings: Sequence[Funding], *, entry_ms: int, h: int, direction: int,
                   sl_dist: Decimal, rules: RuntimeRules, limits: SizingLimits, equity: Decimal,
-                  regime: RegimeSizing) -> TimeExitResult:
+                  regime: RegimeSizing, reason: ExitReason = ExitReason.MANUAL) -> TimeExitResult:
+    """`reason`: 시간 청산 체결의 엔진 사유(트라이얼 #1 기본 MANUAL 그대로 · 트라이얼 #2는 TIME_EXIT — 손익 무관 · 2f G6)."""
     first = bars[entry_ms]
     fill, dec = sizing_decision(first.d("mark_open"), direction, sl_dist, rules, limits, equity, regime)
     if not dec.ok or dec.leverage is None:
@@ -95,7 +96,7 @@ def run_time_exit(bars: dict[int, Bar1m], fundings: Sequence[Funding], *, entry_
     if closed is None:
         last = bars[exit_minute]
         exit_ref = last.d("mark_close")
-        for ev in eng.close_now(ref_mark=exit_ref, ts_ms=exit_ms, reason=ExitReason.MANUAL):
+        for ev in eng.close_now(ref_mark=exit_ref, ts_ms=exit_ms, reason=reason):
             if isinstance(ev, PositionClosed):
                 closed = ev
         reason = "time_exit"
