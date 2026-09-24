@@ -1,0 +1,21 @@
+{
+ "_meta": {
+  "captured_at_utc": "2026-09-24T11:01:04.759Z",
+  "endpoint": "/fapi/v1/commissionRate",
+  "params": {
+   "symbol": "BTCUSDT"
+  },
+  "method": "GET",
+  "signed": true,
+  "read_only": true,
+  "symbol": "BTCUSDT",
+  "purpose": "trial #2 runtime rules (registry #36) — single source, no fallback",
+  "script": "scripts/capture_trial02_rules.py"
+ },
+ "response": {
+  "symbol": "BTCUSDT",
+  "makerCommissionRate": "0.000200",
+  "takerCommissionRate": "0.000500",
+  "rpiCommissionRate": "0"
+ }
+}

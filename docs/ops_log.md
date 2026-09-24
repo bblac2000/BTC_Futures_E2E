@@ -4544,3 +4544,10 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d2f7-17c9-77b2-8f8c-aba134907ef4
 > Resume in Codex: codex resume 01a0d2f7-17c9-77b2-8f8c-aba134907ef4
+
+## 2026-09-24 — 트라이얼 #2 단계 2h: 런타임 규칙 스냅샷 캡처(레지스트리 #36 · 정정 문서 01)
+- 사용자 결정 (a): 앵커 뒤 같은 날 캡처 하나 · 대체 경로 없음.
+- `scripts/capture_trial02_rules.py`(테스트 4개 먼저 — POST 없음 AST 검사 · 권한 거부 · taker 불일치 시 아무것도 안 씀) → 실행 2026-09-24T11:01:04Z.
+- 키 권한 실측 = 읽기 전용(읽기 외 플래그 꺼짐) · GET 4회(exchangeInfo · leverageBracket · commissionRate · fundingInfo).
+- taker 0.0005 = §2 5 bps · 파싱 값은 2026-09-02 fixture와 같다 · 파일에 키·서명 문자열 없음(grep 0).
+- SHA256 4개는 레지스트리 #36 · 정정 문서 01.
