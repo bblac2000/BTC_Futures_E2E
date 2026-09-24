@@ -3756,3 +3756,125 @@ Codex 제약: 코드·문서만 읽음(시장 데이터·var/·OOS 열람 금지
 > 
 > Codex session ID: 01a0d2a0-fcb9-7b60-a5d0-7cc50a5fff11
 > Resume in Codex: codex resume 01a0d2a0-fcb9-7b60-a5d0-7cc50a5fff11
+
+
+## 2026-09-24 — 트라이얼 #2 초안 r2(cb99254) **사후 검토 2차** · Codex(task-mufb3b1r-2vidbx) FIX-FIRST → r3 반영
+Codex: r1 지적 12개 중 9 CLOSED · 3 PARTIAL(#3 · #6 · #9) · **진입 기준가 의도적 이탈 수용**("실행 경로 일치가 더 나은 근거") · 새 지적 7개.
+### Claude Code 항목별 입장
+| 지적 | 입장 · r3 반영 |
+|---|---|
+| #1 HIGH 완결성이 거래일 자체를 빠뜨림 | ✅ 유효 암-일 = 그날 자체 + 전일 + (B) 20일 창 전부 1,440분 · 무효일은 표본에서 제외 · 알려진 결손 2분의 영향 날짜 명시(08-12·13 A·B · B 08-14~09-02) · 전진 결손은 G-F 실행 결함 |
+| #2 HIGH 23:59 갭 청산 대 time_exit | ✅ 고정 순서: 시가가 청산가 너머면 청산(생존 사건) · 아니면 시가 time_exit · 23:59 봉 고저로는 판정 없음 · §11 테스트에 추가 · liquidationFee = 남은 명목 × fee |
+| #3 MEDIUM G3 범위 · OOS 0건 라벨 | ✅ G3 = OOS G2 재현만 · OOS PASS = G3 ∧ OOS G0 ∧ OOS 생존 · §7 우선순위 1~4(0건 FAIL → 청산 → 표본 부족 → G3) |
+| #4 MEDIUM P1 적격일 | ✅ 적격일 = `V_A`(IS Arm A 유효일) · 적격 분 없으면 난수 없이 추출 실패 |
+| #5 MEDIUM 판정기 표본 정의 | ✅ §3-1 판정기 정의 블록(gross_bps · V_A/V_B · 무효일 제외 · A/B 날짜 = V_B, 비수축일 B_day = 0 · Sharpe 식 · 매수보유 달력 · P1/P4 p95 통계 · MDE 식) |
+| #6 LOW G-B 문구 과장 | ✅ "상관이 높으면 근사적으로 줄어들 수 있다" · 실현 SR̂_A·SR̂_B·SR* 보고 |
+| #7 MEDIUM §12 숨은 결정 | ✅ §12-7(P1 방식) · §12-8(엄격 완결성) · §12-9(진입 기준가) 추가 · OOS 개봉·전진 활성화는 "절차 게이트"로 분류 · 23:59 순서는 기술 규칙으로 고정 명시 |
+
+### Codex 원문(verbatim · task-mufb3b1r-2vidbx)
+> ## Numbered findings
+> 
+> 1. **HIGH — [lines 31, 124](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:31) — “Strict completeness” omits the trading day itself.**  
+>    Line 31 requires the prior day, today’s 00:00 bar, and B’s history, while line 124 invalidates 2024-08-13 but not the incomplete 2024-08-12 replay day. Missing intraday bars can hide a cross or exit.  
+>    **Fix:** require all 1,440 evaluation-day mark bars for historical arm-day validity; state separately that a forward-day gap is a G-F execution defect.
+> 
+> 2. **HIGH — [lines 45, 47, 185, 191](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:45) — 23:59 gap liquidation has two outcomes.**  
+>    “23:59 봉에서는 다른 판정을 하지 않는다” gives `time_exit`, while “시가가 이미 청산가 너머여도 같은 봉에서 청산” gives liquidation. The test list only orders time exit before SL/TP, not liquidation.  
+>    **Fix:** freeze liquidation-versus-time-exit priority at 23:59 and test it. Also replace ambiguous `N × liquidationFee` with `remaining_notional × liquidationFee`.
+> 
+> 3. **MEDIUM — [lines 95, 97, 144–145](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:95) — G3 and OOS-zero terminology still conflict.**  
+>    Line 95 makes G3 include OOS G0 and survival; §§4-1/7 treat all three separately. OOS zero trades is both all-stage `FAIL` and `OOS 표본 부족`.  
+>    **Fix:** define G3 as OOS G2 replication only; define `OOS PASS = G3 + OOS G0 + survival`; give zero-trade precedence.
+> 
+> 4. **MEDIUM — [line 104](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:104) — P1 eligibility is not fully singular.**  
+>    “그날이 §1 데이터 완결성을 만족” can mean Arm-A validity, both-arm validity, or only decision inputs; this matters around the known gap. Empty `eligible_h` behavior is also unstated.  
+>    **Fix:** say “Arm-A-valid full replay days,” define the exact date set, and make empty `eligible_h` an immediate failed extraction.
+> 
+> 5. **MEDIUM — [lines 54, 89, 93–94, 107](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:54) — Ledger formulas are improved, but evaluator populations remain ambiguous.**  
+>    Flat is now exact. Still unresolved: data-invalid dates as zero versus excluded; B filter-off zero versus B-invalid; the A/B paired-date intersection; the B&H comparison calendar; exact Sharpe formula; and P4 p95’s underlying statistic. `gross_bps` is only recoverable indirectly from registry #19.  
+>    **Fix:** add one evaluator-definition block covering date populations, invalid-day treatment, `gross_bps`, Sharpe formula, and “P4 p95 of per-draw mean net_bps.”
+> 
+> 6. **LOW — [line 91](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:91) — Advisor finding 5 is stated too strongly.**  
+>    `B ⊂ A` does not guarantee `SR̂_B ≈ SR̂_A` or variance near zero; contraction-day performance may differ materially.  
+>    **Fix:** change “사실상 줄어든다” to “높은 상관이면 근사적으로 줄어들 수 있다” and report realized dependence.
+> 
+> 7. **MEDIUM — [lines 104, 114, 143, 147, 194–200](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:194) — §12 omits decisions already delegated to defaults.**  
+>    The simplified P1 design was adopted although the advisor explicitly recommended user confirmation. OOS opening and forward activation are also user approvals outside §12. Strict completeness and the entry-reference deviation are frozen defaults without explicit confirmation.  
+>    **Fix:** add these as confirmations or clearly classify OOS/forward approvals as later procedural gates.
+> 
+> ## Answers
+> 
+> ### 1. Round-1 findings 1–12
+> 
+> | # | Status | r2 closure |
+> |---|---|---|
+> | 1 | **CLOSED** | [39](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:39): next-open rule and deliberate deviation stated. |
+> | 2 | **CLOSED** | [53–54](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:53), [93–94](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:93): execution/statistical ledgers separated. |
+> | 3 | **PARTIAL** | [47](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:47): chronology added, but 23:59 gap priority and exact gap accounting remain. |
+> | 4 | **CLOSED** | [83–84](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:83), [111–115](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:111): IS-before-OOS staging fixed. |
+> | 5 | **CLOSED** | [96](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:96), [143–152](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:143): OOS PASS, G-F failures, final ACCEPT defined. |
+> | 6 | **PARTIAL** | [104](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:104): old count/direction collision removed; completeness/date eligibility remains ambiguous. |
+> | 7 | **CLOSED** | [40](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:40), [105](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:105): equality drops and delayed decision gate fixed. |
+> | 8 | **CLOSED** | [28](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:28), [107](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:107), [189](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:189): epoch, seed, quantile fixed. |
+> | 9 | **PARTIAL** | [31](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:31), [124](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:124): strict inputs adopted, but current replay day is omitted. |
+> | 10 | **CLOSED** | [95](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:95), [145](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:145), [155–158](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:155): OOS label separated from MDE taxonomy. |
+> | 11 | **CLOSED** | [35](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:35): equivalence explicitly stated. |
+> | 12 | **CLOSED** | [53, 56](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:53), [189–192](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:189): normalization, seed mapping, snapshot and pre-PnL registry requirements added. |
+> 
+> ### 2. Entry-reference deviation
+> 
+> **Acceptable.** A market order submitted after the decision should use the first observable execution-time reference plus the adverse-fill model. `max(U_d,next_open)`/`min(D_d,next_open)` invents an unobserved adverse fill when price retraces inside the band.
+> 
+> Acceptance is conditional on identical historical/paper/live treatment and the disclosed mark-versus-executable-price approximation in line 74. It is conservative to use worse-of, but execution-path consistency is the better justification here.
+> 
+> ### 3. Advisor findings 1–9
+> 
+> 1. Correctly applied.  
+> 2. Core simplification is sound, but eligibility remains ambiguous and the requested user confirmation was omitted.  
+> 3. Correctly applied.  
+> 4. Correctly surfaced in §12.  
+> 5. **Misapplied:** “near-vacuous” was converted into an unjustified factual claim.  
+> 6. Correctly surfaced in §12.  
+> 7. Label added, but OOS zero-trade still has competing labels.  
+> 8. Hook added, but liquidation priority at 23:59 was not resolved or tested.  
+> 9. Correctly applied.
+> 
+> ### 4. New ambiguities or contradictions
+> 
+> The material new issues are findings 1–6 above:
+> 
+> - Strict inputs versus incomplete current replay day.
+> - Time exit versus gap liquidation at 23:59.
+> - G3 composite versus separate-stage terminology.
+> - OOS zero-trade verdict precedence.
+> - P1 valid-day universe.
+> - Statistical invalid-day/paired-date/B&H populations.
+> - Overstated G-B near-vacuity.
+> 
+> ### 5. Single implementation?
+> 
+> **No.** Implementers can still choose differently on:
+> 
+> - Whether 2024-08-12 itself is valid.
+> - Whether 23:59 gap crossing is liquidation or time exit.
+> - Whether OOS zero trades is `FAIL` or `OOS 표본 부족`.
+> - Whether G3 includes G0/survival.
+> - Whether P1 requires A-valid or globally valid days.
+> - Whether invalid dates are excluded or zero-filled in CI, Sharpe and A/B.
+> - Whether B-invalid dates enter as `B_day=0`.
+> - The exact P4 p95 statistic and daily Sharpe convention.
+> 
+> ### 6. Hidden user decisions
+> 
+> Yes:
+> 
+> - Simplified P1 placement versus the prior daily-count/direction-cap design.
+> - Confirmation of strict full-day completeness and its treatment of the known gap.
+> - Confirmation of the next-open entry deviation, if Q4 was treated as a prior commitment.
+> - OOS opening after IS PASS and forward activation after OOS PASS—explicit in staging, but absent from §12.
+> - The unresolved 23:59 liquidation/time-exit priority must become either a user decision or a fixed technical rule.
+> 
+> VERDICT: FIX-FIRST — blockers: full replay-day completeness; 23:59 liquidation/time-exit priority; OOS zero/G3 verdict precedence; deterministic P1 and statistical date populations.
+> 
+> Codex session ID: 01a0d2a9-431e-7543-ba8c-1342c35e5e2a
+> Resume in Codex: codex resume 01a0d2a9-431e-7543-ba8c-1342c35e5e2a
