@@ -4384,3 +4384,12 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d2ec-c1c1-7222-bb18-90e2b75c4baf
 > Resume in Codex: codex resume 01a0d2ec-c1c1-7222-bb18-90e2b75c4baf
+
+## 2026-09-24 — 트라이얼 #2 **앵커**(레지스트리 #35)
+- 업로드: `rclone copyto` → Drive `gdrive:BTC_Futures_E2E/trials/trial_02_preregistration.md`(바이트 그대로 · 변환 없음) · 2026-09-24 10:22:55 UTC(로컬 로그).
+- **createdTime `2026-09-24T10:22:54.426Z`** — Drive 커넥터 `get_file_metadata`(id `1BYBrBNe1pDe00o979MujYPvMIq5ndlFe` · parent `14NZhku5Odij7BX_6nk2uPkqNiESTb8-2`) = rclone `lsjson --metadata` btime.
+- modifiedTime `2026-09-24T10:20:46.466Z` = rclone이 옮긴 로컬 mtime(업로드 시각이 아니다) · 앵커는 createdTime.
+- 무결성: Drive sha256 = 로컬 = 내려받은 사본 `d353f58695ea5e2878827af51675971fd237c34dc30d2757d3f5b712c2272dbf` · MD5 `12ee3f4dacfadd25a42ce78ddaef8b0c` · 43,513 bytes · `cmp` 동일.
+- `bo_v1` = §1 표(25~53행 · LF + 끝 개행) SHA256 `1b8a41a8e6fe983b1982d9775451f93cb3f27b8d3f520102963c8913d1ba56f7`(앵커 직전 재계산 일치).
+- `OOS_end = 2026-09-23T23:59:59.999Z`(createdTime 전 마지막 완전 UTC 일 · 기계적) · OOS 85일 · N = 4 · 시드 20260924 · 트라이얼 #1 OOS 영구 닫힘 재확인.
+- 다음: 단계 2(하네스·전략 구현) before-pass(advisor + Codex) — 코드는 그 뒤.
