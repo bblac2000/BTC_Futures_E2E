@@ -6595,3 +6595,51 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ec59-96b6-7f13-92b3-1214ffc1100e
 > Resume in Codex: codex resume 01a0ec59-96b6-7f13-92b3-1214ffc1100e
+
+## 2026-09-29 — 트라이얼 #3 요지 r2 재확인(Codex task-mumfyjrm-x3p6i2 **FIX-PLAN-FIRST**) → r3
+- B2·B4·B5 CLOSED · B1(이전 OI 행 나이 규칙이 항상 실패) · B3(ATR·rv5 앞선 이력 · P2 +5 범위) · B6(근거) PARTIAL → ✅ 동의 → R1' · R3' · R8'.
+
+### 요지 r3
+> # Trial #3 brief r3 — corrections (Codex r2: B1, B3, B6 partial)
+> 
+> R1' OI age is tested at each row's own comparison time: OI_now(t) = latest row with c_now + 5 min ≤ t and t − (c_now + 5 min) ≤ 10 min;
+>     OI_prev(t) = latest row with c_prev + 5 min ≤ t − 30 min and (t − 30 min) − (c_prev + 5 min) ≤ 10 min; either absent → `oi_missing`.
+>     Forward paper: a row counts only if it was actually received (stored with receipt time) by the decision close; later polls cannot make
+>     it usable retroactively.
+> R3' Lookback/validity span: ATR_15m at decision close t uses the 14 CONSECUTIVE complete UTC 15m mark buckets ending at the last bucket
+>     boundary ≤ t, plus the complete bucket immediately before them for C_{i−1} (15 buckets = 225 min). rv5 uses closes t−5..t. The
+>     admissibility span of an event t0 is [t0 − 270 min, t0 + T_max + 5 + 240 + 1 min] = [t0 − 4h30m, t0 + 6h06m]: every UTC day touched must
+>     be a complete mark day (so every lookback — r30, rv_peak's rv5 over [t0−35, t], ATR's 15 buckets for any t_e ≤ t0 + 120 — is complete),
+>     and every 00/08/16 funding boundary inside it must have exactly one validated event. The SAME admissible set is used by the base run and
+>     every placebo (the +5 term covers P2's delayed fill and shifted exit), so P2 cannot change the sample; window_end test uses the span end.
+> R8' Count-free per-arm power rationale (no data counted): the 12 h cooldown caps qualified events at ≤ 2 per day per arm; G0 needs ≥ 48
+>     filled trades per arm (n_eff ≥ 30 at ρ̂ floor 0.15). Window A (~90 OOS days) needs ≥ 0.53 fills/day/arm = ≥ 27% of the structural
+>     maximum — a rate close to the cap for a 0.5% tail event after cooling/OI/sizing filters; window B (~271 OOS days) needs ≥ 0.18/day/arm
+>     (≥ 9% of the cap, one fill every ~5.6 days). Default proposal B; the user's A/B choice is recorded in §12 before anchoring; "OOS 표본
+>     부족" stays the label if OOS G0 fails; no resizing after opening.
+
+### Codex 원문(verbatim · task-mumfyjrm-x3p6i2)
+> ## Narrow re-check of Trial #3 brief r2
+> 
+> | Before-pass blocker | Status | Finding |
+> |---|---|---|
+> | B1 — OI causality | **PARTIAL** | The five-minute availability lag and raw-data audit rules are specified, but R1’s age test makes `OI_prev` impossible to use. Because its selected row satisfies `c + 5 min ≤ t − 30 min`, its stated age `t − (c + 5 min)` is always at least 30 minutes, exceeding the 10-minute limit. |
+> | B2 — arm state machines | **CLOSED** | Independent books, cooldown triggers, wait boundaries, busy events, and two forward virtual books are specified. |
+> | B3 — timing and validity | **PARTIAL** | Fill, funding, liquidation, SL, and time-exit order are specified. The validity span does not guarantee the earlier mark history needed for `rv5` and ATR; “last 14 complete” ATR buckets also leaves open whether incomplete intervening buckets are skipped. |
+> | B4 — per-arm judgment | **CLOSED** | R4 fixes the per-arm gates, bootstrap assignment and streams, undefined-statistic handling, precedence, and independent OOS progression by reference to Trial #2. |
+> | B5 — cost and stop floor | **CLOSED** | The trial-specific 6 bps per-side model and 0.44% floor resolve the arithmetic objection. |
+> | B6 — OOS power | **PARTIAL** | R8 presents a longer prospective window, but the window remains a user decision and gives no defensible per-arm expected filled-trade case for G0. Neither option is committed yet. |
+> 
+> **Verdict-relevant fixes before drafting the rules as settled:**
+> 
+> 1. In R1, test the comparison row’s age at its comparison time: `(t − 30 min) − (c_prev + 5 min) ≤ 10 min`. For forward paper, also require the row to have **actually been received by the decision close**; a later poll cannot retroactively make it usable.
+> 2. In R3, specify consecutive ATR buckets, the required previous close, and what happens when ATR or `rv5` lookback data are incomplete. The current admissibility span starts at `t0 − 30 min`, earlier history can be needed.
+> 3. In R3/R7, extend or separately define P2 validity and window handling for the **+5-bar delayed fill and shifted exit**. The baseline event span can end before that placebo exit.
+> 4. In R8, record the user’s A/B window choice and a count-free per-arm power rationale before anchoring. The shortage verdict remains appropriate if OOS later fails G0.
+> 
+> The [r2 resolutions](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6475) substantially address the [before-pass findings](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6550), but R1 as written would produce no OI-qualified events. **Drafting the pre-registration as a fixed specification should wait for these corrections.** I used only the brief and protocol text; I opened no market returns and computed nothing from OI values.
+> 
+> **VERDICT: FIX-PLAN-FIRST**
+> 
+> Codex session ID: 01a0ec60-8113-7083-bc5a-a515980c4f9c
+> Resume in Codex: codex resume 01a0ec60-8113-7083-bc5a-a515980c4f9c
