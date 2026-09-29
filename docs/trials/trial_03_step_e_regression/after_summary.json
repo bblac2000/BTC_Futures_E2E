@@ -1,0 +1,17 @@
+{
+ "closed_report_expected": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "closed_report_sha256": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "files_compared": 1043,
+ "head": "1d5f941dff126ad05275ea0790faea963b4b9b67",
+ "identical": true,
+ "mismatches": [],
+ "p1_parts": 8,
+ "pins_commit": "7b8b842f1050ec9e7f68896cf3b2b9432aeb2e0d",
+ "report_sha256_recorded_runs": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "report_sha256_rerun": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "skip_runs": false,
+ "strategy_runs": 205,
+ "t2_base": "/home/cms/project/BTC_Futures_E2E/var/backtest/t2/IS",
+ "verdict_recorded_equal": true,
+ "verdict_rerun_equal": true
+}
