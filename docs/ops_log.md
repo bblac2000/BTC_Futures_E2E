@@ -8064,3 +8064,42 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0edee-fcfa-7dd3-a8d3-383283615e46
 > Resume in Codex: codex resume 01a0edee-fcfa-7dd3-a8d3-383283615e46
+
+## 2026-09-30 — 트라이얼 #3 (d) after-pass 수정 확인(Codex task-mumvte6e-2vretb FIX-FIRST → task-mumw0cth-coglo7 FIX-FIRST → task-mumw6pdc-0bcqix **MERGE**) · 구현 규약 초안
+- 1(실행 경계 규칙 고정): run_arm 인자에서 rules·p·admissible 제거(항상 load_rules() + TF_V1) → 픽스처 경로 run_arm_with_fixture_rules는 호출자 파일이 tests/ 아래가 아니면 거부(실행 시점) + 저장소 전체 정적 검사(호출·import·속성). 입장: ✅ 동의(docstring 규약은 강제가 아니다).
+- 2(P2 상태 시각)·3(창 끝 테스트): CLOSED.
+- 구현 규약 초안 `docs/trials/trial_03_conventions.md`(DRAFT · 번호 1~44) 커밋 — 레지스트리 행은 **아직 추가하지 않는다**(사용자 검토 · (e)~(g) 추가는 차이로 보인 뒤 최종 SHA로 판정기 푸시 전에).
+
+### Codex 원문(verbatim · codex_t3_d_after_r2_result.md)
+> **TRIAL #3 STEP (d) after-pass review of `HEAD`:**
+> 
+> 1. **Input and rules pins — OPEN.** [run_arm](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:133) now validates bar order, funding buckets, rates, and marks, and its default path loads the pinned snapshot. But a caller can still pass arbitrary `rules` and bypass `load_rules()` at line 139. The “fixture only” restriction is a docstring convention, not an enforced run boundary. The new test checks the default and source text; it does not test rejection of an unpinned override. The input-validation portion is closed.
+> 
+> 2. **P2 `ENTRY_PENDING` timestamp — CLOSED.** [The transition](/home/cms/project/BTC_Futures_E2E/strategies/trial03/strategy.py:247) uses the emission bar’s close, and [the P2 test](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_strategy.py:284) checks the timestamp and state order.
+> 
+> 3. **Window-end test — CLOSED.** [The revised test](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_strategy.py:335) supplies a complete touched day and proves both 17:53 admissible and 17:54 `window_end`. No funding boundary falls in the 17:53 interval.
+> 
+> The added [golden fixture](/home/cms/project/BTC_Futures_E2E/tests/fixtures/golden_trial03_e2e.json) is compared with both arms’ trades, intents, funnels, and digests. The 11 focused tests passed in read-only mode.
+> 
+> **VERDICT: FIX-FIRST.** Enforce the fixture-only rules override at the callable run boundary, or make the production entrypoint reject it and test that rejection.
+> 
+> Codex session ID: 01a0edf6-e737-7010-8dc0-3d0425df4814
+> Resume in Codex: codex resume 01a0edf6-e737-7010-8dc0-3d0425df4814
+
+### Codex 원문(verbatim · codex_t3_d_after_r3_result.md)
+> **Finding 1: OPEN.** `run_arm` now pins `load_rules()` and `TF_V1`, and the three focused tests pass. But [the fixture helper](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:139) remains publicly callable. [The AST test](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_strategy.py:378) checks direct calls in only four directories, so it does not enforce the stated rule against calls anywhere outside `tests/`.
+> 
+> VERDICT: FIX-FIRST.
+> 
+> Codex session ID: 01a0edfb-dc1a-7d43-88e1-5d0a610b18f2
+> Resume in Codex: codex resume 01a0edfb-dc1a-7d43-88e1-5d0a610b18f2
+
+### Codex 원문(verbatim · codex_t3_d_after_r4_result.md)
+> **CLOSED.** The guard in [harness.py](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:140) raised `RulesSnapshotMismatch` in a read-only probe called from outside `tests/`. The static test in [test_trial03_strategy.py](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_strategy.py:378) now scans the repository root for calls, from-imports, and attribute references. An independent scan found no matches across the 119 eligible Python files.
+> 
+> The test also excludes `harness.py` itself and `node_modules`; the latter is absent. Those exclusions do not leave a current production caller unscanned.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0ee00-613d-7f12-a40d-c4f4be77a8df
+> Resume in Codex: codex resume 01a0ee00-613d-7f12-a40d-c4f4be77a8df

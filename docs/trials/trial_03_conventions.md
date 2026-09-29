@@ -1,0 +1,61 @@
+# 트라이얼 #3 구현 규약(초안 · 실데이터 손익 계산 전)
+
+> **초안(DRAFT)** — 사용자 검토 대상(단계 경계 · 2026-09-30 (d) 보고). (e)~(g)가 항목을 덧붙이면 그 차이를 사용자에게 먼저 보인다.
+> 확정본은 이 파일의 최종 SHA256을 적은 레지스트리 행(구현 규약 행)이 번호 전부를 참조로 포함하고, 그 행은 **판정기 푸시 전**에 쓴다.
+> 그 행 뒤 이 파일은 바뀌지 않는다(바꾸려면 새 파일 + 새 행). 이 행 전에는 실데이터 손익을 계산하지 않는다.
+> 앵커된 사전등록(`trial_03_preregistration.md` r3 · SHA256 `9b8d2cdf…` · #50)을 **구현**하는 선택만 적는다 — 사전등록 규칙을 바꾸지 않는다.
+> 근거는 `docs/ops_log.md` 2026-09-29~30 단계 2 (a)~(d) before/after-pass와 사용자 결정.
+
+## A. 데이터·OOS 가드 ((a) · 계획 r5 S7)
+1. **IS 경로 범위** = [2023-10-02 00:00Z, 2025-12-31 23:59:59.999Z](워밍업 시작 → IS 끝 · 창 (B) #47) · 밖이면 `OOSGuard`. 준비 산출물은 `var/t3/` 아래만 · `var/t3_s0`(S0)·`var/backtest`(트라이얼 #2)는 입력이 아니다(경로 단언).
+2. **아카이브 읽기**: 줄마다 타임스탬프(첫 열)만 먼저 읽고 시작 전 행은 건너뛰며 **끝 뒤 첫 행에서 그 파일을 멈춘다**(끝 뒤 값 미파싱) · REST 요청 endTime ≤ 끝 · 적재기는 모든 타임스탬프가 범위 안인지 다시 단언.
+3. **OI 원천·중단**: binance.vision 일별 metrics zip + CHECKSUM(원시 보관·해시) · 날짜는 파일 이름으로 선택 · 중단 = CHECKSUM 불일치 · 필요한 날 파일 없음 · zip 안 CSV ≠ 1개 · 필수 열 없음 · create_time 해석 불가 · 5분 경계 아님 · 같은 create_time(파일 무관)의 `sum_open_interest` 문자열 불일치. 같으면 합침. 범위 밖 create_time 행은 **값을 분류하기 전에** 버린다.
+4. **OI 사용 불가 값 = 관측 결손(사용자 결정 2026-09-29 · 관대한 읽기)**: 두 읽기 — (엄격) §5 "해석 불가 → 중단"이 값에도 적용 / (관대) 그 문구는 파일 무결성(체크섬·날 파일·시각·격자·충돌 중복)에 대한 것이고 §1 25행 "어느 행이든 없으면 `oi_missing`"이 값 결손을 다룬다 → **관대한 읽기 채택**. 결과를 보지 않고 정했다는 근거: S0(개수만 · 4585bdb)의 비유한 슬롯 130 / 288,864(0.045%). 유효 값이 하나도 없는 create_time = 사용 불가 슬롯 → 날별·전체 개수와 목록(`oi_unusable.json`) 기록.
+5. **데이터 품질 상한**: IS 창 5분 격자 중 사용 불가 슬롯 > **0.5%** → 준비 중단(`oi_unusable_over_cap`) · 워밍업 슬롯은 기록만.
+6. **캡처 순서**: 실데이터 캡처 CLI는 판정기 커밋 H가 origin/main의 조상이고 H에 `backtest/evaluate_t3.py`가 있을 때만(rc 6) · OOS 진입점은 "트라이얼 #3 OOS 개봉" + 사용자 결정 레지스트리 행 없이는 거부.
+
+## B. 슬리피지 · 공유 계층 ((b) · #51)
+7. **체결 모델**: `replay(..., slippage_rate=)` · `placebo_exec`의 `sizing_decision`·`run_time_exit`·`p1_null_distribution`에 키워드 전용 매개변수(기본 = #7 2 bps · 트라이얼 #1·#2·봇 불변) · 트라이얼 #3 = 0.0006(§2) — 진입 견적·진입 체결·모든 청산 체결(SL·time_exit). 청산(liquidation)은 송신기를 거치지 않는다.
+8. **트라이얼 #2 출처**: main dc23273 뒤 트라이얼 #2 지문 = `1f08d389…`(기록 `9416d9e2…`는 77cef80까지) → 트라이얼 #2 문은 main에서 의도적으로 거부 · 트라이얼 #2 산출물 바이트 동일 증거 `docs/trials/trial_03_step_b_regression/`.
+
+## C. 시간 청산 · 펀딩 ((c) · 사용자 결정 (A))
+9. **시계**: 체결 봉 t_f = `EntryFilled`가 든 봉의 open_ms · 종료 봉 = t_f + 14,400,000 ms · 보유 = 봉 t_f … t_f+239(마감 240개) · time_exit의 ts_ms = 종료 봉 open_ms.
+10. **종료 봉(§1 31행 그대로)**: ① 펀딩 → ② 시가가 추정 청산가 너머(롱 ≤ · 숏 ≥ · 경계 포함)면 청산 → ③ 아니면 시가에 `time_exit`(6 bps 불리 체결) · 그 봉의 고가·저가는 판정하지 않는다. 봉 t_f … t_f+239: 청산 → SL(봉 안 mark 고가·저가 · SL 체결 기준 = SL과 시가 중 불리한 쪽).
+11. **종료 봉 누락** = 실행 실패(§1 35행 판정 가능 구간 위반): 뒤 봉이 오면 그 봉의 펀딩·엔진 처리 전(`before_minute`)에 `MissingExitBar` · 입력이 먼저 끝나면 재생 뒤 `assert_no_due`. 대체 봉 없음.
+12. **펀딩 규약**: 00:00·08:00·16:00 모두 · 그 분의 판정 전에 정산 · 경계 분 체결은 미지불 · 경계 분 time_exit는 지불 뒤 청산 · 240분 보유는 경계를 최대 1개 지난다 · 순서는 시각이 아니라 결과(`funding_paid_usdt` · 정확한 지갑 분해)로 검증.
+13. **`exit_reason`** = 기존 `time_exit` · 공유 트레이드 dict에 새 필드 없음 · `HOLD_MIN = 240`은 `strategies/trial03/exit_schedule.py`.
+14. **보고 전용 부분 개수(X9 · (f))**: time_exit 중 종료 봉 시가가 이미 SL 너머였던 것 = `Decimal(exit_ref) ≤ Decimal(sl)`(롱) / `≥`(숏).
+
+## D. 전략 상태 기계 ((d) · 계획 r2/r3)
+15. **시계·날**: 봉은 open_ms가 속한 UTC 날(§1 22행) · 마감 T = open_ms + 60,000 = "1m 봉 마감 t" · 창 봉 = open_ms ∈ [IS_START, IS_END](이벤트 깔때기 분모) · t0 = 창 봉의 T · 창이 처음 판정할 수 있는 봉 = 2024-01-01 00:00 봉(T = 00:01) · 워밍업 봉은 특징 상태만(상태 기계·장부는 창 첫 봉에서 IDLE·평평 — 단언).
+16. **r30·분위수(§1 24행 · 사용자 문구)**: r30[T] = ln(M_close[봉 T] / M_close[봉 T − 30분]) · float64(`math.log`, Decimal 문자열에서) · 둘 중 하나라도 없거나 비양수면 정의 안 됨. 날 d의 표본 = open이 d−90 … d−1인 봉 전부의 정의된 r30 · 새 day_index의 첫 봉을 판정하기 **전에** 계산 · 정의 수 ≥ ceil(0.99 × 129,600) = **128,304** 아니면 그날 전체 `quantile_invalid` · 부호 있는 r30에 `numpy.quantile(x, p, method="linear")` · `q_dn = Q(0.005)` · `q_up = Q(0.995)` · 위치 (n−1)·p · n = 129,600이면 하한 = 1-기준 648·649번째 사이(649번째 가중 0.995) · 상한 = 128,952·128,953번째 사이(128,953번째 가중 0.005) · 비교는 경계 포함(L: r30 ≤ q_dn · S: r30 ≥ q_up).
+17. **OI(§1 25행)**: 행(create_time c)은 c + 300,000 ms부터 · 기준 시각 T에서 c + 300,000 ≤ T ∧ T − (c + 300,000) ≤ 600,000인 **가장 최근 유효 행** = OI_now · 같은 규칙으로 T − 1,800,000에서 OI_prev · 나이 창 밖으로 더 찾지 않는다 · 결측이면 `oi_missing`, 부사유 = 그 나이 창 안에 사용 불가 슬롯이 있으면 `unusable` 아니면 `absent`(둘 중 하나라도 unusable이면 unusable) · 감소 = Decimal(now) − Decimal(prev) < 0(엄격) · 아니면 `oi_not_decreasing` · 둘 다 쿨다운을 시작하지 않는다.
+18. **이벤트 깔때기(§7-3 · 창 봉마다 첫 실패 사유 하나)**: quantile_invalid → no_tail → not_admissible → in_cooldown → oi_missing → oi_not_decreasing → qualified · 보고 전용 부사유: no_tail{r30_undefined} · not_admissible{window_end|incomplete|funding} · oi_missing{absent|unusable} · 꼬리 분(no_tail 뒤)은 이벤트 기록에 한 줄씩, quantile_invalid·no_tail은 개수만.
+19. **사용자 이름 → §7-3 이름**: cooling_timeout → `not_cooled` · sizing_gate_fail → `sizing_rejected_decision` / `sizing_rejected_fill` · quantile_invalid_day → `quantile_invalid`. 상태: FLUSH_QUALIFIED = 즉시 기록 `qualified` · 코드 상태 IDLE · COOLING · DELAYED(P2) · ENTRY_PENDING · IN_POSITION · COOLDOWN.
+20. **쿨다운(§1 27·34행)**: 적격 이벤트 순간 `cooldown_end = t0 + 43,200,000`(끝 제외) — busy 검사 **전**에 · 항상 t0 기준(청산 기준 아님) · 각 마감에서 T ≥ cooldown_end면 COOLDOWN → IDLE이 분류보다 먼저 · t0 + 720분 꼬리는 적격, t0 + 719분은 `in_cooldown`.
+21. **position_busy**: 포지션·대기 진입 중 적격 이벤트 → 기록(`kind: busy`) 후 `PositionBusyError`로 실행 실패(불변식 · 720 > 366이라 도달 불가). 실행 실패 시 전략 메모리 기록 보존은 (g) 하네스 CLI가 잡아 저장 후 다시 던진다(미결 · (g)).
+22. **냉각(§1 28행)**: t0 뒤 마감 t_e에서 · t_e − t0 > 120분인 첫 봉 → `not_cooled` · 아니면 t_e − t0 ≥ 20분(포함) ∧ rv5[t_e] ≤ 0.5 × rv_peak → 결정 봉 · rv5 = T−5분 … T 마감의 mark 종가 6개 → 로그수익률 5개 `statistics.stdev`(ddof 1) · 정의 안 되면 조건 거짓 · rv_peak = 마감 u ∈ [t0 − 30분, t_e]의 정의된 rv5 최댓값(현재 봉 포함).
+23. **이벤트당 결정 하나**: 첫 냉각 봉이 결정 봉 · `sl_dist_out_of_range`·`sizing_rejected_decision`·`sl_crossed_before_fill`·`sizing_rejected_fill`·`normalization`은 종결(→ COOLDOWN · 재시도 없음).
+24. **ATR_15m(§1 29행)**: UTC 15분 버킷 [b, b+15분) · H = mark_high 최대 · L = mark_low 최소 · C = 마지막 분 mark_close · 완전 = 1m 봉 15개 · 끝 경계 ≤ T인 마지막 연속 완전 버킷 15개로 TR 14개(TR_i = max(H−L, |H−C_{i−1}|, |L−C_{i−1}|)) 단순평균 · Decimal · 결정 봉에 ATR이 없으면 실행 실패.
+25. **SL·띠**: m = t_e 마감 mark 종가 · SL_raw = m ∓ 1.5 × ATR · SL = `normalize_price(SL_raw)`(ROUND_HALF_UP · 스냅샷 tick — 리터럴 없음) · 띠용 sl_dist = 1.5 × ATR / m(반올림 전) · [0.0044, 0.0500] 경계 포함 · 부사유 floor/ceiling.
+26. **결정 시점 B2(§1 29행 · 사용자 요구 7과의 충돌은 앵커 문언으로 해소)**: `size_entry(m 그대로, SL, 원 방향, E_ref 1,000, REGIME, #48 규칙, LIMITS)` — 6 bps 견적은 **체결 시점 재사이징에만**(§1 30행 "예상 체결가"). 거부 → `sizing_rejected_decision`.
+27. **체결(§1 30행)**: 다음 봉 mark 시가 기준 · 엔진이 6 bps 예상 체결가로 재사이징 · 결정·체결 두 번 모두 통과해야 체결 · EntrySkipped 매핑: SL_CROSSED_BEFORE_FILL → `sl_crossed_before_fill` · SIZING_REJECTED & 이유 ∈ {BELOW_MIN_QTY, MIN_NOTIONAL} → `normalization` · 다른 이유 → `sizing_rejected_fill`(enum으로 · 설명 문자열 아님) · LEVERAGE_NOT_CONFIRMED·SEND_FAILED·ENTRIES_BLOCKED·ExitReason.POST_FILL_GATE·`entry_refused`·체결 봉 ≠ 기대 open → 실행 실패.
+28. **P2(+1·+5 · §4)**: 결정 값(m · SL · 결정 B2 · sl_dist)은 t_e에 고정 · 의도는 open o_e + k·60,000 봉에서 냄(decided_ms = 그 봉 open + 59,999) · 체결 = open o_e + (k+1)·60,000 봉 시가 · 그 봉에서 장부 평평 검사(busy → 실행 실패) · 상태 기록 시각 = 의도를 낸 봉의 마감.
+29. **P3(§4)**: 결정 게이트(띠 + 결정 B2)는 원 방향·원 SL · 의도는 반대 방향 · SL′ = `normalize_price(m ± 1.5 × ATR)`(거울상 **원값**을 반올림) · 엔진이 반대 방향으로 재사이징.
+30. **판정 가능 구간(§1 35~36행 · 닫힌 시각점 구간 [t0 − 270분, t0 + 366분])**: 첫 실패 순서 window_end → incomplete → funding · window_end = t0 + 366분 > IS_END(23:59:59.999) · incomplete = day_index(t0 − 270분) … day_index(t0 + 366분)의 날 중 완전하지 않은 날(완전 = 정렬 분 1,440개가 한 번씩 · mark 4필드 유한 양수) · funding = t0 ≤ b ≤ t0 + 366분인 00/08/16 경계 b마다 버킷 분(funding_ms − funding_ms % 60,000) = b인 검증된 확정 펀딩이 정확히 1건이 아님(b = t0도 요구 — 보수적) · 기본·P2·P3·L·S가 같은 판정.
+31. **V(§3-1)** = 창 날 중 완전한 mark 날 ∧ 그날 분위수 유효 · 실행이 기록하고 판정기가 준비 입력에서 다시 계산해 대조.
+32. **결정 기록**: 전략의 `intent` 기록 = t0 · t_e · o_e · decided_ms · variant · m · ATR · SL_raw · SL · sl_dist(결정 · 반올림 전) · 결정 B2 레버리지·수량·명목 · 의도 방향·SL · 하네스가 체결된 의도를 트레이드와 순서로 짝지어 `trades_t3`(공유 트레이드 dict + `t3`) · P1은 여기서 결정 시점 sl_dist를 읽는다.
+33. **실행 불변식·합 검사(암마다)**: 이벤트 깔때기 합 = 창 봉 수 · 진입 종결(not_cooled · sl_dist_out_of_range · sizing_rejected_decision · sl_crossed_before_fill · sizing_rejected_fill · normalization · filled) 합 = 적격 이벤트 · 청산 사유 합 = 체결 = 트레이드 수 · 창 끝 열린 포지션·미완 상태(COOLING·DELAYED·ENTRY_PENDING·IN_POSITION)·예정된 종료 없음.
+34. **예상되는 0**: #48 규칙·E_ref 1,000·띠에서 `sizing_rejected_decision`·`sizing_rejected_fill`·`normalization`은 구조적으로 0에 가깝다(명목 200~2,273 USDT ≥ MIN_NOTIONAL 50 · pos_pct ≤ ~7.6% < 40% · sl_dist 5%에서 L = 12 통과) — 테스트는 테스트 전용 규칙 픽스처로 강제한다.
+35. **실행 입력·규칙**: 실행 경로 `run_arm`에는 규칙·매개변수·판정 가능 덮어쓰기 인자가 **없다** — 규칙은 항상 `load_rules()`(#48 네 파일 SHA256 + taker 0.0005 단언) · 매개변수는 항상 `TF_V1`(테스트 `TF_V1 == TfParams()`) · 입력 검사(분 정렬·엄격 증가 · 펀딩 버킷 중복·격자 밖·비유한 → `InputError`). 픽스처 규칙·작은 `TfParams`는 `run_arm_with_fixture_rules`로만 · `tests/` 밖에서 그것을 부르면 정적 검사 실패(Codex (d) after 확인).
+36. **수치 문맥**: r30·rv5·분위수는 float64 · ATR·m·SL·sl_dist는 Decimal(프로세스 기본 문맥 — (g) CLI 시작에서 `decimal.setcontext(decimal.Context())`, 트라이얼 #2 방식) · `size_entry`는 자체 실행 문맥.
+37. **결정론**: 같은 입력 → 트레이드·이벤트 기록·깔때기의 SHA256 동일(같은 프로세스·서로 다른 두 하위 프로세스) · 합성 끝에서 끝 골든 `tests/fixtures/golden_trial03_e2e.json`.
+38. **사이징 상수**: B2 · `LIMITS = SizingLimits(leverage_range=(10, 30), liq_fee_on_liq_price=True)`(pos_pct 캡 0.40 기본) · `REGIME` risk 0.01 · L ∈ [10, 30] · E_ref 1,000(체결마다 실행 지갑 리셋) · N_stat 1,000 · 청산 수수료 = 수량 × 추정 청산가 × liquidationFee.
+
+## E. 이미 정해진 (e)·(f) 핀(세부는 (e)·(f)에서 덧붙인다)
+39. **P1**: 6 bps를 배치(`sizing_decision`)와 실행(`run_time_exit`) 둘 다에 · 원판 쌍의 sl_dist = 결정 시점 sl_dist(항목 32) · 날을 넘는 적격 분(§4) · 스트림 L `SeedSequence((20260929, 2)).spawn(1000)[d]` · S `(20260929, 3)` — `p1_core` 무수정, 튜플 엔트로피 그대로(동일성 테스트).
+40. **CI**: 가운데 1 − α · α = 0.05/6 · 하한 분위 α/2 = 1/240 · 상한 1 − 1/240(0.41667/99.58333은 표시값) · 부트스트랩 `SeedSequence((20260929, 1)).spawn(8)[k]` IS k 0~3 · OOS k 4~7 · 재표본 10,000.
+41. **G-B**: SR* = expected_max_sr(정의된 {SR̂_#1A, SR̂_#1B, SR̂_#2A, SR̂_#2B, SR̂_L, SR̂_S}, n_trials = 6) · 고정값은 앵커 모듈(보고서 SHA256 대조 픽스처).
+42. **비용 민감도 격자(보고 전용)**: 트레이드마다 scalable_cost_bps = (진입·청산 수수료 + 진입·청산 슬리피지)[USDT] / (수량 × 진입 체결가) × 10⁴ · net_k = net_bps + (1 − k) × scalable_cost_bps · k ∈ {0.5, 1.0, 1.5} · 펀딩·청산 수수료는 배율 없음 · 청산(liquidation) 트레이드는 진입 다리만 · ×1.0 = 기록된 net 정확히.
+43. **퇴화 통계·산술**: 정의 안 된 값을 통과로 읽지 않는다(트라이얼 #2 규약 29와 같은 규칙) · float64 실제 넘침 → 판정 거부 · 매수보유 접미어는 ACCEPT일 때만.
+44. **보고**: 이벤트·진입 깔때기와 부사유 전부 · oi_missing 중 `unusable` 개수 따로 · X9 · 연도별 net · 보유시간·청산 사유 분포.
