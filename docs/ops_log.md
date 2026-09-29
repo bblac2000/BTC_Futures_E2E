@@ -6643,3 +6643,22 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ec60-8113-7083-bc5a-a515980c4f9c
 > Resume in Codex: codex resume 01a0ec60-8113-7083-bc5a-a515980c4f9c
+
+## 2026-09-29 — 트라이얼 #3 요지 r3 재확인(Codex task-mumg1u91-tn081h) **PROCEED** — 초안 작성
+- 문구 2건 반영: 48 체결은 필요 최소(보장 아님 · ρ̂가 크면 더 필요) · 창 A의 27%를 "상한에 가깝다"고 쓰지 않는다.
+
+### Codex 원문(verbatim)
+> The r3 corrections close the three remaining r2 findings. **Drafting can proceed.**
+> 
+> | Finding | Re-check |
+> |---|---|
+> | B1 — OI causality | **Closed.** `OI_prev` is aged at `t − 30 min`, so the rule is usable. Forward rows also require receipt by the decision close. |
+> | B3 — timing and validity | **Closed.** The span covers the consecutive ATR buckets, rv5 history, and P2’s latest delayed exit. The span end governs `window_end` for the base run and placebos. |
+> | B6 — OOS power | **Closed for drafting.** The per-arm fill-rate thresholds make the A/B tradeoff reviewable without using event counts. The user’s choice still belongs in §12 **before anchoring**. |
+> 
+> Two wording points should be corrected in the draft: **48 fills is a necessary minimum, not a guarantee of G0**, because higher measured ρ̂ can require more; and A’s 27% of the structural maximum should not be described as “close to the cap.” Neither changes the specified gate or prevents drafting. See the [r3 brief](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6603) and [r2 findings](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6622).
+> 
+> **VERDICT: PROCEED**
+> 
+> Codex session ID: 01a0ec62-dab2-7800-b936-425e9a132005
+> Resume in Codex: codex resume 01a0ec62-dab2-7800-b936-425e9a132005
