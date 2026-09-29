@@ -6662,3 +6662,61 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ec62-dab2-7800-b936-425e9a132005
 > Resume in Codex: codex resume 01a0ec62-dab2-7800-b936-425e9a132005
+
+## 2026-09-29 — 트라이얼 #3 초안 r1 **after-pass**(advisor + Codex task-mumg7yv8-tctfuz **FIX-FIRST**) → 초안 r2
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| Codex | 1 ATR 경계 | ✅ | 결정 시각 T = t_e 봉 마감 · 끝 경계 ≤ T 버킷부터 연속 14개(경계면 막 끝난 버킷 포함) |
+| Codex | 2 창 이전 이력 | ✅ | 창 끝 이후만 금지 · 창 시작 전 가격·OI·펀딩 이력 입력 허용(IS 워밍업 · OOS 앞 90일) · §12-15 |
+| Codex | 3 결정 시점 B2 | ✅ | 결정 시점 B2(m · SL 가격) + 체결 시점 재사이징 · 깔때기 두 사유 · §12-14 |
+| Codex | 4 전진 OI 결손 | ✅ | 폴러 실패 = G-F 결손 · 폴링 성공인데 새 행 없음 = oi_missing · §12-9 엔드포인트·주기 · 깔때기 분모 정리(no_tail) |
+| advisor | 1 | ✅ | mark 완전성 = 전체 구간 · 펀딩 = [t0, t0+6h06m] |
+| advisor | 2 | ✅ | V = 완전한 mark 날 ∧ 분위수 유효(펀딩은 이벤트별) · 판정기가 다시 계산해 대조 |
+| advisor | 3 | ✅ | oi_not_decreasing을 §1에 · 쿨다운 미시작 |
+| advisor | 4 | ✅ | P2: 지연 봉 시가에 평평하면 체결 시도 · 포지션 있으면 position_busy |
+| advisor | 5 | ✅ | §11 1-1 전진 OI 어댑터 |
+| advisor | 6 | ✅ | G-B 상호 의존 공시 |
+| advisor | 7 | ✅ | 확인만 |
+| advisor | 8 | ✅ | #43 수정 없이 #44 추가 |
+- 초안 r2 SHA256 `06bb0901fc91b68d29aa5545c653e5b286fc753134c41512d8e4eca9fadfa951`.
+
+### advisor 원문(verbatim)
+> You're at the trial #3 after-pass (Codex running); this is the advisor half. I read the draft against brief r1–r3 and against trial #2's precedent. R1'–R10 are all in the text; the §12 list covers every choice that was flagged. What the draft still leaves readable two ways, numbered for the log:
+> 
+> **1. The §1 table has one ambiguous cell — verify it before Codex flags it.** "판정 가능 구간" starts at t0 − 270 min, yet the funding-boundary requirement is stated over the *whole* span. R3' intended the mark-grid requirement over the whole span (lookbacks need bars) but funding only matters during a hold. As written, an event with a missing 00:00 funding record four hours *before* t0 becomes `not_admissible` even though no position exists then. Two implementers will read it differently. Fix: mark completeness over [t0 − 270, t0 + 366]; funding validity over [t0, t0 + 366] only. State the reason (funding is settled only while a position is open).
+> 
+> **2. The V day set definition (§3-1) and the admissibility span (§1) don't match, and V drives the bootstrap blocks.** V requires "그날 00/08/16 펀딩 3건" and the day's quantile validity, but a trade whose event-day funding is fine and whose *next-day* 00:00 funding is missing would be `not_admissible` (not in the sample) while its entry day is still in V (an empty block). That's fine — but the reverse case matters: a day in V whose 00:00 funding is missing has no admissible events and *is* a block. Say explicitly: V = days where an admissible event could exist under §1, computed from the same rules, and the evaluator recomputes V rather than reading it. Trial #2 had `validity.json` equality checks; carry that.
+> 
+> **3. `oi_not_decreasing` is in §7-3 but not in §1.** §1 defines `oi_ok` and `oi_missing`; the funnel names a third reason. Add it to the §1 row so the strategy records it (OI present, not decreasing → not a qualified event, no cooldown started). Also state whether a tail minute that fails `oi_ok` counts against anything — as written it doesn't start cooldown; say so.
+> 
+> **4. P2 mechanics have a gap the brief closed but the draft reopened.** §4 says "체결 = t_e + k + 1분 봉 시가" and "적격 집합은 기본 실행과 같다" — good — but the cooldown/`position_busy` interaction at the delayed time isn't stated. In trial #2, P2 re-evaluated busy at the delayed close; here R7 says decision *not* re-evaluated. Pin: P2 fills at the shifted bar unconditionally if the book is flat at that bar's open; if a position is open (from an earlier P2 fill), the event is `position_busy`. Otherwise two implementers can differ on whether the delayed fill checks the book.
+> 
+> **5. The forward G-F row lists "OI 폴링" as a rule-execution item but §11 has no adapter spec.** Fine for a pre-registration, but add one sentence to §11: forward OI rows are stored with receipt time and the strategy reads only rows received ≤ decision close — otherwise §1's "전진은 결정 시점까지 수신된 행만" has no implementation hook.
+> 
+> **6. §3 G-B disclosure needs one more line.** "각 암의 SR̂가 서로의 SR*에 들어간다" — correct, and it means the two arms' verdicts are not independent through SR*. Say that L's G-B depends on S's realised Sharpe and vice versa, and that this is accepted (N counting requires it). Codex will otherwise read "독립 장부" against this.
+> 
+> **7. Two arithmetic spot-checks pass:** z_{0.991667} = 2.3940 ✓; window-B floor 48/271 = 0.177/day ✓; window A 48/90 = 0.533 ✓. §1-1 rows reuse trial #2's snapshot geometry — correct since #36 is the same snapshot, but §11-7 says "앵커 시점 캡처" for a *new* snapshot; if the new capture changes brackets, §1-1 is an example only (it already says [DERIVED · 예시]) — no change needed.
+> 
+> **8. Registry row #43 says "before-pass … PROCEED" — accurate — but the after-pass verdict slot is missing.** Trial #2 appended a separate row per material revision (#31 → #32 → #34). Plan the same: don't edit #43; the after-pass outcome and any r2 draft get their own row.
+> 
+> **Sequence:** Codex verdict → log both verbatim with positions → fixes 1–6 in draft r2 → narrow re-check → report to the user with the three items they asked for (skill tree + e8c3091; S0 numbers; draft verbatim) plus the §12 list as the decisions they must make before anchor. No anchor, no code.
+
+### Codex 원문(verbatim · task-mumg7yv8-tctfuz)
+> ## After-pass findings
+> 
+> **VERDICT: FIX-FIRST.** Registry row #43 matches the draft’s SHA256, and the draft carries the main r1–r3 resolutions. The following rules still permit different trades or verdicts and need to be fixed before anchoring:
+> 
+> 1. **ATR boundary differs from approved r3.** The draft says the last 15-minute bucket ends at the boundary *before* `t_e` ([§1, line 29](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:29)); r3 specifies the last boundary **≤ `t_e`** ([ops log, r3](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6609)). At a boundary, the two readings can use different ATRs, changing the SL, sizing, and fills. Specify the bar timestamp convention and inclusive boundary explicitly.
+> 
+> 2. **Window lookback conflicts with the no-outside-window rule.** Daily thresholds require 90 preceding days ([lines 23–24](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:23)), while [line 36](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:36) forbids reading outside each IS/OOS window. [Line 111](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:111) names only IS warmup. In particular, OOS could either use preceding IS days for thresholds or lose its first 90 days. State the permitted historical input for **each** window while keeping trading books flat.
+> 
+> 3. **Decision-time B2 gate is missing.** Approved r2 requires the distance band **and B2 gate at decision**, followed by engine resizing at fill ([ops log R3](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6488)). The draft specifies the band at decision but mentions B2 only at execution ([lines 29–30, 38](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:29)). A setup rejected at decision could pass after a changed next open. State both checks and which distance each uses.
+> 
+> 4. **Forward OI absence has two possible dispositions.** An unavailable or stale comparison row is `oi_missing` ([line 25](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:25)); forward data loss is a G-F execution defect leading to **폐기** ([lines 35, 77, 140](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:140)). Define when a missed poll, missing metrics row, or stale row merely suppresses an event and when it counts toward “data 결손 > 0.” This can change a forward **REJECT** into **폐기**.
+> 
+> **Completeness checks:** The numeric parameters and cited sources are present; I found no TBD. §9 covers the original rejection record, L1–L10, and the required distinctions. §7 gives stage precedence and the three dispositions, subject to the forward OI ambiguity above. Every explicitly tagged **[PROPOSED]** choice appears in §12. For exact implementation, §12-9 should also repeat the forward OI endpoint and one-minute polling cadence already fixed in [§5](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:112). The [event funnel](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:149) also places `quantile_invalid` under a denominator requiring a defined tail threshold; clarify that reporting denominator, though it does not itself change a verdict.
+> 
+> This was a read-only document review. I did not open market returns or compute from OI values.
+> 
+> Codex session ID: 01a0ec67-3750-7b33-b0e0-ae8c82fe4e68
+> Resume in Codex: codex resume 01a0ec67-3750-7b33-b0e0-ae8c82fe4e68
