@@ -1,0 +1,137 @@
+"""트라이얼 #3 실행 산출물 계약(단계 2 (f) · 계획 r2 V4) — (g) 단계 실행기가 **이 모듈로 쓰고**, 판정기가 **이 모듈로 읽는다**.
+
+배치(`base` = 트라이얼 #3 IS 디렉터리):
+- `runs/<arm>_<variant>/` (arm ∈ L·S · variant ∈ base·P2_delay1·P2_delay5·P3_invert) = `trades_t3.jsonl` · `events.jsonl` · `summary.json`
+- `runs/<arm>_P1/part_<lo>_<hi>/p1_part.json` · `runs/<arm>_P1_merged/` = `p1_draws.json` · `p1_null.jsonl` · `p1_summary.json`
+파일 집합·요약 키는 고정이다 — 빠짐·남음·스키마 불일치는 판정 **거부**(판정 없음 · §7 IS(0) 폐기와 다르다).
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+from backtest import p1_t3 as P1
+from backtest.replay import read_jsonl, write_jsonl
+from strategies.trial03.harness import T3Run
+
+ARMS = ("L", "S")
+VARIANTS = ("base", "P2_delay1", "P2_delay5", "P3_invert")
+RUN_FILES = ("events.jsonl", "summary.json", "trades_t3.jsonl")
+SUMMARY_KEYS = frozenset({"arm", "variant", "funnel", "sub", "entry", "window_bars", "q_valid", "v_days", "n_trades",
+                          "tf_v1_sha256", "rules_sha256"})
+P1_PART_FILE = "p1_part.json"
+P1_MERGED_FILES = ("p1_draws.json", "p1_null.jsonl", "p1_summary.json")
+P1_SUMMARY_KEYS = frozenset({"arm", "n_source", "computable", "failed", "evaluable", "parts"})
+
+
+class ContractError(RuntimeError):
+    """산출물이 계약과 다르다 → 판정 거부."""
+
+
+def run_dir(base: Path, arm: str, variant: str) -> Path:
+    return base / "runs" / f"{arm}_{variant}"
+
+
+def p1_parts_dir(base: Path, arm: str) -> Path:
+    return base / "runs" / f"{arm}_P1"
+
+
+def p1_merged_dir(base: Path, arm: str) -> Path:
+    return base / "runs" / f"{arm}_P1_merged"
+
+
+def sha(p: Path) -> str:
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def write_run(d: Path, run: T3Run, v_days: Sequence[int], *, tf_v1_sha256: str, rules_sha256: dict[str, str]) -> None:
+    d.mkdir(parents=True, exist_ok=True)
+    s = run.strategy
+    write_jsonl(d / "trades_t3.jsonl", run.trades)
+    write_jsonl(d / "events.jsonl", s.events)
+    summary = {"arm": run.arm, "variant": run.variant.name, "funnel": dict(sorted(s.funnel.items())), "sub": dict(sorted(s.sub.items())),
+               "entry": dict(sorted(s.entry.items())), "window_bars": s.window_bars,
+               "q_valid": {str(k): v for k, v in sorted(s.q_valid.items())}, "v_days": sorted(v_days), "n_trades": len(run.trades),
+               "tf_v1_sha256": tf_v1_sha256, "rules_sha256": dict(sorted(rules_sha256.items()))}
+    (d / "summary.json").write_text(json.dumps(summary, sort_keys=True, indent=1) + "\n")
+
+
+def read_run(d: Path, arm: str, variant: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    files = sorted(p.name for p in d.iterdir()) if d.exists() else []
+    if tuple(files) != RUN_FILES:
+        raise ContractError(f"{d}: 파일 {files} ≠ {list(RUN_FILES)}")
+    summary = json.loads((d / "summary.json").read_text())
+    if set(summary) != SUMMARY_KEYS or summary["arm"] != arm or summary["variant"] != variant:
+        raise ContractError(f"{d}: summary 스키마·arm·variant 불일치")
+    trades = read_jsonl(d / "trades_t3.jsonl")
+    if len(trades) != summary["n_trades"]:
+        raise ContractError(f"{d}: 트레이드 {len(trades)} ≠ summary {summary['n_trades']}")
+    return trades, read_jsonl(d / "events.jsonl"), summary
+
+
+def _part_dict(p: P1.P1Part) -> dict[str, Any]:
+    return {"arm": p.arm, "lo": p.lo, "hi": p.hi, "n_source": p.n_source, "computable": p.computable,
+            "draws_json": p.draws_json, "null": p.null}
+
+
+def write_p1_part(base: Path, part: P1.P1Part) -> Path:
+    d = p1_parts_dir(base, part.arm) / f"part_{part.lo:03d}_{part.hi:03d}"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / P1_PART_FILE).write_text(json.dumps(_part_dict(part), sort_keys=True) + "\n")
+    return d / P1_PART_FILE
+
+
+def read_p1_parts(base: Path, arm: str) -> list[P1.P1Part]:
+    root = p1_parts_dir(base, arm)
+    if not root.exists():
+        raise ContractError(f"{root} 없음")
+    out = []
+    for d in sorted(root.iterdir()):
+        if [p.name for p in d.iterdir()] != [P1_PART_FILE]:
+            raise ContractError(f"{d}: 조각 파일 집합 불일치")
+        x = json.loads((d / P1_PART_FILE).read_text())
+        if set(x) != {"arm", "lo", "hi", "n_source", "computable", "draws_json", "null"} or x["arm"] != arm \
+                or d.name != f"part_{x['lo']:03d}_{x['hi']:03d}":
+            raise ContractError(f"{d}: 조각 스키마 불일치")
+        out.append(P1.P1Part(x["arm"], x["lo"], x["hi"], x["n_source"], x["computable"], x["draws_json"], x["null"]))
+    return out
+
+
+def write_p1_merged(base: Path, arm: str, parts: Sequence[P1.P1Part], draws_total: int = P1.A.P1_DRAWS) -> dict[str, Any]:
+    m = P1.merge(parts, draws_total=draws_total)
+    d = p1_merged_dir(base, arm)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "p1_draws.json").write_text(json.dumps(m["draws"], sort_keys=True, separators=(",", ":")))
+    write_jsonl(d / "p1_null.jsonl", m["null"])
+    part_shas = [{"lo": p.lo, "hi": p.hi, "sha256": sha(p1_parts_dir(base, arm) / f"part_{p.lo:03d}_{p.hi:03d}" / P1_PART_FILE)}
+                 for p in sorted(parts, key=lambda p: p.lo)]
+    summ = {"arm": arm, "n_source": m["n_source"], "computable": m["computable"], "failed": m["failed"], "evaluable": m["evaluable"],
+            "parts": part_shas}
+    (d / "p1_summary.json").write_text(json.dumps(summ, sort_keys=True, indent=1) + "\n")
+    return m
+
+
+def read_p1_merged(base: Path, arm: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    d = p1_merged_dir(base, arm)
+    files = sorted(p.name for p in d.iterdir()) if d.exists() else []
+    if tuple(files) != P1_MERGED_FILES:
+        raise ContractError(f"{d}: 파일 {files} ≠ {list(P1_MERGED_FILES)}")
+    summ = json.loads((d / "p1_summary.json").read_text())
+    if set(summ) != P1_SUMMARY_KEYS or summ["arm"] != arm:
+        raise ContractError(f"{d}: p1_summary 스키마 불일치")
+    return json.loads((d / "p1_draws.json").read_text()), read_jsonl(d / "p1_null.jsonl"), summ
+
+
+def expected_run_dirs(base: Path) -> set[str]:
+    names = {f"{a}_{v}" for a in ARMS for v in VARIANTS} | {f"{a}_P1" for a in ARMS} | {f"{a}_P1_merged" for a in ARMS}
+    return {str(base / "runs" / n) for n in names}
+
+
+def check_run_inventory(base: Path) -> None:
+    got = {str(p) for p in (base / "runs").iterdir()} if (base / "runs").exists() else set()
+    want = expected_run_dirs(base)
+    if got != want:
+        raise ContractError(f"runs/ 목록 불일치: 빠짐 {sorted(want - got)} · 남음 {sorted(got - want)}")
