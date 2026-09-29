@@ -8322,3 +8322,16 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef30-5b4d-72e1-bf17-ff083b861051
 > Resume in Codex: codex resume 01a0ef30-5b4d-72e1-bf17-ff083b861051
+
+## 2026-09-30 — 트라이얼 #3 (e) after-pass 수정 확인(Codex task-mun89nkv-aqw86v FIX-FIRST: 규약 47 문구) → 문구 정정
+- 입장: ✅ 동의 — "time_exit 보유에서만" → "time_exit·시가 갭 청산 보유(종료 봉 분에서 끝나는 보유)에서만". 테스트 두 건은 CLOSED(Codex).
+
+### Codex 원문(verbatim · task-mun89nkv-aqw86v)
+> The two requested test gaps are closed: the duplicate-minute test excludes the affected day through `build_segments`, and the funding spy observes exactly one call for the crossed record. The exit-boundary test also passes for records at 08:00 and 08:00 + 5 ms. I ran those three tests directly; pytest could not start because this read-only environment has no usable temporary directory.
+> 
+> [Item 47](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:66) still needs one wording fix. It first says the asymmetry applies to both `time_exit` and open-gap liquidation, then says the difference occurs **only** for `time_exit` holds. Include open-gap liquidation in that latter clause. [Item 44](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:61) includes the requested report count.
+> 
+> **VERDICT: FIX-FIRST**
+> 
+> Codex session ID: 01a0ef36-06a9-70e0-831c-1a481ee2f446
+> Resume in Codex: codex resume 01a0ef36-06a9-70e0-831c-1a481ee2f446
