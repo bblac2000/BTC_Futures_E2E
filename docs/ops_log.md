@@ -6257,3 +6257,20 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 
 ## 2026-09-29 — 핀 생성 스크립트(K5 · advisor 단계 2 after #3)
 - `t2_provenance.check_pins_registry`로 핀 행 검사를 분리(`load_pins`와 스크립트가 같은 검사기) · `scripts/t2_make_pins.py`: 매니페스트 → `data_pins.json`(원시 5 + 산출물 4 · 이미 있으면 거부) + 레지스트리 핀 행(경로 문구 한 번 · `이름=64hex` 9개뿐) · 쓰기 전에 검사기 통과 확인 · 시험 3개.
+
+## 2026-09-29 — 핀 검사 분리·생성 스크립트·#37 좁은 검토(Codex task-mum6wqs1-q4oh70) **MERGE** — 푸시 체크포인트 준비 완료
+- 다음(사용자 체크포인트): 판정기 커밋 H 푸시 → 레지스트리 #38(H · 원격/참조 · 포함 확인) → prepare → 핀 파일 + 핀 행(#39) → 두 번째 푸시 → verify → A → base → p1 → p1-merge → p4 → 판정 1회. 각 단계의 ops_log 항목은 다음 단계 전에 커밋(깨끗한 트리).
+
+### Codex 원문(verbatim)
+> The narrow review found no push blocker.
+> 
+> - The pins-row checker body is AST identical to the pre-refactor code, and `load_pins` calls it at the same point.
+> - The generator produces one pins-path row with nine filename/hash tokens. The shared checker rejects a changed hash or a second pins-path row. This verifies filename/hash equality; the row does not encode the `raw` versus `prepared` grouping, as was also true before the refactor.
+> - Registry row #37 contains no pins path. Its convention-file SHA256 and commit match the file, and the worktree is clean. Diff checks passed.
+> 
+> The targeted pytest tests were not run because this review was read-only and the local Python environment lacks `pyarrow`; the generator checks above used in-memory execution.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0eb78-90dd-7c90-a2b5-bebfac2c9583
+> Resume in Codex: codex resume 01a0eb78-90dd-7c90-a2b5-bebfac2c9583
