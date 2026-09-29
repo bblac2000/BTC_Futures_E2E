@@ -6254,3 +6254,6 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb74-22ab-7352-a450-94b4ce2786cc
 > Resume in Codex: codex resume 01a0eb74-22ab-7352-a450-94b4ce2786cc
+
+## 2026-09-29 — 핀 생성 스크립트(K5 · advisor 단계 2 after #3)
+- `t2_provenance.check_pins_registry`로 핀 행 검사를 분리(`load_pins`와 스크립트가 같은 검사기) · `scripts/t2_make_pins.py`: 매니페스트 → `data_pins.json`(원시 5 + 산출물 4 · 이미 있으면 거부) + 레지스트리 핀 행(경로 문구 한 번 · `이름=64hex` 9개뿐) · 쓰기 전에 검사기 통과 확인 · 시험 3개.

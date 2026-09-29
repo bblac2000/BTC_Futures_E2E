@@ -104,17 +104,8 @@ def pins_commit(repo: Path = ROOT) -> str:
 REGISTRY_REL = "docs/trial_registry.md"
 
 
-def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool = True) -> tuple[dict[str, Any], str]:
-    """G7·F6: 커밋·깨끗·푸시된 data_pins.json만 · 레지스트리 행에 같은 해시가 모두 적혀 있어야 한다."""
-    _git(repo, "ls-files", "--error-unmatch", PINS_REL)
-    if _git(repo, "diff", "--quiet", "HEAD", "--", PINS_REL, check=False).returncode != 0:
-        raise ProvenanceError(f"{PINS_REL}에 커밋되지 않은 변경이 있다")
-    c = pins_commit(repo)
-    require_pushed(repo, c, remote_ref=remote_ref, fetch=fetch)
-    pins = json.loads((repo / PINS_REL).read_text())
-    #  핀과 같은(푸시된) 커밋 시점의 레지스트리에 해시가 있어야 한다 — 작업 트리 문자열 검색이 아니다(Codex 2f r2 #5)
-    r = subprocess.run(["git", "-C", str(repo), "show", f"{c}:{REGISTRY_REL}"], capture_output=True, text=True)
-    reg = r.stdout if r.returncode == 0 else ""
+def check_pins_registry(reg: str, pins: dict[str, Any]) -> None:
+    """레지스트리 본문에 `PINS_REL` 행이 정확히 하나 · 그 행의 `이름=64hex` 토큰 집합 = data_pins(원시 + 산출물)."""
     rows = [ln for ln in reg.splitlines() if ln.startswith("|") and PINS_REL in ln]
     if len(rows) != 1:
         raise ProvenanceError(f"핀 커밋의 레지스트리에 `{PINS_REL}` 행이 정확히 하나가 아니다({len(rows)})")
@@ -132,6 +123,20 @@ def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool
             raise ProvenanceError(f"데이터 핀 행에 {name}의 해시가 둘 이상")
     if parsed != {**pins["raw"], **pins["prepared"]}:
         raise ProvenanceError("데이터 핀 행의 `파일=해시` 목록이 data_pins.json과 정확히 같지 않다")
+
+
+def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool = True) -> tuple[dict[str, Any], str]:
+    """G7·F6: 커밋·깨끗·푸시된 data_pins.json만 · 레지스트리 행에 같은 해시가 모두 적혀 있어야 한다."""
+    _git(repo, "ls-files", "--error-unmatch", PINS_REL)
+    if _git(repo, "diff", "--quiet", "HEAD", "--", PINS_REL, check=False).returncode != 0:
+        raise ProvenanceError(f"{PINS_REL}에 커밋되지 않은 변경이 있다")
+    c = pins_commit(repo)
+    require_pushed(repo, c, remote_ref=remote_ref, fetch=fetch)
+    pins = json.loads((repo / PINS_REL).read_text())
+    #  핀과 같은(푸시된) 커밋 시점의 레지스트리에 해시가 있어야 한다 — 작업 트리 문자열 검색이 아니다(Codex 2f r2 #5)
+    r = subprocess.run(["git", "-C", str(repo), "show", f"{c}:{REGISTRY_REL}"], capture_output=True, text=True)
+    reg = r.stdout if r.returncode == 0 else ""
+    check_pins_registry(reg, pins)
     return pins, c
 
 
