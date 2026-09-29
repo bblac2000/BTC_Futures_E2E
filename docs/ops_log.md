@@ -8335,3 +8335,13 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef36-06a9-70e0-831c-1a481ee2f446
 > Resume in Codex: codex resume 01a0ef36-06a9-70e0-831c-1a481ee2f446
+
+## 2026-09-30 — 트라이얼 #3 (e) 완료: Codex task-mun8bdsh-gnldae **MERGE**
+
+### Codex 원문(verbatim)
+> The HEAD diff fixes the wording identified in task-mun89nkv-aqw86v: item 47 now includes both `time_exit` and open-gap liquidation in the clause describing when the exit-side funding difference occurs. This was a read-only wording review; I did not rerun tests.
+> 
+> **VERDICT: MERGE**
+> 
+> Codex session ID: 01a0ef37-4027-7bb3-b034-3ad34cad4018
+> Resume in Codex: codex resume 01a0ef37-4027-7bb3-b034-3ad34cad4018
