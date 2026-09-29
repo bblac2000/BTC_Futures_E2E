@@ -11,10 +11,12 @@
 3 매니페스트: 원시·감사·산출물 SHA256 + 코드 커밋. 소비자(전략 실행·판정기)는 `verify_manifest`로 확인한다.
 
 규칙:
-- 분마다 출처 **하나**(혼합 없음). 아카이브: mark 4 · kline OHLC·거래량 필드가 전부 `ok`이고 행이 하나(동일 행 중복은 합침)면 사용,
-  아니면 쓰지 않고 REST 보충. 아카이브의 다른 중복(값이 다름) → 중단.
-- REST(보충 분만): 행이 있는데 필드가 `ok`가 아니면 중단 · mark ok + kline 없음 → 중단(mark-only) · mark 없음 → 결손 분.
-  같은 openTime의 다른 행 → 중단(동일 행은 합침).
+- (K1') **mark 계열과 kline 계열은 분마다 독립**: mark = 아카이브 mark 4필드 ok면 아카이브, 아니면 REST markPriceKlines ·
+  kline = 아카이브 OHLC·거래량·trades ok면 아카이브, 아니면 REST klines. 두 계열은 한 계산에서 섞이지 않는다
+  (재생 봉 = mark가 있는 분 · kline이 없으면 kline 필드 빈 값 · trades = −1 · source = mark 출처 / 매수보유 = kline 일 종가 파일).
+  아카이브의 다른 중복(값이 다름) → 중단(동일 행은 합침).
+- REST(보충 분만): 행이 있는데 필드·시각이 비정상(해석 불가 · 분 경계 아님)이면 중단 · mark 없음 → 결손 분(날 무효는 days.py) ·
+  kline 없음 → 그 분 kline 없음 · 같은 openTime의 다른 행 → 중단(동일 행은 합침).
 - 펀딩 버킷 = 기록이 있는 분 [b, b+60,000): 기록 1개 ok → 이벤트 · 전부 바이트 동일 → 합침 · 그 밖의 2개 이상 → 중단 ·
   ok가 아닌 기록 → 중단 · 이벤트 버킷이 00:00·08:00·16:00 UTC가 아니면 중단(사전등록 §1 펀딩 행).
 - 값 분류: `empty`(없음·"") · `unparseable`(Decimal 실패) · `non_finite`(NaN·Inf) · `ok`.
@@ -203,9 +205,12 @@ def _rest_rows(raw: Path, name: str, fill: set[int], idx: tuple[int, ...], kind:
     by: dict[int, list[list[Any]]] = defaultdict(list)
     for rec in _jsonl(raw / name):
         for r in rec["page"]:
+            if not isinstance(r, list) or not r or not _int_ok(r[0]):
+                findings.append({"kind": f"rest_{kind}_bad_ts", "row": str(r)[:80], "stop": True})     # 감사와 함께 중단
+                continue
             t = int(r[0])
             if t % MIN:
-                findings.append({"kind": f"rest_{kind}_misaligned_ts", "ts_ms": t, "stop": False})
+                findings.append({"kind": f"rest_{kind}_misaligned_ts", "ts_ms": t, "stop": True})
                 continue
             if t in fill:
                 by[t].append(r)
@@ -275,8 +280,10 @@ def analyze(raw: Path, expect_range: tuple[int, int] | None = None
     kline_daily: dict[int, dict[str, Any]] = {}
     missing = kline_counts = 0
     kl_src: Counter[str] = Counter()
+    bar_kline: Counter[str] = Counter()
     for t in range(start - start % MIN + (MIN if start % MIN else 0), end + 1, MIN):
         kv: tuple[str, ...] | None = None
+        ksrc = ""
         if t in arch_kline:
             r = arch_kline[t]
             kv, ksrc = (r["Open"], r["High"], r["Low"], r["Close"], r["Volume"], r["quote_volume"], r["trades"],
@@ -298,6 +305,7 @@ def analyze(raw: Path, expect_range: tuple[int, int] | None = None
             missing += 1
             continue
         o, h, lo, c, vol, qv, trades, tbb, tbq = kv if kv is not None else ("", "", "", "", "", "", "-1", "", "")
+        bar_kline[ksrc if kv is not None else "missing"] += 1
         bars.append(BD.Bar1m(t, o, h, lo, c, vol, qv, int(trades), tbb, tbq, m4[0], m4[1], m4[2], m4[3], msrc))
     fundings = _funding(raw, findings)
     kinds: dict[str, int] = defaultdict(int)
@@ -306,7 +314,8 @@ def analyze(raw: Path, expect_range: tuple[int, int] | None = None
     stops = [f for f in findings if f["stop"]]
     audit = {"start_ms": start, "end_ms": end, "minutes_missing": missing, "bars": len(bars),
              "bars_archive": sum(b.source == "archive" for b in bars), "bars_rest": sum(b.source == "rest" for b in bars),
-             "bars_kline_missing": sum(b.trades == -1 for b in bars), "kline_minutes": kline_counts,
+             "bars_kline_missing": bar_kline["missing"], "bars_kline_archive": bar_kline["archive"],
+             "bars_kline_rest": bar_kline["rest"], "kline_minutes": kline_counts,
              "kline_archive": kl_src["archive"], "kline_rest": kl_src["rest"], "kline_days": len(kline_daily),
              "fill_minutes": len(fill), "funding_events": len(fundings), "finding_counts": dict(sorted(kinds.items())),
              "stops": stops, "findings_nonstop": [f for f in findings if not f["stop"]][:1000]}

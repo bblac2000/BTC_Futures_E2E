@@ -224,3 +224,24 @@ def test_does_not_import_trial01():
     src = Path(P.__file__).read_text(encoding="utf-8")
     mods = [n.module for n in ast.walk(ast.parse(src)) if isinstance(n, ast.ImportFrom)]
     assert not any(m and ("trial01" in m or m == "backtest.prepare" or m.endswith(".prepare")) for m in mods)
+
+
+@pytest.mark.parametrize("bad", ["x", None, T0 + 4 * MIN + 7])
+def test_rest_bad_or_misaligned_timestamp_stops_with_audit(tmp_path, bad):
+    rows = [arow(T0 + i * MIN) for i in range(10) if i != 4]
+    out = run(tmp_path, rows, FakeRest({T0 + 4 * MIN: kline(T0 + 4 * MIN)}, {T0 + 4 * MIN: mark(T0 + 4 * MIN)}))
+    pages = [json.loads(x) for x in (out / "raw" / "rest_mark.jsonl").read_text().splitlines()]
+    pages[0]["page"].append([bad] + mark(T0 + 4 * MIN)[1:])
+    (out / "raw" / "rest_mark.jsonl").write_text("".join(json.dumps(p) + "\n" for p in pages))
+    with pytest.raises(P.SourceStop):
+        P.build(out)
+    assert (out / "source_audit.json").exists() and not (out / "bars_1m.parquet").exists()
+
+
+def test_audit_counts_bar_kline_origin(tmp_path):
+    rows = [arow(T0 + i * MIN) for i in range(10) if i not in (3, 4)]
+    out = run(tmp_path, rows, FakeRest({T0 + 3 * MIN: kline(T0 + 3 * MIN)}, {T0 + 3 * MIN: mark(T0 + 3 * MIN),
+                                                                           T0 + 4 * MIN: mark(T0 + 4 * MIN)}))
+    P.build(out)
+    a = json.loads((out / "source_audit.json").read_text())
+    assert (a["bars_kline_archive"], a["bars_kline_rest"], a["bars_kline_missing"]) == (8, 1, 1)

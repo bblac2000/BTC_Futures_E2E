@@ -6203,3 +6203,27 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - K3': 값 기준 거부 삭제 · 통계 계산을 numpy 넘침·비유한 연산 오류로 감싸 거부.
 - K5: 규약 파일 확정 `docs/trials/trial_02_conventions.md`(초안에서 이름 변경 · 1~37 · 20·27·29 재작성 · 16 채움 · 30~37 추가).
 - 전체 시험 1,171 통과 · ruff · pyright 통과.
+
+## 2026-09-29 — K 구현 재확인(Codex task-mum6bvej-ie7qme **FIX-FIRST**) → 수정
+| # | Codex | 입장 | 반영 |
+|---|---|---|---|
+| 1 | REST 시각 비정상이 감사 없이 예외 · 어긋난 시각 비중단 | ✅ | 해석 불가·분 경계 아님 → 중단 발견으로 기록(감사 작성 뒤 SourceStop) · 시험 3종 |
+| 2 | 봉 기준 kline 출처 개수 없음 | ✅ | bars_kline_archive · bars_kline_rest · bars_kline_missing · 시험 |
+| 문서 | prepare_t2 머리말 · 규약 머리말 · 원시 5개 이름 | ✅ | 머리말 K1'로 · 규약 파일은 행이 기록된 뒤 불변이라고 · 원시 정확한 집합 명시 |
+
+### Codex 원문(verbatim · task-mum6bvej-ie7qme)
+> **VERDICT: FIX-FIRST.**
+> 
+> The core K1′/K2 path separates mark and kline data, gives mark-only minutes the specified empty kline fields and `trades = −1`, and builds buy-and-hold from the pinned daily kline file. The value cap is gone, the numerical probe refused extreme overflowing inputs, and K4 checks the fingerprint before each subprocess. I found no new preregistered-rule change in the finalized conventions.
+> 
+> Two K1′ gaps remain:
+> 
+> 1. [REST row parsing](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:205) does not consistently **stop with a source audit** for malformed timestamps. A misaligned timestamp is recorded with `stop: False`; an unparseable or missing timestamp raises before `SourceStop` and before the audit is written. That misses the approved “malformed → stop” behavior.
+> 2. [Audit counts](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:307) omit the approved `bars_kline_archive` and `bars_kline_rest` counts. The current `kline_archive` and `kline_rest` also count kline-only minutes, so they cannot serve as per-bar replacements.
+> 
+> The documentation needs correction before the conventions are frozen: [the preparation module’s opening rules](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:13) still say mark-only REST minutes stop and sources cannot mix. [The conventions file](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions.md:1) says registry row #37 already incorporates it, while the registry currently ends at #36; its §11-8 inventory also calls the raw set exact without naming the five files.
+> 
+> This was a read-only review. I did not access `var/` or market data, and did not run tests that write files.
+> 
+> Codex session ID: 01a0eb69-b385-7ab1-ac79-c6fa78a18e9d
+> Resume in Codex: codex resume 01a0eb69-b385-7ab1-ac79-c6fa78a18e9d

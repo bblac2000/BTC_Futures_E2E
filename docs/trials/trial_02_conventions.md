@@ -1,6 +1,7 @@
-# 트라이얼 #2 구현 규약(확정 · 실데이터 실행 전 · 레지스트리 #37이 이 파일의 SHA256으로 참조)
+# 트라이얼 #2 구현 규약(확정 · 실데이터 실행 전)
 
-> **확정본** — 레지스트리 #37이 번호 1~37을 참조로 포함한다. 이 파일은 바뀌지 않는다(바꾸려면 새 파일 + 새 레지스트리 행).
+> **확정본** — 이 파일의 SHA256을 적은 레지스트리 행(구현 규약 행)이 번호 1~37을 참조로 포함한다. 그 행이 기록된 뒤 이 파일은 바뀌지 않는다
+> (바꾸려면 새 파일 + 새 레지스트리 행).
 > 앵커된 사전등록(`trial_02_preregistration.md` · #35)을 **구현**하는 선택만 적는다 — 사전등록 규칙을 바꾸는 것은 정정 문서의 몫이다(#36 정정 01).
 > 근거는 `docs/ops_log.md` 2026-09-24~29 단계 2 검토 항목.
 
@@ -33,7 +34,8 @@
 28. **판정기 수치 규칙**: 입력 Decimal → float64 한 번 · 유한하지 않은 값 → 판정 거부 · 보고서 JSON 엄격(NaN → null) · 모든 트라이얼 #2 손익 프로세스(run · p1_t2_run · evaluate_t2)는 시작 때 파이썬 기본 10진 문맥.
 29. **산술 무결성(값 기준 거부 없음 · K3')**: 판정기 입력은 유한한 Decimal(아니면 거부) · float64 계산이 실제로 넘치거나 비유한 결과를 내면 판정 거부(판정 없음 · 아무것도 쓰지 않음) · 크기만으로 거부하는 한도는 없다 · 가격 필터(#36 max/min ≈ 8,135)로 가격 항은 ~8.2×10⁷ bps 이내라 넘침에는 펀딩율 ~10¹⁴⁰ 같은 비현실 값이 필요하다 · 진짜 정의되지 않는 통계(n < 2 · 분산 0 등)는 사전등록 §3-1대로(실패·비교 불가).
 16. **§11-8 산출물 스키마·격리 CLI·증거**: 실행 기록 `var/backtest/t2/IS/_records/<이름>.json`(명령·모듈·인자·출력 SHA256·git HEAD·출처) ·
-   준비 출력(정확한 집합) = manifest.json · bars_1m.parquet · funding.json · source_audit.json · kline_close_daily.json(+ raw/ 원시 5개) ·
+   준비 출력(정확한 집합) = manifest.json · bars_1m.parquet · funding.json · source_audit.json · kline_close_daily.json ·
+   원시(raw/ · 정확한 집합) = archive_rows.jsonl · fill_ranges.json · rest_klines.jsonl · rest_mark.jsonl · funding.jsonl ·
    전략 실행(정확한 집합) = trades.jsonl · crosses.jsonl · days.jsonl · validity.json · meta.json · P1 조각·병합 = p1_draws.json · p1_null.jsonl
    (원판 0건이면 + p1_not_computable.json) · 곁파일 = verify_receipt.json · p1_merge_expect.json · 판정 = evaluation/{report.json, verdict.txt,
    record.json} · CLI = `python -m backtest.t2_stages --evaluator-commit H --stage {prepare|verify|A|base|p1|p1-merge|p4}` → 격리 하위 프로세스
