@@ -7710,3 +7710,278 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0edbf-1948-7cf2-b8df-f0a69c86b42b
 > Resume in Codex: codex resume 01a0edbf-1948-7cf2-b8df-f0a69c86b42b
+
+## 2026-09-30 — 트라이얼 #3 (d) 상태 기계 **before-pass**(advisor + Codex task-mumulo1j-r9o5b4 FIX-PLAN-FIRST → r2 task-mumutx8d-6eco72 FIX-PLAN-FIRST → r3 task-mumuy2hq-8vadui **PROCEED**)
+- **사용자 요구 7과 충돌(보고에 명시)**: "decision mark priced with the same 6 bps model"은 r3 §1 29행 "결정 시점 B2 게이트(기준가 m · SL 가격 · E_ref로 정본 size_entry)" · 30행 "엔진이 실행 시점에 B2 재사이징(예상 체결가 …)"과 모순 — 그 문구는 (b) advisor 8의 제안을 내가 (b) 보고에 옮긴 것. 앵커 문언을 따른다: 결정 = size_entry(m 그대로), 6 bps는 체결 시점만(D1). 사용자 요구 1의 이름 별칭은 §7-3 이름으로(cooling_timeout → not_cooled · sizing_gate_fail → sizing_rejected_{decision|fill} · quantile_invalid_day → quantile_invalid).
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 창 소속 한 칸 어긋남 | ✅ | D2(open 기준) |
+| advisor | 2 결정 값 보관 위치 | ✅ | D7(intent 기록 · trades_t3) |
+| advisor | 3 이벤트당 결정 하나 | ✅ | D5 |
+| advisor | 4 window_end·r30_undefined 자리 | ✅ | D10 부사유 |
+| advisor | 5 도달 불가 사유(0 기대) | ✅ | D11 · 테스트 전용 규칙 픽스처 |
+| advisor | 6 RejectReason 매핑 | ✅ | D6 |
+| advisor | 7 핀 | ✅ | D9·D9′(시각 구간은 닫힌 시각점 — Codex r2) |
+| advisor | 8 추가 테스트 | ✅ | D12 |
+| advisor | 9 Q2·Q3 | ✅ | — |
+| advisor | 10 규약 문서·행 | ✅ | D13 |
+| Codex | 1 결정 시점 B2 가격(BLOCKER) | ✅ | D1 — m 그대로(advisor (b) 8·사용자 요구 7과 달리 앵커 문언) |
+| Codex | 2 창 한 칸 | ✅ | D2 → r3 D2′(구간 끝 ≤ IS_END) |
+| Codex | 3 P2 ms | ✅ | D4 → r3 D4′(decided_ms = open + 59,999) |
+| Codex | 4 워밍업 | ✅ | D3 |
+| Codex | 5 결과 회계 | ✅ | D6 |
+| Codex | 6 경계 순서 | ✅ | D8 |
+
+### 계획 r1 원문
+> # Trial #3 step (d) — strategy state machine + P2/P3 variants + harness: BEFORE-PASS plan (no code yet)
+> 
+> Spec: docs/trials/trial_03_preregistration.md §1 lines 22–39 (tf_v1), §4 (P2/P3), §7-3 (funnels); plan r5 S2'/S8/S10/S11/S12;
+> (c) conventions; user (d) requirements 1–10 (2026-09-30). All on synthetic data; no real-data read.
+> 
+> ## Anchored lines that fix the requirements (verbatim)
+> - line 24 quantile: "날 d마다 **00:00에 한 번** 계산: 표본 = d−90 … d−1 날의 모든 1m 종가 t의 r30[t] · 129,600분 중 **99% 이상** 정의돼야 한다(아니면 그날
+>   이벤트 없음 `quantile_invalid`) · numpy 선형 분위수 · `q_dn = Q(0.005)` · `q_up = Q(0.995)` · 그날 자신의 r30은 쓰지 않는다"
+> - line 25 OI: "metrics 행(create_time = c)은 **c + 5분부터 쓸 수 있다** · `OI_now(t)` = c + 5분 ≤ t인 최근 행 ∧ t − (c + 5분) ≤ 10분 · `OI_prev(t)` =
+>   c + 5분 ≤ t − 30분인 최근 행 ∧ (t − 30분) − (c + 5분) ≤ 10분 · `oi_ok = sum_open_interest(OI_now) − sum_open_interest(OI_prev) < 0` · 어느 행이든
+>   없으면 `oi_missing` · 둘 다 있고 감소가 아니면 `oi_not_decreasing` · 둘 다 **적격 이벤트가 아니고 쿨다운을 시작하지 않는다**"
+> - line 26–27 event/cooldown: "1m 봉 마감 t에서 L: r30[t] ≤ q_dn / S: r30[t] ≥ q_up ∧ oi_ok ∧ 판정 가능 ∧ t ≥ cooldown_end" ·
+>   "적격 이벤트마다(진입 여부와 무관 — 바쁨·식지 않음·건너뜀 포함) `cooldown_end = t0 + 12시간`(끝 제외) · 암별"
+>   → an event at exactly t0 + 720 min IS allowed; t0 + 719 is in cooldown (user req. 9).
+> - line 28 cooling: "t0 이후 봉 마감 t_e에서 `t_e − t0 ≥ 20분`(포함) ∧ `rv5[t_e] ≤ 0.5 × rv_peak` · rv5[t] = t−5…t mark 종가로 만든 1m 로그수익률 5개의
+>   표본표준편차(ddof 1) · rv_peak = max(rv5[u] : t0 − 30분 ≤ u ≤ t_e)(현재 봉 포함) · `t_e − t0 > 120분`인 첫 봉에서 `not_cooled`(포함 경계: 120분까지 진입 가능)"
+> - line 29 decision gate (ATR/SL/band/B2 at decision) and line 30 entry: "다음 1m 봉 mark 시가를 기준가로 · 엔진이 실행 시점에 B2 재사이징 … 결정·체결
+>   두 번 모두 통과해야 체결 · 체결가 = 기준가 ± 6 bps 불리 + 불리 tick · 실행 시 SL이 이미 넘어가 있으면 `sl_crossed_before_fill`"
+> - line 34: "포지션(또는 대기 진입)이 있는 동안의 적격 이벤트 = `position_busy`(쿨다운은 시작)"
+> - line 38 B2 sizing; §7-3 funnel names (event funnel: quantile_invalid → no_tail → not_admissible → in_cooldown → oi_missing → oi_not_decreasing →
+>   qualified; entry funnel: position_busy · not_cooled · sl_dist_out_of_range(floor/ceiling) · sizing_rejected(decision) · sl_crossed_before_fill ·
+>   sizing_rejected(fill) · normalization → filled).
+> 
+> ## Clock (plan r5 S8, pinned)
+> Bar k has open_ms o_k; its close/decision time T_k = o_k + 60,000. "1m 봉 마감 t" = T_k. r30[T_k] = ln(M_close[bar k] / M_close[bar with
+> T = T_k − 30 min]) in float64 from Decimal strings; undefined if either close absent or non-positive. Day d's quantile sample = r30 at every
+> T_k with o_k in day d−90 … d−1 (1440 per day; the first ones reach into d−91's last 30 closes); computed when the first bar of d is handled
+> (before judging it); defined ≥ ceil(0.99 × 129,600) = 128,304 else the whole day is quantile_invalid. numpy.quantile(x, p, method="linear"),
+> compare ≤ / ≥ inclusive. OI: rows = (create_time c, value) from oi_5m.json (valid only) + unusable slot list; t = T_k.
+> OI_now = latest valid row with c + 300,000 ≤ T_k and T_k − (c + 300,000) ≤ 600,000; OI_prev same at T_k − 1,800,000. Missing → oi_missing,
+> sub-reason `unusable` iff an unusable slot c' exists with c' + 300,000 ≤ t_ref and t_ref − (c' + 300,000) ≤ 600,000 for a missing side
+> (no search beyond the age window), else `absent`. oi_ok ⇔ Decimal(now) − Decimal(prev) < 0.
+> 
+> ## State machine (user req. 1) — one instance per arm; engine/ledger per arm (separate replay() calls)
+> States: IDLE → (tail ∧ admissible ∧ not in cooldown ∧ oi_ok) FLUSH_QUALIFIED(t0) [instant: cooldown_end = t0 + 720 min set HERE, before the
+> busy check] → busy? (ctx.has_position) → record position_busy, raise PositionBusyError (run fails; invariant 720 > 366) → COOLING →
+> per bar close t_e > t0: if t_e − t0 > 120 min → not_cooled → COOLDOWN; elif t_e − t0 ≥ 20 min ∧ rv5 ≤ 0.5·rv_peak → DECISION:
+> ATR_15m, SL, band → sl_dist_out_of_range_floor | _ceiling → COOLDOWN; decision-time B2 (size_entry(adverse_fill_estimate(side, m, tick,
+> 0.0006), SL_rounded, dir, E_ref, REGIME, rules, LIMITS)) → sizing_rejected_decision → COOLDOWN; pass → ENTRY_PENDING (intent emitted at
+> t_e close; P2: emitted at close of t_e + k) → engine at next open: EntrySkipped(SL_CROSSED_BEFORE_FILL) → sl_crossed_before_fill →
+> COOLDOWN; EntrySkipped(SIZING_REJECTED) → sizing_rejected_fill or normalization (Q1) → COOLDOWN; EntryFilled → IN_POSITION (exit schedule
+> t_f + 240, (c)) → PositionClosed(sl | liquidation | time_exit) → COOLDOWN → first bar close with T_k ≥ cooldown_end → IDLE.
+> COOLDOWN is always relative to t0 (not exit). Tail minutes during COOLING/ENTRY_PENDING/IN_POSITION/COOLDOWN fall in the event funnel as
+> in_cooldown (they are before cooldown_end) — hence position_busy is unreachable.
+> Event log (strategy-owned, JSONL-able, enumeration FIXED in the conventions row): per arm, every tail minute (r30 beyond its threshold) with
+> its first-failure reason (not_admissible, in_cooldown, oi_missing{absent|unusable}, oi_not_decreasing, qualified) and every transition
+> (qualified, position_busy, not_cooled, sl_dist_out_of_range{floor|ceiling}, sizing_rejected_decision, intent, sl_crossed_before_fill,
+> sizing_rejected_fill, normalization, filled, exit{sl|liquidation|time_exit}, idle). Counts only (no per-minute rows) for quantile_invalid
+> and no_tail. User aliases → anchored names: cooling_timeout → not_cooled; sizing_gate_fail → sizing_rejected_{decision|fill};
+> quantile_invalid_day → quantile_invalid.
+> Funnel denominator = window bar closes (T_k within [IS_START, IS_END]); warm-up bars update state only.
+> 
+> ## Decision details (user req. 5–7)
+> - Cooling evaluated at each bar close t_e with t_e > t0; t_e − t0 ≥ 20 min inclusive; last allowed t_e = t0 + 120 min; fill at the NEXT
+>   bar's open (line 30). rv5[t] from the 6 mark closes at T−5 … T (5 log returns, ddof 1); rv_peak over u ∈ [t0 − 30 min, t_e] (bar closes).
+> - ATR_15m: buckets [b, b+15 min) UTC-aligned, bucket H = max mark_high, L = min mark_low, C = mark_close of its last minute; complete = 15 bars;
+>   the 14 TRs of the last 14 complete buckets whose end b+15 ≤ T (15 buckets needed, contiguous), Decimal; simple mean.
+> - m = t_e mark close; SL_raw = m ∓ 1.5·ATR; SL = normalize_price(SL_raw) (HALF_UP to the snapshot tick — not a literal); sl_dist (band) =
+>   1.5·ATR/m unrounded; band [0.0044, 0.0500] inclusive; floor/ceiling separate reasons.
+> - B2 via canonical size_entry + LIMITS = SizingLimits(leverage_range=(10, 30), liq_fee_on_liq_price=True) (trial #2's, same constitution
+>   values; pos_pct_max default 0.40), REGIME risk 0.01, E_ref 1,000 (sizing_capital), rules from #48 snapshot only. Engine re-sizes at fill.
+> - P2 (+1/+5): decision at t_e unchanged; intent emitted at close of t_e + k (fills t_e + k + 1 open); book flat check at emission
+>   (busy → raise). P3: decision gate (band + B2) in the ORIGINAL direction with the original SL; intent direction reversed with SL mirrored
+>   about m: SL' = normalize_price(m ± 1.5·ATR) (opposite side); engine re-sizes for the reversed direction.
+> - (c) wiring: exit schedule observe() is the first statement of on_minute_closed; guard() in before_minute; harness calls
+>   assert_no_due() after replay; per-run assertions: position_busy count 0 (raise), entry_refused 0, open_at_end None.
+> 
+> ## Harness (strategies/trial03/harness.py) — pure over prepared inputs
+> - admissible(t0) bitmap: every UTC day touched by [t0 − 270 min, t0 + 366 min] is complete (1,440 aligned bars, finite mark OHLC) AND each
+>   00/08/16 boundary in [t0, t0 + 366 min] has exactly one validated funding record; shared by L/S and base/P2/P3; t0 = T_k.
+> - window: events only for t0 ≥ IS_START and t0 + 366 min ≤ IS_END (span end ≤ window end); V = window days that are complete ∧ quantile-valid
+>   (recorded per run for the evaluator's recomputation).
+> - run_arm(arm, variant) → replay(..., slippage_rate=0.0006, sizing_capital=E_ref, limits=LIMITS) → trades, event log, funnel counts.
+> 
+> ## Tests (user req. 8–9)
+> Per transition and per abort reason, long (L) and short (S), synthetic bars/OI/funding: quantile_invalid day; no_tail; not_admissible;
+> in_cooldown (event at t0+719 blocked, at t0+720 allowed — line 27 "끝 제외"); oi_missing absent and unusable; oi_not_decreasing (and
+> neither starts cooldown); qualified → cooling → not_cooled at t0+121 (t0+120 still allowed); entry at ≥ 20 min with rv condition; sl_dist
+> floor/ceiling; sizing_rejected_decision; sl_crossed_before_fill; sizing_rejected_fill; normalization; filled → exit sl / liquidation /
+> time_exit → COOLDOWN → IDLE; position_busy forced (test-only short cooldown) records then raises and cooldown was started first; P2 +1/+5
+> fill timing; P3 reversed direction + mirrored SL + original-direction decision gate. End-to-end per arm with a hand-computed expected
+> ledger (entry/exit times, fills, qty, leverage, net). Determinism: two runs → identical SHA256 of trades and event logs. Quantile edge:
+> exactly 128,304 defined → valid; 128,303 → invalid. Static check: no rolling price max/min channel in strategies/trial03 (rv_peak allowed).
+> 
+> ## Questions
+> Q1 How to split engine EntrySkipped(SIZING_REJECTED) into sizing_rejected(fill) vs normalization (§7-3 lists both)? Proposal: normalization
+>    iff the SizingDecision reason is the qty-floor/MIN_NOTIONAL failure category; otherwise sizing_rejected_fill. Needs the decision's reason code.
+> Q2 Anything in the state machine that contradicts r3 (esp. COOLDOWN relative to t0; tail minutes during a position counted as in_cooldown)?
+> Q3 Is a per-tail-minute event log (not per minute) sufficient for §7-3, with counts for quantile_invalid/no_tail?
+> Q4 Implementer-choices row: which items beyond this plan must be in it before P&L?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (d) before-pass. The plan is faithful to r3 §1/§4/§7-3 where it quotes them; the clock, cooldown-at-qualification, and P2/P3 semantics are right. What follows are the two-implementer forks the plan leaves open — each is a line for the conventions doc — plus a few test-design facts. Blocking first.
+> 
+> **1. BLOCKER — window membership is off by one as written.** "Funnel denominator = window bar closes (T_k within [IS_START, IS_END])" excludes the last IS bar (open 23:59 Dec 31 2025, T = 2026-01-01 00:00:00.000 > IS_END) and *includes* the last warm-up bar (open 23:59 Dec 31 2023, T = IS_START), making it a legal t0 although its open is in the warm-up. Pin one rule for everything: a bar belongs to the day of its `open_ms` (line 22 `day_index`), and window membership, the denominator, the quantile that applies to it, and its sample membership all follow the open. Event t0 = T_k of a bar with open in the window. Then V (by day) and the denominator agree. State the resulting fact: the first bar the window can qualify is open 00:00 Jan 1 (T = 00:01).
+> 
+> **2. MAJOR — say where decision-time values live; the plan needs them and (b) forbade new trade fields.** Plan r5 S8 said decision-time `sl_dist`/SL are "recorded in the trade record"; (b) decided the shared trade dict is frozen. P1 (e) needs the decision-time `sl_dist = 1.5·ATR/m` per source trade, and X9 needs `sl` vs `exit_ref` (that one is already in the trade record via `decision.sl`). Pin: the strategy's `intent` event carries `t0, t_e, m, ATR_15m, SL_raw, SL_rounded, sl_dist, decision quote, decision qty/L, variant, decided_ms`; the harness writes a per-arm `trades_t3.jsonl` that joins replay trades to intents by `trade_id ↔ intent order` (one open intent at a time makes the join unambiguous — assert it). P1 reads that file, never the shared trade dict.
+> 
+> **3. MAJOR — one decision per event; aborts are terminal.** The plan says the first cooled bar triggers the decision but doesn't say what happens on a band/sizing abort — retry at the next cooled bar, or done? §7-3's entry funnel gives each qualified event exactly one terminal reason, so: the first bar satisfying the cooling condition is *the* decision bar; `sl_dist_out_of_range`, `sizing_rejected_decision`, `sl_crossed_before_fill`, `sizing_rejected_fill`, `normalization` end the event → COOLDOWN. Pin it and add the retry-would-have-passed test (second cooled bar passes the band; assert no entry).
+> 
+> **4. MAJOR — `window_end` (line 36) has no place in the §7-3 order.** Line 36 names it as a reason; §7-3 lists six. Pin: the admissible bitmap excludes t0 with t0 + 366 min > IS_END, and those tail minutes are counted as a sub-count `window_end` under `not_admissible` (report-only sub-count, same device as `oi_missing{unusable|absent}`). Same for `r30_undefined`: a window minute whose r30 is undefined (first 30 bars after an incomplete day) cannot be a tail → counted under `no_tail` with a sub-count. The six anchored names stay the top level.
+> 
+> **5. MAJOR — several abort reasons are unreachable under #48 at E_ref 1,000; design the tests accordingly.** With MIN_NOTIONAL 50 and the band [0.44%, 5%], notional is 200–2,273 USDT; the smallest floored qty at any plausible price stays ≥ 50 USDT; pos_pct peaks at ~7.6% vs the 40% cap; L = 12 passes at 5.00% (your §1-1 row). So `sizing_rejected_decision`, `sizing_rejected_fill` and `normalization` should be 0 in the real run. Tests must force them with a test-only rules fixture (larger MIN_NOTIONAL / step) — not by changing E_ref or the band — and the report and conventions doc should state the expected zeros. `sl_crossed_before_fill` and every other reason are reachable with synthetic bars.
+> 
+> **6. Q1 — map by `RejectReason`, and pin the decision/fill asymmetry.** `engine.py:450` shows `SizingDecision.reason` is an `exchange.normalize.RejectReason`. Grep its members; the MIN_NOTIONAL/qty-floor members → `normalization`, all others → `sizing_rejected_fill`. At decision time every rejection is `sizing_rejected_decision` — §7-3 lists `normalization` only after the fill position. Harness invariant: `LEVERAGE_NOT_CONFIRMED`, `SEND_FAILED`, `ENTRIES_BLOCKED` counts are 0 (PAPER can't produce them).
+> 
+> **7. Pins the plan states loosely — write them exactly:**
+> - Quantile trigger: on day change, i.e. when the first handled bar has `day_index` > the current quantile day; the 23:59 bar of d−1 has already been added to d−1's bucket. A day whose 90-day sample has < 128,304 defined values is `quantile_invalid` for all its bars.
+> - Admissibility endpoints: day set = `day_index(T − 60,000)` for every close T in [t0 − 270 min, t0 + 366 min]; funding boundaries by bucket minute `b = funding_ms − funding_ms % 60,000`, required for `t0 ≤ b ≤ t0 + 366 min` inclusive (the upper end matters — a boundary at the exit bar's minute is paid before the time exit).
+> - P3: `SL' = normalize_price(m ± 1.5·ATR)` — round the mirrored raw price, not mirror the rounded SL. P2: `decided_ms` = close of bar t_e + k (the engine fills on `open_ms > decided_ms`); the original t_e stays in the event log.
+> - State machine starts IDLE at the first window bar; warm-up bars feed only feature state (r30 buffers, quantile buckets, rv, ATR buckets, OI index); no cooldown or cooling can originate in the warm-up, so a flush straddling the window start has t0 = its first window minute.
+> - Numeric paths: r30 and rv5 in float64 from Decimal strings (`math.log`, `statistics`/numpy ddof 1); ATR, m, SL, sl_dist in Decimal under the process default context (`decimal.setcontext(decimal.Context())` at CLI start, as the trial #2 CLIs do); `size_entry` uses its own exec context. Comparisons `≤ q_dn` / `≥ q_up` / `rv5 ≤ 0.5·rv_peak` / band inclusive.
+> - `load_rules` for trial #3 asserts the four #48 SHA256s from `anchor.RULES_SNAPSHOT_SHA256` and `taker == 0.0005` before anything runs (trial #2's `RulesSnapshotMismatch` pattern).
+> 
+> **8. Tests to add beyond the per-reason list:**
+> - Sum checks: per arm, event-funnel counts sum to the number of window bars; per arm, entry-funnel terminals + fills = qualified events; exit reasons = fills. These catch double counting in the state machine.
+> - Cooldown boundary both ways at close times: event at T = t0 + 43,200,000 qualifies; T = t0 + 43,140,000 is `in_cooldown`.
+> - P2 at the edge: t_e = t0 + 120, k = 5 → emission at t0 + 125, fill at t0 + 126, no `not_cooled` fired after the decision.
+> - `not_cooled` needs volatile synthetic bars: on flat bars rv5 = rv_peak = 0 and the cooling condition is trivially true at t0 + 20.
+> - Static checks: no `strategies.trial01/02` imports anywhere under `strategies/trial03/`; no rolling price max/min channel (rv_peak allowed by name).
+> - Determinism across processes, not just calls: run the same synthetic input in two `spawn` subprocesses and compare hashes (that is how the IS run will execute).
+> 
+> **9. Q2 — no contradiction found.** COOLDOWN relative to t0 is line 27 verbatim; tail minutes during a position falling under `in_cooldown` follows from the §7-3 order plus 720 > 366; arms overlapping in time is §0 as amended in r3. Q3 — per-tail-minute records plus counts for `quantile_invalid`/`no_tail` are sufficient; the sum checks in item 8 make the counts auditable.
+> 
+> **10. Q4 / the step boundary the user set.** Mirror trial #2: write `docs/trials/trial_03_conventions.md` as a numbered list; registry row #52 references its SHA256 and commit (as #37 did). At the (d) report, send the full draft text (items from (a)–(d) plus the pins already made for (e)/(f): P1 rate at placement and execution, tuple seeds, cost grid, X9, CI exact fractions, the OI decision with both readings quoted and the 130-slot S0 count). Say plainly that (e)–(g) may append items, that any addition will be shown to them as a diff before the row is written, and that the row lands before the evaluator push — no P&L until then.
+> 
+> **Sequence:** Codex lands → log both verbatim with positions → plan r2 with items 1–7 → narrow re-check → PROCEED → build test-first in this order: `config.py` → `features.py` (pure calculators, tested in isolation) → `strategy.py` → `harness.py` → variants → static checks → determinism → after-pass → push → conventions draft + report → stop before (e). Zero shared-code change is the expectation; check `git diff --stat dc23273 -- backtest/engine_replay.py backtest/placebo_exec.py paper/ sizing/ exchange/` before the after-pass as you did for (c).
+
+### Codex 원문(verbatim · task-mumulo1j-r9o5b4)
+> ## BEFORE-PASS findings
+> 
+> 1. **BLOCKER — Decision-time B2 uses the wrong price.** The plan calls `size_entry` with an adverse-fill estimate. Anchored r3 specifies the decision reference as the mark close **`m`**, with the fixed SL; the adverse estimate belongs to execution-time resizing. This can change which events become intents. Change the decision call to `size_entry(m, SL_rounded, original_direction, E_ref, …)`. Keep the engine’s quoted fill price for its second check. The earlier suggestion to quote `m` in the ops log also conflicts with r3 and must not override it. [r3 §1](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:29>), [engine execution](</home/cms/project/BTC_Futures_E2E/paper/engine.py:433>)
+> 
+> 2. **MAJOR — The window-close rule is off by one bar.** Counting `T_k ∈ [IS_START, IS_END]` includes the final warm-up bar, whose close is `IS_START`, and excludes the IS final 23:59 bar, whose close is `IS_END + 1 ms`. Day ownership in r3 uses `open_ms`. Define the funnel population by bars whose **`open_ms` is in the window**, then use `T_k = open_ms + 60,000` for signal comparisons. Do not turn the warm-up bar’s boundary close into an IS event. Apply the same convention to V and count reconciliation. [r3 day and window rules](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:22>), [funnel denominator](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:148>)
+> 
+> 3. **MAJOR — P2 needs millisecond timestamps, not “+1 open” prose.** With the plan’s clock, the bar after a decision at close `T_e` **opens at `T_e`**. P2 `+k` emits after the bar closing at `T_e + k·60,000` and fills at that same boundary, if the next bar exists. Pin those open times for base, +1 and +5 in the plan and tests. Preserve the original `decision_mark`, SL, decision B2 result and decision-time `sl_dist` through the delay; only execution B2 is repeated. [r3 P2](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:93>), [replay timing](</home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:130>)
+> 
+> 4. **MAJOR — “Warm-up bars update state” is too broad.** Warm-up must build price, quantile, rv and ATR history without creating qualified events, cooldowns, pending intents or positions. Start each window with an idle, flat strategy book. Otherwise a pre-IS tail can suppress a registered IS event. Make this a harness assertion and test the bar immediately before and after `IS_START`. [r3 flat-window rule](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:36>), [plan r5 S10](</home/cms/project/BTC_Futures_E2E/docs/ops_log.md:7012>)
+> 
+> 5. **MAJOR — Close the intent-to-outcome accounting.** `replay()` returns `open_at_end` but does not expose `engine.pending`; it also reports generic `entry_refused` separately. For every emitted intent, require exactly one `EntryFilled` or `EntrySkipped`, no delayed P2 candidate left, no due exit, and no unmatched outcome. Treat unexpected engine skip reasons and `POST_FILL_GATE` as run failures rather than funnel categories. This makes the proposed zero-refusal assertion meaningful and prevents an unfilled final intent from passing unnoticed. [replay result and callbacks](</home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:63>), [engine outcomes](</home/cms/project/BTC_Futures_E2E/paper/engine.py:449>)
+> 
+> 6. **MINOR — Specify transition order at the cooldown boundary.** Before classifying a tail at `T_k = cooldown_end`, move `COOLDOWN → IDLE`; the event is eligible at that exact close. Keep `position_busy` recording after starting the new event’s cooldown in the forced fixture. This matches the proposed +719/+720 tests and r3’s excluded end. [r3 cooldown](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:27>), [(c) busy helper](</home/cms/project/BTC_Futures_E2E/strategies/trial03/exit_schedule.py:57>)
+> 
+> ## Q1–Q4
+> 
+> **Q1.** The proposed split is correct: for `EntrySkipped(SIZING_REJECTED)`, classify `BELOW_MIN_QTY` and `MIN_NOTIONAL` as `normalization`; classify other `SizingDecision.reason` values as `sizing_rejected_fill`. Read the enum, not the detail string. This matches Trial #2’s harness. `SL_CROSSED_BEFORE_FILL` stays separate. [Trial #2 mapping](</home/cms/project/BTC_Futures_E2E/strategies/trial02/harness.py:29>), [reason enum](</home/cms/project/BTC_Futures_E2E/exchange/normalize.py:23>)
+> 
+> **Q2.** Cooldown relative to `t0`, including skipped entries, matches r3. A tail while a position is open is normally counted as `in_cooldown`: the 720-minute cooldown exceeds the maximum 366-minute event span. `position_busy` remains a recorded invariant failure in a forced fixture. The decision-price conflict in finding 1 *does* contradict r3.
+> 
+> **Q3.** Yes. One record per tail close, plus exact counts for `quantile_invalid` and `no_tail`, is sufficient if the mutually exclusive event counts sum to the full window-bar denominator and every qualified event has exactly one final entry outcome. Keep transition records separate from event-funnel counts so `qualified` is not counted twice. [r3 funnels](</home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:148>)
+> 
+> **Q4.** Before real-data P&L, the append-only implementer-choices row must pin the fixes above and the remaining r5 S12 contract: numeric and undefined-input handling; OI parsing, deduplication and missing sub-reasons; exact bitmap and V recomputation; P1 cross-day eligibility and streams; P2 queue and P3 original-direction gate; (c)’s exit-bar, funding, missing-bar and busy conventions; cost-grid and liquidation accounting; zero-trade and degenerate statistics; float64 overflow refusal; complete per-arm outputs, provenance, and evaluator reconciliation. Register choices that fill gaps, without changing anchored r3. [plan r5 S12](</home/cms/project/BTC_Futures_E2E/docs/ops_log.md:7019>), [(c) conventions](</home/cms/project/BTC_Futures_E2E/docs/ops_log.md:7673>)
+> 
+> Read-only review; no market data was read and no code or tests were run.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0edd7-c749-7591-9c63-d5ea9f7902d5
+> Resume in Codex: codex resume 01a0edd7-c749-7591-9c63-d5ea9f7902d5
+
+### 계획 r2 원문
+> # Trial #3 (d) plan r2 — resolutions (advisor 1–10 + Codex task-mumulo1j-r9o5b4 1–6, Q1–Q4)
+> 
+> D1 DECISION-TIME B2 PRICE (Codex 1 BLOCKER): r3 line 29 "결정 시점 B2 게이트(기준가 m · SL 가격 · E_ref로 정본 size_entry)" and line 30 "엔진이 실행
+>    시점에 B2 재사이징(예상 체결가 · 같은 SL 가격 …)" → decision call = size_entry(m, SL_rounded, ORIGINAL direction, E_ref, REGIME, rules,
+>    LIMITS) with m RAW; the 6 bps adverse quote applies only at the engine's fill-time re-sizing. This REVERSES the earlier carry-forward note
+>    ((b) advisor item 8, repeated in the (b) report and adopted as user (d) req. 7 "decision mark priced with the same 6 bps model"), which
+>    contradicts line 29 — flagged to the user in the (d) report; anchored text governs (as with convention 2).
+> D2 WINDOW MEMBERSHIP (advisor 1, Codex 2): a bar belongs to the UTC day of its open_ms (line 22). Window bars = bars with open_ms in
+>    [IS_START, IS_END]; event-funnel denominator = those bars; t0 = T_k = open_ms + 60,000 of a window bar; V by open-day; the first window
+>    bar that can qualify opens 00:00 Jan 1 2024 (T = 00:01). Events also need t0 + 366 min ≤ IS_END + 1 ms (span end inside the window —
+>    span end is a close time); tail minutes failing only that are counted under not_admissible with sub-count `window_end` (line 36).
+> D3 WARM-UP (Codex 4, advisor 7): bars with open_ms < IS_START feed feature state only (r30 buffers, quantile day buckets, rv, ATR buckets,
+>    OI index); the state machine starts IDLE and the book flat at the first window bar; no cooldown/cooling/intent can originate before it.
+>    Harness asserts IDLE+flat at the first window bar; tests for the bar just before and just after IS_START.
+> D4 P2 / base TIMING in ms (Codex 3, advisor 7): decision bar t_e has open o_e, close T_e = o_e + 60,000. Base: intent emitted at T_e
+>    (decided_ms = replay now_ms of bar t_e), fills at the bar opening at T_e. P2 +k: intent emitted at the close of the bar with open
+>    o_e + k·60,000, fills at the bar opening at T_e + k·60,000 (= "t_e + k + 1분 봉 시가" with minute labels = opens). decision_mark, SL,
+>    decision-B2 result and decision-time sl_dist are frozen at t_e; only fill-time B2 repeats. Edge test: t_e = t0 + 120, k = 5.
+> D5 ONE DECISION PER EVENT (advisor 3): the first bar with t_e − t0 ≥ 20 min ∧ rv5 ≤ 0.5·rv_peak is THE decision bar; band / decision-B2 /
+>    sl_crossed / fill-B2 / normalization aborts are terminal (→ COOLDOWN, no retry). Test: a later cooled bar that would pass is not used.
+> D6 OUTCOME ACCOUNTING (Codex 5, advisor 6/8): every emitted intent gets exactly one EntryFilled or EntrySkipped; EntrySkipped reasons:
+>    SL_CROSSED_BEFORE_FILL → sl_crossed_before_fill; SIZING_REJECTED with SizingDecision.reason ∈ {BELOW_MIN_QTY, MIN_NOTIONAL} →
+>    normalization, other reasons → sizing_rejected_fill (enum, not detail string — as trial #2's harness); LEVERAGE_NOT_CONFIRMED /
+>    SEND_FAILED / ENTRIES_BLOCKED, ExitReason.POST_FILL_GATE, replay `entry_refused`, a P2 candidate still delayed at the end, a due exit
+>    (assert_no_due) or open_at_end ≠ None → run failure. Sum checks per arm: event-funnel counts = window bars; entry-funnel terminals +
+>    fills = qualified; exit reasons = fills.
+> D7 DECISION RECORDS (advisor 2): no shared trade-dict fields. The strategy's `intent` record carries t0, t_e, T_e, decided_ms, variant, m,
+>    ATR_15m, SL_raw, SL_rounded, sl_dist (decision, unrounded 1.5·ATR/m), decision-B2 leverage/qty/notional; the harness writes per-arm
+>    trades_t3.jsonl joining replay trades to intents in order (one open intent at a time — asserted). P1 (e) reads sl_dist from there.
+> D8 BOUNDARY ORDER (Codex 6): at each close, COOLDOWN → IDLE happens first when T_k ≥ cooldown_end, then the tail is classified; event at
+>    T = t0 + 43,200,000 qualifies, T = t0 + 43,140,000 is in_cooldown. Busy fixture: cooldown set before position_busy recording/raise.
+> D9 PINS (advisor 7): quantile recomputed when the first bar of a new day_index is handled (previous day's 23:59 already bucketed);
+>    admissibility day set = day_index(T − 60,000) for every close T in [t0 − 270 min, t0 + 366 min]; funding boundary bucket b = funding_ms −
+>    funding_ms % 60,000 required for t0 ≤ b ≤ t0 + 366 min inclusive, exactly one validated record each; P3 SL' = normalize_price(m ± 1.5·ATR)
+>    (round the mirrored raw price); numeric paths: r30/rv5 float64 from Decimal strings (math.log; ddof 1), ATR/m/SL/sl_dist Decimal under the
+>    default context set at CLI start (decimal.setcontext(decimal.Context())); comparisons inclusive (≤ q_dn, ≥ q_up, rv5 ≤ 0.5·rv_peak, band);
+>    trial-#3 load_rules asserts the four #48 SHA256s and taker == 0.0005 before anything runs.
+> D10 SUB-COUNTS (advisor 4): top-level §7-3 names unchanged; report-only sub-counts: not_admissible{window_end|incomplete|funding},
+>    no_tail{r30_undefined}, oi_missing{absent|unusable}, sl_dist_out_of_range{floor|ceiling}.
+> D11 EXPECTED ZEROS (advisor 5): under #48 at E_ref 1,000 and the band, sizing_rejected_decision, sizing_rejected_fill and normalization
+>    are expected 0 (notional 200–2,273 USDT ≥ MIN_NOTIONAL 50; pos_pct ≤ ~7.6% < 40%; L = 12 passes at 5%); tests force them with a
+>    test-only rules fixture (larger MIN_NOTIONAL/step), never by changing E_ref or the band; stated in the conventions doc.
+> D12 TESTS added (advisor 8): sum checks; cooldown boundary both ways; P2 edge; not_cooled on volatile synthetic bars (flat bars are
+>    trivially cooled); static checks (no trial01/02 imports under strategies/trial03; no rolling price channel; rv_peak allowed);
+>    determinism across two spawn subprocesses (hash compare).
+> D13 CONVENTIONS (advisor 10, Codex Q4): docs/trials/trial_03_conventions.md (numbered, like trial #2's) covering (a)–(d) plus pins already
+>    made for (e)/(f) (P1 rate at placement+execution, tuple seeds, cost grid, X9, CI fractions, OI decision with both readings quoted and the
+>    130-slot S0 count, zero-trade/degenerate stats, overflow refusal, outputs/provenance). Full draft text sent to the user at the (d) report;
+>    (e)–(g) additions shown as diffs; registry row lands before the evaluator push; no P&L before.
+> Build order: config.py → features.py (pure, isolated tests) → strategy.py → harness.py → variants → static checks → determinism.
+> Shared-code check before the after-pass: git diff --stat dc23273 -- backtest/engine_replay.py backtest/placebo_exec.py paper/ sizing/ exchange/.
+
+### Codex 원문(verbatim · task-mumutx8d-6eco72)
+> **VERDICT: FIX-PLAN-FIRST**
+> 
+> | Prior finding | Status | Re-check |
+> |---|---|---|
+> | 1 — decision B2 price | **CLOSED** | D1 uses raw decision mark `m` for `size_entry`; the 6 bps quote belongs to fill-time resizing. This matches [r3 §1 lines 29–30](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:29). |
+> | 2 — window membership | **PARTIAL** | Open-time day membership is correct, but D2’s `span_end ≤ IS_END + 1 ms` admits an endpoint at 00:00 *after* the window. [r3 §1 line 36](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:36) requires the span end to be **within** the window. Use `span_end ≤ IS_END_MS` with the anchored end timestamp of 23:59:59.999. |
+> | 3 — P2 timing | **PARTIAL** | The delayed fill bar is correct. The stated `decided_ms` equality is off by 1 ms: replay sets `ctx.now_ms = open_ms + 60,000 − 1`, then requests the intent; the next bar opens at `open_ms + 60,000` ([replay lines 130–136](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:130)). State that exact value in D4. |
+> | 4 — warm-up | **CLOSED** | D3 keeps pre-window bars in feature state while starting the trading state IDLE and flat. |
+> | 5 — outcome accounting | **CLOSED** | D6 accounts for emitted intents, distinguishes skip reasons by enum, and fails the run on unaccounted execution paths. |
+> | 6 — boundary order | **CLOSED** | D8 specifies the cooldown transition before classification and covers both sides of the boundary. |
+> 
+> The D2 boundary is verdict relevant: an event at **2025-12-31 17:54 UTC** has `t0 + 366 min = 2026-01-01 00:00 UTC`. R2 admits it; r3 excludes it. D9 would also demand a funding record at that out-of-window midnight. Correct the inequality and add this exact edge fixture. The D4 correction is a timestamp wording fix; its specified replay sequence already fills on the intended bar.
+> 
+> The read-only shared-code diff from `dc23273` is empty. No harness or tests were run.
+> 
+> Codex session ID: 01a0eddd-a6f4-7b90-94f4-d9ae505689c2
+> Resume in Codex: codex resume 01a0eddd-a6f4-7b90-94f4-d9ae505689c2
+
+### 계획 r3 원문
+> # Trial #3 (d) plan r3 = r2 with D2/D4/D9 corrected (Codex task-mumutx8d-6eco72)
+> D2' Window end: an event needs t0 ≥ IS_START and span end t0 + 366 min ≤ IS_END_MS (2025-12-31 23:59:59.999Z) — r3 line 36 "구간 끝 ≤ 창 끝".
+>     Edge: t0 = 2025-12-31 17:54Z → t0 + 366 min = 2026-01-01 00:00Z > IS_END → not_admissible{window_end}; t0 = 17:53Z admissible (fixture).
+> D9' Span semantics = closed interval of TIME POINTS [t0 − 270 min, t0 + 366 min] (line 35): day set = day_index(t0 − 270 min) …
+>     day_index(t0 + 366 min) inclusive (a span ending exactly at 00:00 of d+1 touches d+1 — conservative, literal); funding boundaries
+>     required for every boundary b (00/08/16) with t0 ≤ b ≤ t0 + 366 min, exactly one validated record whose bucket minute
+>     (funding_ms − funding_ms % 60,000) = b. Supersedes r2 D9's "day_index(T − 60,000) for every close" wording.
+> D4' decided_ms (replay's now_ms) = open_ms + 60,000 − 1 of the emitting bar: base emits in bar t_e (decided_ms = o_e + 59,999, fill at the
+>     bar opening o_e + 60,000); P2 +k emits in the bar with open o_e + k·60,000 (decided_ms = o_e + k·60,000 + 59,999, fill at the bar opening
+>     o_e + (k+1)·60,000).
+> Everything else as r2.
+
+### Codex 원문(verbatim · task-mumuy2hq-8vadui)
+> D2′ matches the window rule in [§1, line 36](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:36); the 17:53Z and 17:54Z edge cases are correct. D9′ follows the closed time-point span and funding boundaries in [line 35](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:35). D4′ matches the replay loop: it sets `now_ms` to the emitting bar’s `open_ms + 59,999` before calling the strategy, and processes a pending entry on the next bar ([engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:130), [lines 5–7](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:5)).
+> 
+> VERDICT: PROCEED
+> 
+> Codex session ID: 01a0ede0-9a3b-7791-a5b8-415e65a1ab19
+> Resume in Codex: codex resume 01a0ede0-9a3b-7791-a5b8-415e65a1ab19
