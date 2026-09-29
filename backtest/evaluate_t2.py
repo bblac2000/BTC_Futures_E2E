@@ -138,6 +138,16 @@ def check_meta(st: T.Stages, recs: dict[str, dict[str, Any]], pins: dict[str, An
         days = validity.v_b if n == "B" else validity.v_a
         if any(int(t["entry_ms"]) // DAY not in days for t in trades):
             bad.append("trade_day_outside_valid_set")
+        if n == "B":                                          # 날 상태 기록이 V_B와 일대일 · B 트레이드는 수축(trading)일에만
+            rows = _jsonl(d / "days.jsonl")
+            st_b: dict[int, list[str]] = defaultdict(list)
+            for r in rows:
+                st_b[int(r["day"])].append(str(r.get("status")))
+            vb_ok = all(len(st_b.get(x, [])) == 1 and st_b[x][0] in ("trading", "not_contraction", "no_range") for x in validity.v_b)
+            others_ok = all(v == ["not_trade_day"] for k, v in st_b.items() if k not in validity.v_b)
+            trading = {k for k, v in st_b.items() if v == ["trading"]}
+            if not (vb_ok and others_ok) or any(int(t["entry_ms"]) // DAY not in trading for t in trades):
+                bad.append("b_day_status")
         if bad:
             raise Refusal(f"{n}: 메타/유효일 불일치 {bad}")
     parts = sorted((st.runs / "P1").glob("part_*"))
@@ -172,7 +182,10 @@ def _f(x: Any) -> float:
         raise Refusal(f"수치 해석 불가: {x!r}") from e
     if not d.is_finite():
         raise Refusal(f"유한하지 않은 값: {x!r}")
-    return float(d)
+    f = float(d)
+    if not math.isfinite(f):
+        raise Refusal(f"float64 범위 밖 값: {x!r}")                  # 1e400 → inf(Codex 2g r2 #1)
+    return f
 
 
 def trades_of(st: T.Stages, name: str) -> list[dict[str, Any]]:
@@ -322,10 +335,20 @@ def _finite(o: Any) -> Any:
     return o
 
 
-def evaluate(base: Path = T.BASE_DIR, repo: Path = ROOT, *, fetch: bool = True,
-             load_prepared: Callable[..., tuple[list[Bar1m], list[Funding]]] = PT.load_prepared_pinned,
-             rebuild: Callable[..., Any] = PT.verify_rebuild, window: tuple[int, int] | None = None,
-             days: tuple[int, int] | None = None) -> tuple[str, dict[str, Any], dict[str, Any]]:
+def evaluate(base: Path = T.BASE_DIR, repo: Path = ROOT, **kw: Any) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """모든 실패 = 판정 거부(판정 없음 · 아무것도 쓰지 않음) — 영수증 해석·선행 검사 포함(Codex 2g r2 · advisor #6)."""
+    try:
+        return _evaluate(base, repo, **kw)
+    except Refusal:
+        raise
+    except Exception as e:  # noqa: BLE001 — 어떤 예외도 판정으로 새지 않는다
+        raise Refusal(f"{type(e).__name__}: {e}") from e
+
+
+def _evaluate(base: Path, repo: Path, *, fetch: bool = True,
+              load_prepared: Callable[..., tuple[list[Bar1m], list[Funding]]] = PT.load_prepared_pinned,
+              rebuild: Callable[..., Any] = PT.verify_rebuild, window: tuple[int, int] | None = None,
+              days: tuple[int, int] | None = None) -> tuple[str, dict[str, Any], dict[str, Any]]:
     decimal.setcontext(decimal.Context())
     out = base / "evaluation"
     if out.exists():

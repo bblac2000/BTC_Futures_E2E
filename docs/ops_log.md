@@ -5865,3 +5865,29 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb34-2f85-7de2-8d0e-324d702297bf
 > Resume in Codex: codex resume 01a0eb34-2f85-7de2-8d0e-324d702297bf
+
+## 2026-09-29 — 2g 재확인 r2(Codex task-mum4k69v-2rawav **FIX-FIRST**) → 수정
+| # | Codex | 입장 | 반영 |
+|---|---|---|---|
+| 1 | OPEN — 1e400 → inf | ✅ | float 변환 뒤 유한성 검사 · 시험(평가기 경로) |
+| 2 | CLOSED | — | — |
+| 3 | PARTIAL — B 날 상태 파일 | ✅ | V_B 날마다 정확히 한 행(trading · not_contraction · no_range) · V_B 밖은 not_trade_day · B 트레이드는 trading 날만 · 시험 2개 |
+| advisor 6 | PARTIAL — 영수증 해석·선행 검사 | ✅ | `evaluate` 전체를 감싸 모든 예외 → 거부 · 시험(깨진 영수증) |
+
+### Codex 원문(verbatim · task-mum4k69v-2rawav)
+> ## Narrow re-check
+> 
+> 1. **Finding 1: OPEN — verdict-relevant.** `_f()` rejects nonfinite Decimal inputs but does not check the result of `float(d)` ([evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:167)). I confirmed that `_f("1e400")` returns `inf`, while the 95th percentile of 199 values at −10 and one `inf` remains −10. A nonfinite P4 draw can therefore be included without reaching the new verdict-input guard. Check that the converted float is finite, and test this path through the evaluator.
+> 
+> 2. **Finding 2: CLOSED.** Prepare and verify now use the fixed `T.PREP_OUTPUTS` set, with an extra-output refusal test ([evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:95)).
+> 
+> 3. **Finding 3 / H6: PARTIAL.** The B diagnostic now reads day status, reports the mean difference, and adds trades per valid day and invalid-day counts ([evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:287)). The evaluator does not check that `days.jsonl` has one valid status per `V_B` day or that B trades occur only on `trading` days. An incomplete or inconsistent status file can still misstate the diagnostic.
+> 
+> **Advisor items:** 2–5 and 8 are closed in this diff. Item 1 remains partial with finding 3; item 7 has the requested targeted tests, but lacks the overflow case above. **Item 6 is partial:** receipt parsing and parts of preflight remain outside the new refusal handler, so malformed provenance can raise an uncaught exception ([evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:333)).
+> 
+> This was read-only. I did not inspect `var/` or market data. I ran the focused numeric probe; I did not run the file-writing pytest suite.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0eb3c-5a49-7780-8d6a-8793891a19b7
+> Resume in Codex: codex resume 01a0eb3c-5a49-7780-8d6a-8793891a19b7

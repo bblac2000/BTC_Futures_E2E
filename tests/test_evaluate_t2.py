@@ -382,3 +382,53 @@ def test_evaluator_variant_table_matches_run_table():
     from strategies.trial02.run import variant_for, variant_meta
     for n in E.STRATEGY_RUNS:
         assert E.VARIANTS[n] == variant_meta(variant_for(n)), n
+
+
+def test_overflowing_value_is_refused(tmp_path, patched):
+    s = good_scenario()
+    build(tmp_path, s)
+    d = tmp_path / "runs" / "P4_draw011"
+    rows = [json.loads(x) for x in (d / "trades.jsonl").read_text().splitlines()]
+    rows[0]["net_bps"] = "1e400"
+    _w(d / "trades.jsonl", rows)
+    rec_f = tmp_path / "_records" / "P4_draw011.json"
+    rec = json.loads(rec_f.read_text())
+    rec["run"]["outputs"]["trades.jsonl"] = hashlib.sha256((d / "trades.jsonl").read_bytes()).hexdigest()
+    rec_f.write_text(json.dumps(rec))
+    with pytest.raises(E.Refusal, match="범위"):
+        run_eval(tmp_path)
+
+
+def _rewrite(tmp_path, name, fname, rows):
+    d = tmp_path / "runs" / name
+    _w(d / fname, rows)
+    rec_f = tmp_path / "_records" / f"{name}.json"
+    rec = json.loads(rec_f.read_text())
+    rec["run"]["outputs"][fname] = hashlib.sha256((d / fname).read_bytes()).hexdigest()
+    rec_f.write_text(json.dumps(rec))
+
+
+def test_b_day_status_file_must_cover_v_b(tmp_path, patched):
+    build(tmp_path, contraction=set(range(FIRST, FIRST + 10)))
+    rows = [json.loads(x) for x in (tmp_path / "runs" / "B" / "days.jsonl").read_text().splitlines()][1:]   # 한 날 빠짐
+    _rewrite(tmp_path, "B", "days.jsonl", rows)
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)
+
+
+def test_b_trade_on_non_trading_day_refused(tmp_path, patched):
+    build(tmp_path, contraction=set(range(FIRST, FIRST + 10)))
+    rows = [json.loads(x) for x in (tmp_path / "runs" / "B" / "days.jsonl").read_text().splitlines()]
+    for r in rows:
+        if r["day"] == FIRST:
+            r["status"] = "not_contraction"                       # B 트레이드가 있는 날을 쉬는 날로
+    _rewrite(tmp_path, "B", "days.jsonl", rows)
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)
+
+
+def test_malformed_receipt_is_a_refusal(tmp_path, patched):
+    build(tmp_path)
+    (tmp_path / "_records" / "verify_receipt.json").write_text("{not json")
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)
