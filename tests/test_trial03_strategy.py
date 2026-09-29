@@ -383,15 +383,37 @@ def test_run_arm_has_no_rules_or_params_override_and_fixture_path_is_test_only()
     assert "rules" not in params and "p" not in params and "admissible" not in params
     assert "load_rules()" in inspect.getsource(H.run_arm)
     offenders = []
-    for base in ("backtest", "strategies", "scripts", "ops"):
-        for f in (ROOT / base).rglob("*.py"):
-            tree = ast.parse(f.read_text(encoding="utf-8"))
-            for n in ast.walk(tree):
-                if isinstance(n, ast.Call):
-                    name = n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, "id", "")
-                    if name == "run_arm_with_fixture_rules":
-                        offenders.append(str(f.relative_to(ROOT)))
+    skip = {".venv", "var", ".git", "tests", "node_modules"}
+    for f in ROOT.rglob("*.py"):
+        rel = f.relative_to(ROOT)
+        if rel.parts[0] in skip or rel == Path("strategies/trial03/harness.py"):
+            continue
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        for n in ast.walk(tree):
+            names = []
+            if isinstance(n, ast.Call):
+                names.append(n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, "id", ""))
+            elif isinstance(n, ast.ImportFrom):
+                names += [a.name for a in n.names]
+            elif isinstance(n, ast.Attribute):
+                names.append(n.attr)
+            if "run_arm_with_fixture_rules" in names:
+                offenders.append(str(rel))
     assert offenders == []
+
+
+def test_fixture_path_refuses_callers_outside_tests(tmp_path):
+    caller = tmp_path / "evil.py"
+    caller.write_text("from strategies.trial03.harness import run_arm_with_fixture_rules\n"
+                      "def go(*a, **k):\n    return run_arm_with_fixture_rules(*a, **k)\n")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("evil", caller)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    sc = S.Scenario()
+    with pytest.raises(RulesSnapshotMismatch):
+        mod.go(sc.bars(), sc.fundings(), *sc.oi_rows(), "L", Variant(), rules=S.RULES)
 
 
 def test_run_arm_production_path_loads_pinned_rules(monkeypatch):

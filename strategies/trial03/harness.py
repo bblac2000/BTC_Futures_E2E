@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -140,7 +141,10 @@ def run_arm_with_fixture_rules(bars: Sequence[Bar1m], fundings: Sequence[Funding
                                unusable: Sequence[int], arm: str, variant: Variant, *, rules: RuntimeRules,
                                p: TfParams = TF_V1, window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS),
                                admissible: Admissibility | None = None) -> T3Run:
-    """**테스트 전용**(합성 픽스처 규칙·작은 TfParams) — `tests/` 밖에서 부르면 정적 검사가 실패한다."""
+    """**테스트 전용**(합성 픽스처 규칙·작은 TfParams) — 호출자 파일이 `tests/` 아래가 아니면 거부(실행 시점) · 저장소 전체 정적 검사도 있다."""
+    caller = Path(inspect.stack()[1].filename).resolve()
+    if (ROOT / "tests") not in caller.parents:
+        raise RulesSnapshotMismatch(f"픽스처 규칙 경로는 tests/ 전용이다(호출자 {caller})")
     return _run_arm(bars, fundings, oi_rows, unusable, arm, variant, rules=rules, p=p, window=window, admissible=admissible)
 
 
