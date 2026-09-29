@@ -5945,3 +5945,15 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb4d-3fad-7ea1-9ae7-6059e672932d
 > Resume in Codex: codex resume 01a0eb4d-3fad-7ea1-9ae7-6059e672932d
+
+## 2026-09-29 — 2g 재확인 r6(Codex task-mum5f0r2-kh9onv) **MERGE** — 2g 완료 · 전체 시험 1,168 통과
+
+### Codex 원문(verbatim)
+> Both r5 findings are closed. [_f()](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:180) checks the Decimal against the bps limit before float rounding. The [OOS and forward verdicts](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:135) reject nonfinite means even with zero trades. I found no new verdict-relevant issue in the requested diff.
+> 
+> The focused tests and boundary probes passed; `git diff --check` passed, and the working tree is clean. I did not access `var/` or market data. **2g is ready to merge.**
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0eb52-502a-7a41-8eaa-fb3cf6a90c52
+> Resume in Codex: codex resume 01a0eb52-502a-7a41-8eaa-fb3cf6a90c52
