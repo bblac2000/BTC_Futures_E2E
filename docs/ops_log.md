@@ -6310,3 +6310,8 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - `t2_stages --stage prepare`(H = 63c1760) → rc 0 · 1분 56초 · 최대 RSS 4.5 GB · 중단 조건 0.
 - 감사(무결성 개수만): 봉 1,343,518(아카이브 1,325,698 · REST 17,820) · 결손 분 2(= 사전등록 §5의 2024-08-12 10:02·10:03 mark 결손 · 아카이브 mark 비정상 2 · REST에도 mark 없음) · kline 결손 봉 0 · kline 일 933 · 확정 펀딩 2,799.
 - `scripts/t2_make_pins.py` → `strategies/trial02/data_pins.json` + 레지스트리 #39(검사기 통과) · 두 번째 푸시(사용자 승인 순서) 뒤 verify.
+
+## 2026-09-29 — 트라이얼 #2 verify 완료
+- 두 번째 푸시 63c1760..7b8b842(핀 파일 + #39) · 핀 행 검사 통과 · 비밀 스캔 0.
+- `--stage verify` → rc 0 · 59초 · 최대 RSS 4.5 GB · 원시 → 산출물 재빌드 해시 = 핀 · verify 영수증 작성.
+- 다음: A 단독(메모리 측정 → 이후 단계 `--jobs` 결정).
