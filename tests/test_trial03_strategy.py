@@ -375,12 +375,38 @@ def test_input_validation_and_duplicate_minutes():
     assert (S.DAY0 // S.DAY) not in complete_days(bars[:10] + [bars[9]] + bars[10:1439])
 
 
-def test_run_arm_without_rules_uses_pinned_snapshot():
+def test_run_arm_has_no_rules_or_params_override_and_fixture_path_is_test_only():
     import inspect
 
     from strategies.trial03 import harness as H
-    assert inspect.signature(H.run_arm).parameters["rules"].default is None
+    params = inspect.signature(H.run_arm).parameters
+    assert "rules" not in params and "p" not in params and "admissible" not in params
     assert "load_rules()" in inspect.getsource(H.run_arm)
+    offenders = []
+    for base in ("backtest", "strategies", "scripts", "ops"):
+        for f in (ROOT / base).rglob("*.py"):
+            tree = ast.parse(f.read_text(encoding="utf-8"))
+            for n in ast.walk(tree):
+                if isinstance(n, ast.Call):
+                    name = n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, "id", "")
+                    if name == "run_arm_with_fixture_rules":
+                        offenders.append(str(f.relative_to(ROOT)))
+    assert offenders == []
+
+
+def test_run_arm_production_path_loads_pinned_rules(monkeypatch):
+    from strategies.trial03 import harness as H
+    called = []
+
+    def fake_load():
+        called.append(True)
+        raise RulesSnapshotMismatch("stop here")
+
+    monkeypatch.setattr(H, "load_rules", fake_load)
+    sc = S.Scenario()
+    with pytest.raises(RulesSnapshotMismatch):
+        H.run_arm(sc.bars(), sc.fundings(), *sc.oi_rows(), "L", Variant())
+    assert called == [True]
 
 
 def test_load_rules_pins_snapshot_48_and_taker():

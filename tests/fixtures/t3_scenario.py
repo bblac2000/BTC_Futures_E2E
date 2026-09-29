@@ -17,7 +17,7 @@ from typing import Any
 from backtest.data import MINUTE_MS, Bar1m, Funding
 from exchange.loader import rules_from_snapshot_dir
 from strategies.trial03.config import TF_V1, TfParams
-from strategies.trial03.harness import T3Run, run_arm
+from strategies.trial03.harness import T3Run, run_arm_with_fixture_rules
 from strategies.trial03.strategy import BASE, Variant
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -109,7 +109,7 @@ class Scenario:
 
 def run(sc: Scenario, variant: Variant = BASE, *, p: TfParams = P, rules=RULES, window=WINDOW) -> T3Run:
     rows, bad = sc.oi_rows()
-    return run_arm(sc.bars(), sc.fundings(), rows, bad, sc.arm, variant, rules=rules, p=p, window=window)
+    return run_arm_with_fixture_rules(sc.bars(), sc.fundings(), rows, bad, sc.arm, variant, rules=rules, p=p, window=window)
 
 
 def digest(r: T3Run) -> str:

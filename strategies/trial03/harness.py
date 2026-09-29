@@ -131,12 +131,23 @@ class T3Run:
 
 
 def run_arm(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequence[Sequence[Any]], unusable: Sequence[int],
-            arm: str, variant: Variant, *, rules: RuntimeRules | None = None, p: TfParams = TF_V1,
-            window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS), admissible: Admissibility | None = None) -> T3Run:
-    """`rules=None`(실행 경로) → #48 스냅샷을 `load_rules`로 단언해 쓴다. `rules`를 넘기는 것은 **테스트 픽스처 전용**이다
-    ((g) CLI는 넘기지 않는다 — 정적 검사)."""
+            arm: str, variant: Variant, *, window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS)) -> T3Run:
+    """실행 경로: 규칙은 항상 `load_rules()`(#48 네 파일 SHA256 + taker 단언) · 매개변수는 항상 `TF_V1` — 덮어쓸 인자가 없다."""
+    return _run_arm(bars, fundings, oi_rows, unusable, arm, variant, rules=load_rules(), p=TF_V1, window=window)
+
+
+def run_arm_with_fixture_rules(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequence[Sequence[Any]],
+                               unusable: Sequence[int], arm: str, variant: Variant, *, rules: RuntimeRules,
+                               p: TfParams = TF_V1, window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS),
+                               admissible: Admissibility | None = None) -> T3Run:
+    """**테스트 전용**(합성 픽스처 규칙·작은 TfParams) — `tests/` 밖에서 부르면 정적 검사가 실패한다."""
+    return _run_arm(bars, fundings, oi_rows, unusable, arm, variant, rules=rules, p=p, window=window, admissible=admissible)
+
+
+def _run_arm(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequence[Sequence[Any]], unusable: Sequence[int],
+             arm: str, variant: Variant, *, rules: RuntimeRules, p: TfParams, window: tuple[int, int],
+             admissible: Admissibility | None = None) -> T3Run:
     validate_inputs(bars, fundings)
-    rules = load_rules() if rules is None else rules
     adm = admissible or Admissibility(bars, fundings, p=p, window_end=window[1])
     s = Trial03(arm, rules=rules, oi=OiIndex(oi_rows, unusable, p), admissible=adm, variant=variant, p=p, window=window)
     r = replay(bars, fundings, s, rules=rules, limits=LIMITS, equity=p.e_ref, sizing_capital=p.e_ref, slippage_rate=p.slippage)
@@ -160,4 +171,4 @@ def v_days(s: Trial03, days: set[int]) -> list[int]:
     return sorted(d for d, ok in s.q_valid.items() if ok and d in days)
 
 
-__all__ = ["InputError", "validate_inputs", "Admissibility", "RulesSnapshotMismatch", "T3Run", "complete_days", "load_rules", "run_arm", "v_days"]
+__all__ = ["InputError", "validate_inputs", "run_arm_with_fixture_rules", "Admissibility", "RulesSnapshotMismatch", "T3Run", "complete_days", "load_rules", "run_arm", "v_days"]
