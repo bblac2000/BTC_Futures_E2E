@@ -6780,3 +6780,9 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > **Logging this pass:** the standing rule is verbatim for every advisor text. Log this one under the after-pass as the closing advisor note with your positions; no registry row (draft unchanged).
 > 
 > No blockers on the substance — Codex closed all 14 items across three passes and the draft is ready for the user's decisions. The items above are report-accuracy, not design.
+
+## 2026-09-29 — 트라이얼 #3 업로드 전 해시 불일치 발견(정정 · 앵커 보류)
+- 업로드 직전 대조: 파일 SHA256 = `9b8d2cdf…`(= #45·#46 · 커밋 4cd51b2) ≠ 사용자 승인 문구·#47의 `28798f49…`.
+- 원인: `28798f49…`는 r3 문구 수정 뒤·상태줄(3행) 수정 **전**의 일시 해시. 보고에 그 값을 잘못 인용했고 advisor 노트·입장표(위 "r3 SHA256 28798f49… 그대로")도 그 값을 따랐다. 어느 커밋에도 없다.
+- 내용: 사용자가 원문으로 읽은 텍스트와 Codex MERGE 대상 = `9b8d2cdf…` 파일. 정정 행 #49. 사용자 해시 재확인 전 업로드하지 않는다.
+- 비차단 메모: rclone `gdrive:` 원격이 폐지 예정인 rclone 공유 client_id를 쓴다는 NOTICE(2026 중 중단) — 변경 없음, 사용자 보고.
