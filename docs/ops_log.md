@@ -7697,3 +7697,16 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0edb9-5423-79c0-aa9e-327f5a2ab19a
 > Resume in Codex: codex resume 01a0edb9-5423-79c0-aa9e-327f5a2ab19a
+
+## 2026-09-30 — 트라이얼 #3 (c) after-pass 수정 확인(Codex task-mumtn07v-9i0by7) **MERGE**
+- 입장: ✅ 동의. (c) 완료 — (d) 전 사용자 보고에서 멈춤.
+
+### Codex 원문(verbatim)
+> **CLOSED.** The missing-bar test now checks the engine position’s `funding_paid == 0` after `MissingExitBar`, so it observes whether funding settled. The end-of-input test ends at `t_f+239` and asserts that the due bar is exactly one minute later. The five short-side cases are present. [Review file](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_exit_schedule.py:160)
+> 
+> I confirmed these points from HEAD and the replay code. I could not rerun the tests here because `pytest` is unavailable; the reported 1254 passing tests, ruff, pyright, and mutation check remain locally reported results.
+> 
+> **VERDICT: MERGE**
+> 
+> Codex session ID: 01a0edbf-1948-7cf2-b8df-f0a69c86b42b
+> Resume in Codex: codex resume 01a0edbf-1948-7cf2-b8df-f0a69c86b42b
