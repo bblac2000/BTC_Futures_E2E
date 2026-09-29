@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import statistics
 from decimal import Decimal as D
+from decimal import localcontext
 
 import numpy as np
 import pytest
@@ -160,3 +161,26 @@ def test_atr_requires_contiguous_complete_buckets():
                 continue                                                # 버킷 10 불완전
             ab.add(mbar(T0 + k * M15 + i * MINUTE_MS, "60000", "60010", "59990", "60000"))
     assert ab.atr(T0 + 16 * M15) is None                                # 끝 ≤ T인 마지막 15개 안에 불완전 버킷
+
+
+# ── 청산 거리(레지스트리 #4 · 사용자 결정 2026-09-30 (A)) ─────────────────────
+@pytest.mark.parametrize("lev,direction,pct", [(30, "LONG", "2.8949"), (30, "SHORT", "2.8718"),
+                                               (10, "LONG", "9.5884"), (10, "SHORT", "9.5120")])
+def test_liquidation_distance_is_registry_4_closed_form_at_tier_1(lev, direction, pct):
+    """#4: dist = (1/L − taker − MMR_eff)/(1 ∓ MMR) · liquidationFee는 거리에 없다 · #48 1구간 MMR 0.004 · cum 0 · taker 0.0005."""
+    from exchange.orders import Direction
+    from sizing.position import liquidation_estimate
+    from strategies.trial03.harness import load_rules
+    rules = load_rules()
+    b = rules.bracket_for_notional(D("1000"))
+    assert (b.bracket, b.maint_margin_ratio, b.cum, rules.commission.taker) == (1, D("0.004"), D("0"), D("0.0005"))
+    d = Direction(direction)
+    side = 1 if d is Direction.LONG else -1
+    with localcontext() as ctx:                                                   # 엔진 실행 문맥과 같은 정밀도(34자리)
+        ctx.prec = 34
+        closed = (1 / D(lev) - D("0.0005") - D("0.004")) / (1 - side * D("0.004"))
+    est = liquidation_estimate(d, D("75700"), D("1000"), lev, rules)
+    assert est.dist_pct == closed
+    assert (est.dist_pct * 100).quantize(D("0.0001")) == D(pct)
+    fee_free = liquidation_estimate(d, D("75700"), D("1000"), lev, rules)          # 플래그는 거리에 들어가지 않는다
+    assert fee_free.dist_pct == est.dist_pct and "liq_fee_on_liq_price" not in liquidation_estimate.__code__.co_varnames

@@ -56,12 +56,12 @@ class OOSGuard(RuntimeError):
 
 
 def is_range() -> tuple[int, int]:
-    return A.WARMUP_START_MS, A.IS_END_MS
+    return A.DATA_START_MS, A.IS_END_MS
 
 
 def check_is_bounds(start_ms: int, end_ms: int) -> None:
-    if not (A.WARMUP_START_MS <= start_ms <= end_ms <= A.IS_END_MS):
-        raise OOSGuard(f"범위 [{start_ms}, {end_ms}]가 IS 경로 한계 [{A.WARMUP_START_MS}, {A.IS_END_MS}] 밖")
+    if not (A.DATA_START_MS <= start_ms <= end_ms <= A.IS_END_MS):
+        raise OOSGuard(f"범위 [{start_ms}, {end_ms}]가 IS 경로 한계 [{A.DATA_START_MS}, {A.IS_END_MS}] 밖")
 
 
 def assert_in_range(ts: Iterable[int], start_ms: int, end_ms: int) -> None:
@@ -207,9 +207,9 @@ def analyze_oi(oi_dir: Path, start_ms: int, end_ms: int) -> tuple[list[list[Any]
     per_day: dict[str, int] = defaultdict(int)
     for t in unusable:
         per_day[_day(t)] += 1
-    lo, hi = max(start_ms, A.IS_START_MS), min(end_ms, A.IS_END_MS)
+    lo, hi = max(start_ms, A.WINDOW_START_MS), min(end_ms, A.IS_END_MS)
     is_grid = 0 if hi < lo else (hi - (lo + (-lo) % OI_STEP)) // OI_STEP + 1
-    is_bad = sum(A.IS_START_MS <= t <= A.IS_END_MS for t in unusable)
+    is_bad = sum(A.WINDOW_START_MS <= t <= A.IS_END_MS for t in unusable)
     if is_grid and is_bad > OI_UNUSABLE_CAP * is_grid:
         stops.append({"kind": "oi_unusable_over_cap", "unusable": is_bad, "grid": is_grid, "stop": True})
     audit = {"start_ms": start_ms, "end_ms": end_ms, "days": len(oi_days(start_ms, end_ms)), "rows_in_range": rows_in,

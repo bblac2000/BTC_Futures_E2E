@@ -39,13 +39,14 @@ def test_anchor_identity():
 
 
 def test_window_b_and_oos_end_mechanical():
-    assert _iso(A.WARMUP_START_MS) == "2023-10-02T00:00:00.000Z"
-    assert _iso(A.IS_START_MS) == "2024-01-01T00:00:00.000Z"
+    assert _iso(A.DATA_START_MS) == "2023-10-02T00:00:00.000Z"
+    assert _iso(A.WINDOW_START_MS) == "2024-01-01T00:00:00.000Z"
     assert _iso(A.IS_END_MS) == "2025-12-31T23:59:59.999Z"
     assert A.OOS_START_MS == A.IS_END_MS + 1
     assert _iso(A.OOS_END_MS) == "2026-09-28T23:59:59.999Z"
     assert (A.OOS_END_MS + 1 - A.OOS_START_MS) // A.DAY_MS == 271
-    assert (A.IS_START_MS - A.WARMUP_START_MS) // A.DAY_MS == 91          # 90일 분위수 표본 + r30 30분 전(2023-10-02 23:30)
+    assert (A.WINDOW_START_MS - A.DATA_START_MS) // A.DAY_MS == 91
+    assert not hasattr(A, "IS_START_MS") and not hasattr(A, "WARMUP_START_MS")      # 두 "시작"을 이름으로 구분(사용자 2026-09-30)          # 90일 분위수 표본 + r30 30분 전(2023-10-02 23:30)
 
 
 def test_multiple_testing_constants_exact():

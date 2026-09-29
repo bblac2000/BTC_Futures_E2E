@@ -132,14 +132,14 @@ class T3Run:
 
 
 def run_arm(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequence[Sequence[Any]], unusable: Sequence[int],
-            arm: str, variant: Variant, *, window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS)) -> T3Run:
+            arm: str, variant: Variant, *, window: tuple[int, int] = (A.WINDOW_START_MS, A.IS_END_MS)) -> T3Run:
     """실행 경로: 규칙은 항상 `load_rules()`(#48 네 파일 SHA256 + taker 단언) · 매개변수는 항상 `TF_V1` — 덮어쓸 인자가 없다."""
     return _run_arm(bars, fundings, oi_rows, unusable, arm, variant, rules=load_rules(), p=TF_V1, window=window)
 
 
 def run_arm_with_fixture_rules(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequence[Sequence[Any]],
                                unusable: Sequence[int], arm: str, variant: Variant, *, rules: RuntimeRules,
-                               p: TfParams = TF_V1, window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS),
+                               p: TfParams = TF_V1, window: tuple[int, int] = (A.WINDOW_START_MS, A.IS_END_MS),
                                admissible: Admissibility | None = None) -> T3Run:
     """**테스트 전용**(합성 픽스처 규칙·작은 TfParams) — 호출자 파일이 `tests/` 아래가 아니면 거부(실행 시점) · 저장소 전체 정적 검사도 있다."""
     caller = Path(inspect.stack()[1].filename).resolve()

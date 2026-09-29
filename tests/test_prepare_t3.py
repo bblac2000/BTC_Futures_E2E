@@ -100,10 +100,10 @@ def capture(tmp: Path, rows26: list[str] | None = None, oi: FakeOI | None = None
 
 # ── OOS 가드 · 범위 ─────────────────────────────────────────────────────────
 def test_is_range_is_warmup_to_is_end():
-    assert P.is_range() == (A.WARMUP_START_MS, A.IS_END_MS)
+    assert P.is_range() == (A.DATA_START_MS, A.IS_END_MS)
 
 
-@pytest.mark.parametrize("start,end", [(START, END + 1), (START, OOS0 + 5 * MIN), (A.WARMUP_START_MS - MIN, END)])
+@pytest.mark.parametrize("start,end", [(START, END + 1), (START, OOS0 + 5 * MIN), (A.DATA_START_MS - MIN, END)])
 def test_capture_refuses_ranges_outside_is(tmp_path, start, end):
     with pytest.raises(P.OOSGuard):
         capture(tmp_path, start=start, end=end)
@@ -203,9 +203,9 @@ def test_oi_unusable_over_half_percent_of_is_grid_stops(tmp_path):
 
 
 def test_oi_unusable_in_warmup_is_logged_not_capped(tmp_path):
-    w = A.IS_START_MS - 86_400_000                               # 2023-12-31(워밍업)
+    w = A.WINDOW_START_MS - 86_400_000                               # 2023-12-31(워밍업)
     d = _oi_dir(tmp_path, {"2023-12-31": oi_zip("2023-12-31", [oi_row(w + i * 5 * MIN, "") for i in range(5)])})
-    _, audit, stops = P.analyze_oi(d, w, A.IS_START_MS - 1)
+    _, audit, stops = P.analyze_oi(d, w, A.WINDOW_START_MS - 1)
     assert not stops and audit["unusable_total"] == 5 and audit["unusable_is_slots"] == 0 and audit["is_grid_slots"] == 0
 
 

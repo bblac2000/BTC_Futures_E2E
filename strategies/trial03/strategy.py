@@ -68,7 +68,7 @@ Admissible = Callable[[int], str | None]           # t0 → None(판정 가능) 
 class Trial03:
     def __init__(self, arm: str, *, rules: RuntimeRules, oi: OiIndex, admissible: Admissible,
                  variant: Variant = BASE, p: TfParams = TF_V1,
-                 window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS)):
+                 window: tuple[int, int] = (A.WINDOW_START_MS, A.IS_END_MS)):
         if arm not in ARM_DIRECTION:
             raise ValueError(f"arm {arm}")
         self.arm, self.dir, self.rules, self.oi, self.admissible = arm, ARM_DIRECTION[arm], rules, oi, admissible

@@ -63,8 +63,8 @@ def oos_end_from_created(created: str) -> int:
     return int(c.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000) - 1
 
 
-WARMUP_START_MS = _ms(2023, 10, 2)                         # §5 워밍업(분위수 90일 + r30 · ATR · rv · 판정 가능 구간 앞쪽)
-IS_START_MS = _ms(2024, 1, 1)
+DATA_START_MS = _ms(2023, 10, 2)                           # 데이터 시작(준비 경로 하한 · 워밍업 첫 봉) · §5 워밍업(분위수 90일 + r30 · ATR · rv · 판정 가능 구간 앞쪽)
+WINDOW_START_MS = _ms(2024, 1, 1)                          # 창 시작(판정 가능한 첫 봉 · 이벤트 깔때기 분모의 시작)
 IS_END_MS = _ms(2026, 1, 1) - 1                            # 2025-12-31 23:59:59.999Z
 OOS_START_MS = _ms(2026, 1, 1)
 OOS_END_MS = oos_end_from_created(ANCHOR_CREATED_TIME)    # 2026-09-28 23:59:59.999Z(271일)
