@@ -7584,3 +7584,58 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 >    bar, high/low beyond SL or liq but open not → time_exit at open (under (A)).
 > X8 Shared-change check (advisor 8): expected zero change to backtest/engine_replay.py and paper/; `git diff --stat dc23273 -- backtest/engine_replay.py
 >    paper/` reported; non-empty → trial #2 regression re-run before reporting.
+
+## 2026-09-30 — 트라이얼 #3 (c) 계획 r3·r4: 사용자 결정 (A) · Codex 좁은 재확인
+- 사용자(2026-09-30): **(A)** — r3 §1 31행 그대로(종료 봉 = 펀딩 → 시가 갭 청산 → 시가 time_exit · 고가·저가 미판정) · 관례 2 철회 · 문서·tf_v1 무변경. 진단 전용 추가: §7-3 보고에 time_exit 아래 "종료 봉 시가가 이미 SL 너머였던 time_exit" 부분 개수(기존 필드 exit_ref·sl에서 · (f)에서) — 앵커된 산출물 무관(Codex 확인). #5 처리 수용.
+- Codex task-mumt2096-4im3qc: 1~4 CLOSED · 새 간극(X6 시각 순서) → 계획 r4 X6′(결과로 검증) · Codex task-mumt4hxr-lw4pht **PROCEED**. 입장: ✅ 전부 동의.
+
+### 계획 r3 원문
+> # Trial #3 (c) plan r3 = r2 + user decision (2026-09-30)
+> X1 → (A): r3 §1 line 31 as anchored governs the exit bar t_f+240: ① funding → ② liquidation iff the open is already beyond the estimated
+>    liquidation price → ③ otherwise time_exit at the open; no high/low evaluation on that bar; an open beyond SL (not liq) is time_exit.
+>    User convention 2 withdrawn. No document change, no new code path, tf_v1 unchanged.
+> X9 (new, diagnostic only, step f): §7-3 exit-reason report adds a sub-count under time_exit: "time_exit where the exit-bar open was already
+>    past the stop-loss price" = time_exit trades with exit_ref ≤ sl (long) / exit_ref ≥ sl (short), from existing trade-record fields
+>    (exit_ref = the exit bar's mark open for time_exit; sl = the fixed SL price). Report-only; no execution, record or tf_v1 change.
+> X2–X8 unchanged from r2. Tests in (c): 9 funding (00/08/16 × crossed / fill-in-minute / exit-in-minute) + at-most-one-funding structural
+>    + position_busy raises + 240-bar hold + exit-bar cases under (A) (open beyond liq → liquidation; open beyond SL only → time_exit at open
+>    with adverse 6 bps fill; high/low beyond SL/liq but open not → time_exit) + intrabar SL/liq in t_f+239 + missing exit bar (gap and
+>    end-of-input) + open_at_end None.
+
+### Codex 원문(verbatim · task-mumt2096-4im3qc)
+> **Narrow re-check:**
+> 
+> | Prior finding | Status | Reason |
+> |---|---|---|
+> | 1. Exit-bar rule | **CLOSED** | The user selected anchored option (A) and withdrew convention 2. The rule matches [§1 line 31](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:31) and the existing [replay hook](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:90). |
+> | 2. Equivalence claim and intrabar cases | **CLOSED** | X2 limits the equal-fill and equal-P&L claim to an open already beyond SL; X7 covers high/low crossings separately. |
+> | 3. Missing exit bar at end of input | **CLOSED** | X4 adds a post-replay schedule check and tests both a skipped bar followed by another bar and end of input. |
+> | 4. Busy-event assertion | **CLOSED** | X5 calls for the immediate exception and a strategy-owned record, while assigning failure-log persistence to the later harness work. |
+> 
+> **X9** uses existing `exit_reason`, `direction`, `exit_ref`, and `sl` trade fields. As a sub-count within `time_exit`, it changes neither the anchored execution rule nor the trade record, `tf_v1`, or the existing [§7-3 exit-reason categories](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:151).
+> 
+> **New gap:** X6 asks a test to assert `funding.ts_ms < exit-fill.ts_ms` in the exit bar. At a funding boundary, both timestamps equal that bar’s open time: replay settles funding first, then passes the same `t` to `close_now` ([replay loop](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:84)). Replay also discards the `FundingSettled` return rather than passing it to `on_event`. Revise X6 to verify order through a test-only engine spy or the resulting wallet and `PositionClosed.funding_paid_usdt`; do not require strictly increasing timestamps or a shared-code change.
+> 
+> Read-only review; no tests or code were run.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0edb0-2643-7130-8338-3de532cf99a2
+> Resume in Codex: codex resume 01a0edb0-2643-7130-8338-3de532cf99a2
+
+### 계획 r4 원문
+> # Trial #3 (c) plan r4 = r3 with X6 fixed (Codex task-mumt2096-4im3qc new gap)
+> X6' Funding order in the exit bar is NOT tested by timestamps (funding and time_exit both carry the bar's open ms; replay discards the
+>     FundingSettled return). Order is verified by outcome: exit in a boundary minute → PositionClosed.funding_paid_usdt == exactly one
+>     settlement (signed_qty × mark × rate) and wallet_after == wallet_before − commissions − that funding + price P&L (exact); fill in a
+>     boundary minute → funding_paid_usdt == 0; crossed → exactly one settlement. No shared-code change, no engine spy needed.
+
+### Codex 원문(verbatim · task-mumt4hxr-lw4pht)
+> X6′ closes the timestamp-ordering gap. Replay settles funding before the exit hook, while `PositionClosed` exposes the accumulated funding charge. The proposed boundary-minute cases can therefore verify the observable result without comparing timestamps or capturing `FundingSettled`.
+> 
+> For the wallet assertion, use the entry and exit commissions and fill-price P&L, with the single trade’s entry wallet as the baseline. The earlier findings 1–4 remain closed at the plan level. This is a read-only plan confirmation; the tests have not yet been implemented.
+> 
+> VERDICT: PROCEED
+> 
+> Codex session ID: 01a0edb1-ea8a-7353-a4ad-bf89dee21342
+> Resume in Codex: codex resume 01a0edb1-ea8a-7353-a4ad-bf89dee21342
