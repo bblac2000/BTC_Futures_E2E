@@ -39,6 +39,9 @@ from strategies.trial02 import anchor as A
 ROOT = Path(__file__).resolve().parent.parent
 DAY = A.DAY_MS
 N_STAT = Decimal(1000)
+#  수치 건전성 한도(판정 임계가 아니다 · 규약 29): 트레이드·추출 하나의 bps 절댓값 ≤ 10⁶(= 10,000%) — 실제 트레이드는 약 10⁴ 이내.
+#  이 안이면 어떤 합·분산·재표본 합도 float64를 넘지 않는다(Codex 2g r3·r4: 유한한 값들의 넘침 경로를 입력에서 한 번에 막는다).
+BPS_SANITY = 1_000_000.0
 SIDECARS = ("verify_receipt.json", "p1_merge_expect.json")
 NOT_COMPUTABLE = "p1_not_computable.json"
 P4 = [f"P4_draw{d:03d}" for d in range(A.P4_DRAWS)]
@@ -185,6 +188,8 @@ def _f(x: Any) -> float:
     f = float(d)
     if not math.isfinite(f):
         raise Refusal(f"float64 범위 밖 값: {x!r}")                  # 1e400 → inf(Codex 2g r2 #1)
+    if abs(f) > BPS_SANITY:
+        raise Refusal(f"bps 건전성 한도 밖 값: {x!r}")
     return f
 
 

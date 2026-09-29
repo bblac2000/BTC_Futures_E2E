@@ -116,3 +116,11 @@ def test_forward_function(kw, label):
 def test_nonfinite_inputs_raise(field):
     with pytest.raises(ValueError):
         V.verdict_is(replace(good(), **{field: float("nan")}))
+
+
+def test_oos_and_forward_reject_nonfinite():
+    with pytest.raises(ValueError):
+        V.verdict_oos(data_unavailable=False, n=60, liquidations=0, rho=0.0, mean_net=float("inf"), net_ci_lo=1.0,
+                      net_ci_hi=2.0, sd_net=1.0)
+    with pytest.raises(ValueError):
+        V.verdict_forward(liq_or_killswitch=0, exec_defect=False, n_trades=3, mean_net_bps=float("nan"), is_bh_beats=False)

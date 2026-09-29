@@ -49,6 +49,8 @@ def valid_day_bootstrap_mean(by_day: Mapping[int, Sequence[float]], days: Sequen
     cnts = np.array([float(len(by_day.get(d, ()))) for d in order])
     idx = rng.integers(0, len(order), size=(resamples, len(order)))
     s, c = sums[idx].sum(axis=1), cnts[idx].sum(axis=1)
+    if not (np.all(np.isfinite(sums)) and np.all(np.isfinite(s))):
+        raise ValueError("부트스트랩 합이 유한하지 않다")
     ok = c > 0
     lo, hi = _q(s[ok] / c[ok], level)
     n = cnts.sum()
@@ -63,7 +65,10 @@ def daily_diff_bootstrap(a_day: Mapping[int, float], b_day: Mapping[int, float],
         return DayCI(float("nan"), float("nan"), float("nan"), level, resamples, 0, 0)
     d = np.array([float(b_day.get(x, 0.0)) - float(a_day.get(x, 0.0)) for x in order])
     idx = rng.integers(0, len(order), size=(resamples, len(order)))
-    lo, hi = _q(d[idx].mean(axis=1), level)
+    means = d[idx].mean(axis=1)
+    if not (np.all(np.isfinite(d)) and np.all(np.isfinite(means))):
+        raise ValueError("일별 대비 재표본이 유한하지 않다")
+    lo, hi = _q(means, level)
     return DayCI(float(d.mean()) if len(d) else float("nan"), lo, hi, level, resamples, 0, len(order))
 
 
@@ -81,9 +86,15 @@ def lag1_rho(x: Sequence[float]) -> float:
 def sharpe_or_none(x: Sequence[float]) -> float | None:
     """mean / std(ddof=1) · n < 2 또는 분산 0 → 정의되지 않음(None)."""
     a = np.asarray(x, dtype=float)
+    if not np.all(np.isfinite(a)):
+        raise ValueError("Sharpe 입력에 유한하지 않은 값")
     if len(a) < 2:
         return None
-    sd = float(a.std(ddof=1))
+    with np.errstate(over="raise"):
+        try:
+            sd = float(a.std(ddof=1))
+        except FloatingPointError as e:
+            raise ValueError("Sharpe 분산 계산 넘침") from e     # 넘침을 '정의 안 됨'으로 읽지 않는다(Codex 2g r4 #1)
     if sd == 0 or not math.isfinite(sd):
         return None
     return float(a.mean() / sd)

@@ -443,3 +443,12 @@ def test_overflowing_mean_of_finite_values_is_refused(tmp_path, patched):
     _rewrite(tmp_path, "P4_draw033", "trades.jsonl", rows)
     with pytest.raises(E.Refusal):
         run_eval(tmp_path)
+
+
+def test_sanity_bound_refuses_absurd_bps(tmp_path, patched):
+    build(tmp_path)
+    rows = [json.loads(x) for x in (tmp_path / "runs" / "B" / "trades.jsonl").read_text().splitlines()]
+    rows[0]["net_bps"], rows[1]["net_bps"] = "1e200", "2e200"                   # 유한하지만 넘침 유발
+    _rewrite(tmp_path, "B", "trades.jsonl", rows)
+    with pytest.raises(E.Refusal, match="건전성"):
+        run_eval(tmp_path)

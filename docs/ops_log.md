@@ -5908,3 +5908,22 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb41-954a-7722-864f-a081edf86244
 > Resume in Codex: codex resume 01a0eb41-954a-7722-864f-a081edf86244
+
+## 2026-09-29 — 2g 재확인 r4(Codex task-mum4zbf8-pxgads **FIX-FIRST**) → 수정
+- r3 경로 CLOSED · 남은 경로: B Sharpe 분산 넘침(None으로 읽혀 SR*에서 빠짐) · 재표본 중간 합 넘침 · OOS/전진 함수의 inf → ✅ 동의 → **입력 경계에서 한 번에**: 판정기가 읽는 bps 값 하나의 절댓값 ≤ 10⁶(건전성 한도 · 판정 임계 아님 · 밖이면 거부 · 규약 29) + 방어선: 부트스트랩 합·재표본 평균 유한성 · Sharpe 분산 넘침 → 오류(정의 안 됨이 아님) · OOS/전진 유한성 검사 · 시험 4개.
+
+### Codex 원문(verbatim · task-mum4zbf8-pxgads)
+> The r3 fix closes the reported P4 path: run means and P1/P4 percentiles now receive finite checks. The full scan found remaining verdict paths:
+> 
+> 1. **B Sharpe overflow can change IS PASS.** Finite B returns alternating `1e200` and `2e200` overflow the standard deviation. [sharpe_or_none](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:81) returns `None`, so [G-B](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:102) omits B from `SR*`. A read-only probe changed a representative result from REJECT to IS PASS. Refuse overflow here rather than treating it as an undefined Sharpe.
+> 
+> 2. **Bootstrap overflow can hide behind finite CI endpoints.** [valid_day_bootstrap_mean](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:39) checks the resulting endpoints, but not each resampled sum. In a 10,000-resample probe, 34 sums overflowed while both CI endpoints stayed finite; [G1](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:107) can then proceed. Check intermediate aggregates before computing quantiles.
+> 
+> The preregistered OOS and forward verdict functions also accept infinite means as passing inputs ([OOS](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:129), [forward](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:145)); they are not called by the current IS evaluator.
+> 
+> `git diff --check` passed. This was read-only; I did not access `var/` or market data or run the file-writing test suite.
+> 
+> VERDICT: FIX-FIRST
+> 
+> Codex session ID: 01a0eb47-23e4-71d3-8a26-e18dec387896
+> Resume in Codex: codex resume 01a0eb47-23e4-71d3-8a26-e18dec387896

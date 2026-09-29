@@ -81,3 +81,10 @@ def test_empty_day_list_is_undefined_without_warnings():
 def test_p95_rejects_nonfinite():
     with pytest.raises(ValueError):
         S.p95([-10.0] * 199 + [float("inf")])
+
+
+def test_overflow_is_an_error_not_undefined():
+    with pytest.raises(ValueError):
+        S.sharpe_or_none([1e200, 2e200] * 5)
+    with pytest.raises(ValueError):
+        S.valid_day_bootstrap_mean({1: [1e308, 1e308], 2: [1e308]}, [1, 2], rng(), resamples=50, level=0.9875)
