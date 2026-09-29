@@ -5545,3 +5545,16 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb1e-0cee-7cb1-87c7-f9c2b08b2818
 > Resume in Codex: codex resume 01a0eb1e-0cee-7cb1-87c7-f9c2b08b2818
+
+## 2026-09-29 — 2f 재확인 r4(Codex task-mum3hmxz-c6kh2p **FIX-FIRST**) → 수정
+- #5 PARTIAL(부분 문자열 대조 — `old_funding.json=<해시>`가 통과) → ✅ 동의 → 행에서 `이름=64자리 hex`를 정확히 파싱 · 같은 이름에 다른 해시 → 거부 · 파싱 결과가 data_pins와 **정확히 같은** 집합 · 테스트(접두 이름 · 충돌 중복).
+
+### Codex 원문(verbatim · task-mum3hmxz-c6kh2p)
+> **#5 remains PARTIAL.** [load_pins](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:118) now requires one path-bearing registry row at the pushed pins commit, but it checks each `file=hash` pair with substring matching. A row with `funding.json=<wrong hash>` and `old_funding.json=<correct hash>` passes the expected `funding.json=<correct hash>` check. The new [test](/home/cms/project/BTC_Futures_E2E/tests/test_t2_provenance.py:188) does not cover this case.
+> 
+> Parse and compare exact filename–hash entries, reject conflicting duplicates, and test the prefixed-name case. I reviewed the requested diff and log read-only, without accessing `var/` or market data. I did not run the test suite.
+> 
+> VERDICT: FIX-FIRST.
+> 
+> Codex session ID: 01a0eb20-eaed-7bd0-9d05-d7f7bbed7fcd
+> Resume in Codex: codex resume 01a0eb20-eaed-7bd0-9d05-d7f7bbed7fcd

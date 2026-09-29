@@ -60,9 +60,10 @@ def test_fingerprint_changes_with_execution_code(repo):
     assert PV.fingerprint(repo) != a
 
 
-def pins_file(repo: Path, raw: str = "r1", registry: bool = True) -> dict:
-    pins = {"raw": {"archive_rows.jsonl": raw}, "prepared": {"bars_1m.parquet": "b1", "funding.json": "f1",
-                                                             "source_audit.json": "s1"}}
+def pins_file(repo: Path, raw: str = "a", registry: bool = True) -> dict:
+    hx = lambda c: c * 64  # noqa: E731
+    pins = {"raw": {"archive_rows.jsonl": hx(raw)}, "prepared": {"bars_1m.parquet": hx("b"), "funding.json": hx("f"),
+                                                                 "source_audit.json": hx("c")}}
     (repo / PV.PINS_REL).parent.mkdir(parents=True, exist_ok=True)
     (repo / PV.PINS_REL).write_text(json.dumps(pins))
     (repo / PV.REGISTRY_REL).parent.mkdir(parents=True, exist_ok=True)
@@ -82,8 +83,8 @@ def test_pins_must_be_tracked_clean_and_pushed(repo):
         PV.load_pins(repo)                                        # 푸시 전
     push(repo)
     p, c = PV.load_pins(repo)
-    assert p["raw"] == {"archive_rows.jsonl": "r1"} and c == PV.head(repo)
-    pins_file(repo, raw="x")
+    assert p["raw"] == {"archive_rows.jsonl": "a" * 64} and c == PV.head(repo)
+    pins_file(repo, raw="e")
     with pytest.raises(PV.ProvenanceError):
         PV.load_pins(repo)                                        # 커밋 안 된 변경
 
@@ -187,8 +188,34 @@ def test_hashes_only_in_another_row_are_refused(repo):
 
 def test_pins_row_needs_name_hash_pairs(repo):
     pins_file(repo)
-    reg = (repo / PV.REGISTRY_REL).read_text().replace("funding.json=f1", "funding.json=zz")
+    reg = (repo / PV.REGISTRY_REL).read_text().replace("funding.json=" + "f" * 64, "funding.json=" + "d" * 64)
     (repo / PV.REGISTRY_REL).write_text(reg)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)
+
+
+def test_prefixed_name_does_not_satisfy_pin(repo):
+    """`old_funding.json=<맞는 해시>` + `funding.json=<틀린 해시>` → 거부(정확한 이름 파싱)."""
+    pins_file(repo)
+    reg = (repo / PV.REGISTRY_REL).read_text()
+    lines = reg.splitlines()
+    lines[1] = lines[1].replace("funding.json=" + "f" * 64, "funding.json=" + "d" * 64 + " · old_funding.json=" + "f" * 64)
+    (repo / PV.REGISTRY_REL).write_text("\n".join(lines) + "\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)
+
+
+def test_conflicting_duplicate_pin_entry_refused(repo):
+    pins_file(repo)
+    lines = (repo / PV.REGISTRY_REL).read_text().splitlines()
+    lines[1] = lines[1].replace(" |", " · funding.json=" + "d" * 64 + " |")
+    (repo / PV.REGISTRY_REL).write_text("\n".join(lines) + "\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-qm", "pins")
     push(repo)

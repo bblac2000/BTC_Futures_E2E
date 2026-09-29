@@ -118,10 +118,13 @@ def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool
     rows = [ln for ln in reg.splitlines() if ln.startswith("|") and PINS_REL in ln]
     if len(rows) != 1:
         raise ProvenanceError(f"핀 커밋의 레지스트리에 `{PINS_REL}` 행이 정확히 하나가 아니다({len(rows)})")
-    want = [f"{n}={h}" for n, h in {**pins["raw"], **pins["prepared"]}.items()]
-    missing = [w for w in want if w not in rows[0]]
-    if missing:
-        raise ProvenanceError(f"트라이얼 #2 데이터 핀 행에 `파일=해시`가 없다: {missing[:3]}")
+    import re
+    parsed: dict[str, str] = {}
+    for name, h in re.findall(r"(?<![\w./-])([\w./-]+)=([0-9a-f]{64})(?![0-9a-f])", rows[0]):
+        if parsed.setdefault(name, h) != h:
+            raise ProvenanceError(f"데이터 핀 행에 {name}의 해시가 둘 이상")
+    if parsed != {**pins["raw"], **pins["prepared"]}:
+        raise ProvenanceError("데이터 핀 행의 `파일=해시` 목록이 data_pins.json과 정확히 같지 않다")
     return pins, c
 
 
