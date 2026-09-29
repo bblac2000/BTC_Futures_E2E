@@ -6391,3 +6391,207 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 파일 존재(S3 목록 · 내용 미개봉): 1,003일 전부 있음 · 결측 0(목록 2020-09-01 ~ 2026-09-28).
 - **분기 규칙(사전확약 · 값은 보지 않고 개수만)**: OI 조건 사양을 정본으로 하려면 ① 필요 기간 파일 결측 0 ∧ ② 5분 격자 기대 행(날마다 288) 대비 `sum_open_interest`가 비어 있지 않고 유한한 행의 비율 ≥ 99.0%(전체) ∧ ③ 그 비율이 95% 미만인 날 ≤ 1% — 하나라도 어기면 **OI 없는 사양**이 정본. 행 개수·비어 있음·유한성만 센다(OI 값·수익률은 보지 않는다).
 - **S0 결과(개수만)**: ① 결측 파일 0 ✅ · ② 5분 격자 유한 OI 288,734 / 288,864 = **99.955%** ✅ · ③ 95% 미만 날 1(2024-02-16 · 0.10%) ✅ → **OI 조건 사양이 정본**(존재만으로 결정). 열: create_time · symbol · sum_open_interest · …(값 미열람). 개수 파일 `var/t3_s0/metrics_s0_counts.json` SHA256 `08cf3c45b8dee03c33053bfc0a533a08c2f88df5a89cc8ae53eb1417261dc7a3` · 원본 zip 1,003개 `var/t3_s0/metrics/`.
+
+## 2026-09-29 — 트라이얼 #3(T-FLUSH) **before-pass**(advisor + Codex task-mumfotny-4sqkx4 **FIX-PLAN-FIRST**) → 요지 r2
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| Codex | B1 OI 인과 | ✅ | R1(5분 가용 지연 · 나이 ≤ 10분 · 감사 규칙 · 전진 폴링) |
+| Codex | B2 상태 기계 | ✅ | R2(암별 독립 장부 · 적격 이벤트마다 쿨다운 · 경계 포함 규칙 · 전진 = 두 가상 장부) |
+| Codex | B3 시점·유효성 | ✅ | R3(결정 종가 SL · ATR 정의 · 봉 순서 · 걸친 날 전부 완전 + 펀딩 00/08/16 · 창 경계 평평) |
+| Codex | B4 암별 판정 | ✅ | R4(트라이얼 #2 규칙을 암별로 · 6값 SR* · OOS 스트림 · 암 독립 진행) |
+| Codex | B5 바닥 근거 | ✅ | R5(바닥 0.44% = 2×22 bps · 슬리피지 6 bps/측 엔진 매개변수) |
+| Codex | B6 OOS 검정력 | ✅ | R8(창 A/B는 사용자 결정 · 기본 제안 B · 개수 계산 없음) |
+| Codex | Q1~Q6 | ✅ | N = 6 확인 · R6 · R5 · R7 · 표본 부족 라벨 유지 · R9 |
+| advisor | 1 | ✅ | R10 §12 목록 |
+| advisor | 2 | ✅ | R8 |
+| advisor | 3 | ✅ | R3 · §11에 OI 원시·준비 계열 |
+| advisor | 4 | ✅ | R3 · R7 |
+| advisor | 5 | ✅ | R5 |
+| advisor | 6 | ✅ | R9 |
+| advisor | 7·8·9 | ✅ | 초안 §3·§7·레지스트리 행 |
+
+### 요지 r1
+> # Trial #3 (T-FLUSH) re-base on constitution v1.3 — before-pass brief (no draft yet)
+> 
+> Source: Drive "T-FLUSH — 청산 플러시 소진 후 되돌림 (설계서 v0.2 · 프로토타입)" (created 2026-09-22, written against constitution v1.0).
+> Constitution v1.3 committed e8c3091. S0 OI existence done (ops_log 4585bdb): rule pre-committed (23a5648) then counts: files 1,003/1,003,
+> finite-OI 5-min grid 99.955%, 1 day < 95% → **OI-conditioned spec is the registered one**.
+> 
+> ## Stale v0.2 items → proposed fix
+> 1 Sizing: L_raw = risk_pct/(pos_pct·sl_dist) → **B2** (notional = E_ref·1%/sl_dist; L = highest integer in [10,30] passing the #5 gate sl·1.5 < liq_dist ∧ liq_dist − sl ≥ 10 bps; margin = notional/L; pos_pct cap 0.40). Liquidation distance = exact
+>   per-direction `liquidation_estimate` (#2/#4/#5), no fee term in the distance; v0.2 "M-1" closed (settled by #2/#4). Liquidation loss fee basis
+>   = qty × est. liq price (trial #2 convention 1).
+> 2 Leverage decision date 2026-09-24 (#30), not 09-22. Main-timeframe wording: 1m = decision/monitoring cadence, signal scale per hypothesis
+>   (open-decisions #3 interpretation 2026-09-29) — no "1m/5m/15m 택1 개정"; v0.2 Appendix A is dropped (both rows already in v1.3).
+> 3 Statistics on fixed notional (L5): E_ref 1,000 execution ledger reset per entry; N_stat 1,000 statistical ledger (trial #2 conventions 3).
+> 4 N: cumulative attempts on the same IS data (research-protocol §1/§5 v1.3): #1A, #1B, #2A, #2B, #3L, #3S → **N = 6**; α = 0.05/6 = 0.008333;
+>   CI = central 99.1667% (0.41667 / 99.58333 percentiles); SR* = expected_max_sr over the defined subset of the six SR̂ (four pinned:
+>   SR_1A, SR_1B, SR_2A = −0.007474349306781282, SR_2B = −0.0033941087843268273 from #2 report.json (SHA256 9223047c…)), n_trials = 6; < 2 defined → G-B fails.
+> 5 Two arms, **both judged** (unlike #1/#2 where B was a subgroup): L = DOWN flush → long; S = UP flush → short. Each arm is its own
+>   hypothesis with its own gates/verdict (they are not nested; entry conditions are opposite). Trial result = the pair of verdicts.
+> 6 Survival gate: liquidation = 0 at every stage (IS, OOS, forward), per arm.
+> 7 Evaluator committed + pushed before any run; trial #2 evaluator requirements: B&H suffix only on ACCEPT; report-only cost grid ×0.5/×1.0/×1.5.
+> 8 P1 conventions (a)–(f) (trial #1/#2) with new fixed seed **20260929**; eligibility = minute t in valid days with exit minute t+h−1 inside the
+>   window and valid (holds cross UTC days here: h ≤ 240 + fill delay); P2 = +1/+5 bars; P3 = sign flip (mirror SL about fill); no P4 (no
+>   level/distance family to randomise; p_evt is a single pre-committed quantile) — constitution requires 3 layers.
+> 9 §7 non-overlap must address L1–L5 (trial #1) and L6–L8 (trial #2): event-conditional entry after a 30-min flush (tens-hundreds/yr, not every
+>   minute or every day), hold H = 4h, direction opposite to the flush (mean reversion, not breakout continuation), no S/R levels, no daily
+>   range, no TSMOM filter. Also E2E #74 (Donchian breakout) — this is exhaustion-reversal, no rolling-extreme channel (static check again).
+> 10 Cost: 14 bps round trip + real funding, paper-regime tag. **Post-flush slippage unmeasured → pre-committed conservative multiplier ×3 on the
+>    slippage leg: 6 bps per side** (vs #7's 2 bps) for entry and exit fills → round trip 10 + 12 = **22 bps** + funding used in G2/judgement;
+>    report-only cost grid shows ×0.5/×1.0/×1.5 of that 22.
+> 11 Data: 1m mark + kline from the trial #2 `prepare_t2` path (same raw-capture/audit/manifest discipline; new trial-#3 capture covering
+>    warm-up from 2023-10-02); funding REST; OI = binance.vision 5-min metrics (captured raw + hashed like the other inputs).
+> 
+> ## Parameters (every value + source; none tuned on returns or event counts)
+> - Series: all price logic on **mark 1m** (one series, as trial #2); kline only for B&H.
+> - r30[t] = ln(M_close[t] / M_close[t−30]) (mark closes). p_evt = **0.005** (v0.2 proposal; 0.5% tail of 30-min returns). q_dn/q_up recomputed
+>   **once per UTC day at 00:00** from the trailing **W_ref = 90** full UTC days of r30 (v0.2 W_ref; daily recompute = deterministic, no
+>   within-day look-ahead) — numpy linear quantile; day invalid for events if < 99% of those minutes have a defined r30.
+> - oi_ok (L and S alike, v0.2 "부호만"): OI(latest 5-min metrics row with create_time ≤ t0) − OI(latest row ≤ t0 − 30 min) < 0; either row
+>   missing → event invalid (`oi_missing`).
+> - Cooldown T_cd = **12 h** after any event (shared by both directions within an arm's run; v0.2 ρ̄ defence).
+> - Entry: T_min = **20 min** after t0, c_cool = **0.5** (rv5 ≤ 0.5·rv_peak; rv5 = sample std of last 5 mark 1m log returns; rv_peak = max rv5
+>   over [t0−30, t]); T_max = **120 min** else event dropped (`not_cooled`). Decision at bar close, fill at next bar mark open (+ slippage model).
+> - Exit: time stop **H = 4 h** (240 min) after fill → exit at that bar's mark open (exit_at_bar_open hook); SL = entry ∓ **k_sl = 1.5 × ATR_15m**
+>   (ATR_15m = simple mean of true range over the last **14** closed 15m mark bars at decision time, v0.2 scale M-9 accepted as the scale rule);
+>   intrabar SL on mark high/low, fill = worse of SL and open; liquidation check first (engine order); no TP, no trail.
+> - sl_dist band: floor **0.30%** (≥ 2× round-trip cost scale, as trial #2), cap **5.00%** (10x geometry: liq ≈ 9.6% keeps sl·1.5 < liq; trial #2
+>   §1-1); outside → skipped (`sl_dist_out_of_range`).
+> - One position per arm run; events during a position are consumed as `position_busy`.
+> - Windows: IS 2024-01-01 → 2026-06-30 (same IS data as #1/#2 → N rule); OOS 2026-07-01 → OOS_end = last full UTC day before Drive createdTime
+>   (mechanical); warm-up from 2023-10-02 (W_ref + ATR). Forward paper 30 days, compounding, sign = mean net_bps.
+> - Seeds: P1 20260929 spawn(1000); bootstrap SeedSequence((20260929,1)).spawn(8)[k] (k: 0 gross_L, 1 net_L, 2 gross_S, 3 net_S).
+> 
+> ## Open questions for the reviewers
+> Q1 N = 6 with both arms judged — is "two judged arms" consistent with the constitution (vs one judged + subgroup)? Any argument for N ≠ 6?
+> Q2 Daily quantile recompute vs per-minute trailing quantile — acceptable as a pre-committed simplification?
+> Q3 Slippage ×3 on both legs (entry after cooling, exit 4h later) — conservative enough / too conservative?
+> Q4 P1 eligibility with cross-day holds; P4 omitted — acceptable?
+> Q5 OOS ~85 days × event rate may give an OOS sample too small — keep the "OOS 표본 부족" label mechanism from trial #2?
+> Q6 Anything in v0.2 §1.1/§1.2 (original digest rejection record) that must survive into the pre-registration?
+
+### 요지 r2
+> # Trial #3 brief r2 — resolutions (advisor + Codex before-pass)
+> 
+> R1 OI causality (Codex B1): a metrics row with create_time = c is treated as usable from c + 5 min (one-bucket availability lag). OI_now(t) =
+>    latest row with c + 5 min ≤ t; OI_prev(t) = latest row with c + 5 min ≤ t − 30 min; each must satisfy age t − (c + 5 min) ≤ 10 min, else
+>    `oi_missing`. Rows are captured raw with SHA256; duplicate create_time with differing values → STOP, identical → collapse; non-5-min-aligned
+>    or unparseable create_time → STOP (same audit discipline as prepare_t2). Forward paper: `/futures/data/openInterestHist period=5m` polled
+>    every minute, stored raw, same lag/age rule (G-F rule-execution match includes this).
+> R2 State machine (Codex B2 · advisor 1d/1f): arms L and S are INDEPENDENT BOOKS (separate isolated runs, each sees only its own tail).
+>    Per arm: a qualified event t0 = first 1m bar close with r30 ≤ q_dn (L) / r30 ≥ q_up (S) ∧ oi_ok ∧ admissible ∧ t0 ≥ cooldown_end.
+>    Every qualified event sets cooldown_end = t0 + 12 h (exclusive), whether or not it enters (busy / not cooled / skipped). While a cooling wait
+>    is open, further tails are inside cooldown and ignored. T_min inclusive (t_e − t0 ≥ 20 min); T_max inclusive (t_e − t0 ≤ 120 min, else
+>    `not_cooled` at the first bar with t_e − t0 > 120). Position open → qualified event recorded `position_busy` (starts cooldown).
+>    Forward: if both arms pass, two separate virtual paper books (own E_ref wallet each); a live policy combining them needs a new decision.
+> R3 Timing/validity (Codex B3 · advisor 3/4): decision at bar close m; SL price fixed = m ∓ 1.5·ATR_15m (decision-close anchored, not fill);
+>    sl_dist = 1.5·ATR/m; band + B2 gate at decision; engine re-sizes at fill (standard) and skips `sl_crossed_before_fill`. ATR_15m = SMA over the
+>    last 14 complete UTC-aligned 15m mark buckets whose end ≤ decision close; TR_i = max(H−L, |H−C_{i−1}|, |L−C_{i−1}|). Bar order = engine:
+>    funding → pending fill at open → liquidation → SL (fill worse of SL/open) · exit bar (fill + 240 min): gap liquidation at open, else time
+>    exit at open, no H/L evaluation. Validity (ex-post sample rule, backtest only): an event is admissible only if every UTC day touched by
+>    [t0 − 30 min, t0 + T_max + 240 min + 1 min] is a complete mark day (C2 grid) and every 00:00/08:00/16:00 funding boundary inside that span has
+>    exactly one validated event; plus the quantile precondition (R6). Funding = all actual events inside the hold incl. 00:00, minute bucket,
+>    settled before that minute's checks, liquidation price recomputed (engine). Books start and end flat per window; admissible only if
+>    t0 + T_max + 240 min + 1 min ≤ window end (`window_end`); nothing read beyond the window.
+> R4 Judgement per arm (Codex B4): trial #2 §3/§3-1/§7 rules applied per arm: G0 on filled trades (n ≥ 48 ∧ n/(1+4·max(ρ̂,0.15)) ≥ 30); G1/G2
+>    mean > 0 ∧ CI_lo > 0 with central 99.1667% CI (0.41667/99.58333), day-block bootstrap over the arm's valid-day set V (days on which an
+>    admissible event could exist), entry-day assignment, 10,000 resamples; G-B = PSR(0) > 0.5 ∧ n ≥ 30 ∧ SR̂ − SR* > 0, SR* over the defined
+>    subset of the six {SR_1A, SR_1B, SR_2A, SR_2B, SR_L, SR_S} with n_trials 6, < 2 defined → fail; flat; survival (0 liquidations); P1/P2/P3;
+>    θ = 10 bps; MDE with z_{1−0.008333}; zero trades → FAIL; degenerate stats never pass; §7 precedence per arm; an IS-PASS arm proceeds to its
+>    own OOS (user approval) regardless of the other arm. Bootstrap streams: SeedSequence((20260929,1)).spawn(8): 0 gross_L 1 net_L 2 gross_S
+>    3 net_S (IS) · 4 gross_L 5 net_L 6 gross_S 7 net_S (OOS). Verdict string = 3-class + survival per arm.
+> R5 Cost and floor (Codex B5 · advisor 5): registered model = taker 5 bps × 2 + slippage **6 bps per side** (×3 of registry #7's 2 bps, trial-
+>    specific pre-commit) applied adversely with tick rounding on BOTH fills in sizing, execution, P1 and G2 → nominal 22 bps RT + actual
+>    funding. Engine: `PaperSender` gains a default-off slippage parameter (default 2 bps unchanged) — shared-layer change at step 2 with
+>    before/after passes. sl_dist floor = **0.44%** (= 2 × 22 bps), cap **5.00%**. Report-only cost grid: net at fees+slippage ×0.5/×1.0/×1.5
+>    (funding unchanged); no grid value replaces the registered case.
+> R6 Quantiles (Q2): for day d, sample = r30[t] for every 1m close t in days d−90..d−1 (r30 = ln(C[t]/C[t−30 min]), exact clock offset, both
+>    closes finite positive mark closes); requires ≥ 99% of the 129,600 minutes defined, else day d has no events (`quantile_invalid`);
+>    numpy linear quantile p = 0.005 / 0.995.
+> R7 P1 (Q4): conventions (a)–(f) per arm with arm-specific stream spawn from seed 20260929 (L: SeedSequence((20260929, 2)).spawn(1000),
+>    S: SeedSequence((20260929, 3)).spawn(1000)); h = ceil((exit_ms − fill_ms)/1 min) (fill→exit, not the event wait); eligible start minutes
+>    t = those where the whole [t, t+h−1] lies in complete mark days within the window and each funding boundary inside has a validated event;
+>    longest-first placement, ≤ 1,000 attempts, no pair redraw, failed draws > 10 → 폐기. P2 = fill delayed +1/+5 bars, decision NOT re-evaluated,
+>    SL/exit times shift with the fill; P3 = direction flipped, SL mirrored about m (m ± 1.5·ATR). No P4 (constitution requires 3 layers).
+> R8 OOS power (Codex B6 · advisor 2): no data-based expectation is computed (no counts). Window choice goes to the user (§12): (A) IS
+>    2024-01-01→2026-06-30, OOS 2026-07-01→OOS_end (~90 days if anchored 2026-09-29) — "OOS 표본 부족" likely; (B) IS 2024-01-01→2025-12-31,
+>    OOS 2026-01-01→OOS_end (~271 days) — N still 6 (same data); disclosure: 2026-H1 was part of trials #1/#2 IS for other hypotheses. Default
+>    proposal (B). "OOS 표본 부족" label kept either way; no resizing after OOS opening.
+> R9 §7 (advisor 6 · Codex): add rows for ATR-scale≠execution (15m SL under 4h hold = noise-stop risk; stop-out share reported), E2E #109–111
+>    (cooling gate is timing only), carry v0.2 §1.1 rejection record and §1.2 table updated through L1–L10; the paper's clustering is not
+>    evidence of Binance reversal alpha; holding-time and per-year reporting pre-committed; no post-result filter; L9 does not waive survival.
+> R10 §12 decision list for the user (advisor 1): mark-only series · decision-close SL anchor · daily quantile · per-arm cooldown started by every
+>    qualified event · slippage ×3 both legs · floor 0.44% · two independent books forward · OI lag rule · window A/B.
+
+### advisor 원문(verbatim)
+> You're at the trial #3 before-pass (Codex running); this is the advisor half. The brief covers every stale v0.2 item the user listed and every parameter has a number and a source. What it doesn't yet do is separate *your* choices from the user's, and a few rules are still readable two ways. Numbered for the log:
+> 
+> **1. Add a §12-style decision record — the brief makes several calls v0.2 and the user never made.** Mark them [PROPOSED] in the draft with your rationale, and list them for the user before anchor (as trial #2 did): (a) all price logic on **mark** 1m — v0.2 used kline closes for r30; (b) SL anchored at the **decision-bar close** ∓ 1.5·ATR (fixed price; needs no new engine mechanism) vs v0.2's fill-anchored "entry ∓ k·ATR"; (c) quantiles recomputed **once per UTC day** from the trailing 90 full days vs per-minute trailing; (d) cooldown 12h **shared** across directions and started by events that never enter; (e) slippage ×3 on **both** legs (22 bps round trip); (f) forward activation when **both** arms pass — one process has one position, so cross-arm blocking is untested in IS; (g) OI sampled in forward via REST every 5 min and stored (backtest uses 5-min metrics; G-F rule-execution match includes the OI sampling).
+> 
+> **2. IS/OOS split is a decision, not a detail — give the user the arithmetic.** Same IS (2024-01 → 2026-06) keeps N = 6 clean but leaves ~85 OOS days; a 12h cooldown caps events at ≤ 2/day/arm → ≤ 170 per arm, and G0 needs 48 → OOS 표본 부족 is likely unless the rate holds ≥ 0.56/day. Alternative: IS → 2025-12-31, OOS 2026-01-01 → OOS_end (~270 days), N still 6 (a subset of the same data raises nothing), but OOS then overlaps windows whose trial #1/#2 results have been seen for different hypotheses. Present both; don't choose. Keep the "OOS 표본 부족" label mechanism either way.
+> 
+> **3. Validity rules change because holds cross midnight.** Trial #2 needed only 08/16 funding; here a valid day needs a complete mark grid **and** funding events at 00/08/16. Pre-commit: an event may enter only if the entry day and the day containing t_e + H are both valid (ex-post sample rule, as §1 of trial #2), plus `oi_missing` if either OI row is absent. §11 must say `prepare_t2` gains an OI raw file + prepared 5-min series under the same audit/stop rules (duplicates, malformed timestamps, off-grid).
+> 
+> **4. Pin the ATR and event mechanics so two implementers agree.** ATR_15m = SMA(14) of true range over UTC-aligned 15m buckets built from 1m mark (complete buckets only; TR uses the previous bucket close); sl_dist = 1.5·ATR/decision close; P3 mirror = decision close ± 1.5·ATR. rv5 = sample std (ddof 1) of the last 5 mark log returns; rv_peak = max rv5 over [t0−30, t]; t0 = first minute the condition holds outside cooldown. P2 = fill delayed by k bars with the t_e decision **not** re-evaluated (state it — trial #2 re-evaluated gates at the delayed time). H-bar: gap liquidation at open first, then exit at open; SL not evaluated in that bar (equivalent-or-worse to "SL 우선").
+> 
+> **5. Slippage ×3 is an engine parameter, not a number in a table.** `PaperSender.quote_fill_price` is registry #7's model and is used by the engine, trial replays *and* `placebo_exec` (P1). The 6 bps/side must be a default-off parameter reaching all of them (default 2 bps unchanged) — flag it in §11 as a shared-layer change needing the before/after passes at step 2.
+> 
+> **6. §7 non-overlap is missing three rows.** "ATR 스케일 ≠ 실행 스케일" (15m SL under a 4h hold — say why it's a noise-stop risk, not a liquidation risk under B2 at 10–30x, and that the stop-out share is reported); E2E #109–111 volatility regime (the cooling gate is timing, direction is the flush sign); and carry v0.2 §1.1/§1.2 forward verbatim with the L1–L8 rows added. Q6 answer: yes, both tables survive.
+> 
+> **7. Evaluator requirements per v1.3 §5:** verdict string = 3-class **+ survival** in one line (trial #2's convention 26 lacks it); B&H suffix only on ACCEPT; cost grid ×0.5/×1.0/×1.5 of the **22 bps** model; degenerate statistics never pass; per-arm verdicts, each with its own MDE classification.
+> 
+> **8. Report funnel to pre-register (§7-3 analogue):** `in_cooldown`, `oi_missing`, `not_cooled` (T_max), `position_busy`, `sl_dist_out_of_range` floor/ceiling, `sl_crossed_before_fill`, `sizing_rejected`/`normalization`, `time_exit`/`sl`/`liquidation` shares — denominators defined.
+> 
+> **9. Registry row draft must carry:** N = 6, α 0.008333, CI 0.41667/99.58333, the six-value SR* set with the four pinned floats, seed 20260929, the OI branch decision with commit 4585bdb, and "no returns opened".
+> 
+> **Procedure:** Codex → log both verbatim with positions → draft with [PROPOSED] + §12 list → after-pass → report (skill tree + `e8c3091`, S0 numbers, draft verbatim). No anchor, no code, no event counts from data.
+
+### Codex 원문(verbatim · task-mumfotny-4sqkx4)
+> ## Before-pass finding
+> 
+> **FIX-PLAN-FIRST.** The re-base fixes the main v0.2 conflicts on leverage, one minute cadence, cumulative N, and fixed-notional statistics. The brief still leaves rules that can change which trades occur or whether an arm passes. Those rules need to be fixed in the pre-registration before an anchor or run. I reviewed the supplied OI existence count only; I did not open market-return data or calculate from OI values.
+> 
+> ### BLOCKERs to resolve
+> 
+> 1. **OI as-of timing can introduce look-ahead.** `create_time ≤ t0` does not establish when a five minute metrics row became available. Pin the timestamp’s meaning, a causal availability cutoff, maximum permitted row age, duplicate handling, and what happens when either comparison row is missing or stale. The [S0 record](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:6389) establishes availability counts, not causal usability.
+> 
+> 2. **The event and arm state machines are ambiguous.** “Cooldown shared by both directions within an arm’s run” conflicts with arms that each have only one event direction. State whether L and S run as independent books or suppress each other; exactly which qualified, busy, or uncooled event starts the 12 hour cooldown; whether events during a cooling wait replace it; and the inclusive `T_min`/`T_max` and cooldown boundaries. Independent arms also need a precommitted forward-paper policy if both pass: two separate virtual books, or one specified arbitration rule. A pair of independent backtest verdicts does not itself define one executable one-way policy.
+> 
+> 3. **Trade timing and validity can change the sample.** Pin whether SL is anchored to the actual adverse fill, when the distance band and B2 gate are rechecked, the precise 15 minute bar included in ATR, and the order of funding, entry, liquidation, SL, and the 240 minute open exit. Define a continuous valid mark path through a cross-day hold, the treatment of missing OI and funding records, and flat starts and ends at IS, OOS, and forward boundaries. An entry and exit minute being valid does not establish that the intervening minutes are valid. Trial #2 had to specify these choices explicitly in its [rules](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30) and [implementation conventions](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions.md:23).
+> 
+> 4. **The judgement rules are incomplete.** For *each* judged arm, pin G0’s event and filled-trade denominators, `n_eff` and ρ̂ rule, G1/G2/G-B/flat and P1 comparisons, θ and MDE classification, bootstrap day assignment, zero-trade and undefined-statistic handling, stage precedence, and whether an IS-passing arm proceeds when the other fails. Reserve RNG streams for OOS as well as IS. Trial #2’s [gate and verdict definitions](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:84) cannot be inherited silently when both arms are judged and holds cross days.
+> 
+> 5. **The stated stop-floor rationale is false under the new cost model.** Twice the proposed 22 bps round-trip cost is **44 bps (0.44%)**, above the proposed **0.30%** floor. Either retain 0.30% with an explicit, different rationale and accept its cost exposure, or choose a new floor *before* measurement. The 22 bps figure is nominal: adverse tick rounding, fee bases, and funding still need exact ledger rules. Registry [#7](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:15) fixes the ordinary 2 bps per-side paper model; the proposed 6 bps per-side trial model needs an express trial-specific precommit.
+> 
+> 6. **OOS power is unsubstantiated per arm.** An anchor on **2026-09-29 UTC** would make July 1–September 28 a **90 day** OOS window; “about 85 days” comes from Trial #2. The constitution requires the OOS length to fit expected trades and `n_eff` ([research protocol §1](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:17)). The brief’s “tens–hundreds/year” is not a per-arm power case. Precommit a defensible per-arm expectation or a prospectively longer window; do not resize after seeing event counts.
+> 
+> ### Q1–Q6
+> 
+> | Question | Review |
+> |---|---|
+> | **Q1 — N and two arms** | **N = 6 is correct** on the recorded attempt history: #1 A/B, #2 A/B, then two newly judged L/S hypotheses on the same IS data. Trial #2 counted its reporting-only B in N = 4 ([registry #32–#35](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:40)); correlation or one arm later failing does not remove an attempt. N changes only if another unrecorded IS attempt exists or a further hypothesis is tried. Pin all six SR̂ inputs and the `<2 defined` failure rule. |
+> | **Q2 — daily quantiles** | Acceptable as a **new, precommitted** rule. For day `d`, specify the 90 UTC days `d−90…d−1`, exact 30 clock-minute returns, missing-value denominator, linear quantile, and no use of day `d` in its threshold. Daily recomputation is not inherently look-ahead; an improperly timed OI row would be. |
+> | **Q3 — ×3 slippage** | A defensible conservative *assumption*, not evidence that stressed entry or four-hour exit fills are covered. Use 6 bps adversely on **both** fills, with the same tick and fee mechanics in sizing, execution, P1, and G2. Keep ×0.5/×1.0/×1.5 report-only; specify whether it scales fees and slippage while actual funding remains unchanged. No grid result may replace the registered 22 bps case. |
+> | **Q4 — P1 and P4** | Cross-day P1 is permissible if each arm’s eligible starts require the **entire** sampled hold and required funding to be valid and inside its window. Pin `(sl_dist,h)` resampling, duration rounding, close at `t+h−1`, longest-first nonoverlap, 1,000 attempts, arm-specific RNG streams, and **>10 failed draws ⇒ 폐기**, following [Trial #1’s (a)–(f)](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_01_preregistration.md:98). “`h ≤ 240 + fill delay`” mixes event wait with duration **after fill**; replace it with the exact measured duration. P4 may be omitted: the constitution requires the three P1/P2/P3 layers ([§3](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:32)), not a fourth. Record that `p_evt` will not be searched after counts or returns. |
+> | **Q5 — small OOS** | **Keep Trial #2’s `REJECT(OOS 표본 부족)` mechanism**, per arm: zero trades first, then survival failure, then OOS G0 shortage, then G3 ([Trial #2 §7](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:161)). Shortage is neither a pass nor permission to extend the same trial after opening OOS. Resolve the window-power blocker above before anchoring. |
+> | **Q6 — v0.2 §1.1–§1.2** | Carry forward a concise rejection and provenance record from the [Drive v0.2 source](https://docs.google.com/document/d/1FdZMDt9cOmQEm-eBrgw31l82kZUFVWjFRxkrERL9k34/edit): seven mega-events fail G0; `@forceOrder` snapshots cannot measure 30 minute liquidation totals; multiple AND conditions risk destroying the sample; 3–5x/Kelly and `algoOrder` are not adopted. Say explicitly that the paper’s liquidation clustering is **not evidence of Binance reversal alpha**. Update §1.2’s comparison through Trial #2 L6–L8; do not carry over v0.2’s IS-count-based `p_evt` selection, N = 2, or stale dates. |
+> 
+> ### Further precommits needed
+> 
+> Define `r30` and `rv5` from closed, finite, positive mark observations at exact clock offsets; the ATR aggregation and prior close; tie handling if both event tails qualify; and whether `rv_peak` includes every bar through the current decision as written. Define the first and last admissible event/entry times, including an event whose wait or exit crosses a window boundary. Keep IS and OOS books flat at their boundary and do not read an exit beyond the window.
+> 
+> For funding, use the captured **actual** funding events that fall inside each hold, including **00:00** on cross-day positions; specify minute-bucket matching, missing/duplicate refusal, settlement before that minute’s exit check, and liquidation-price recalculation after settlement. Trial #2’s 08:00/16:00-only rule followed from its same-day exit and cannot be copied ([§1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:44)).
+> 
+> For P1, say whether eligibility uses each arm’s audited valid-day set or only valid price/funding paths; require valid intervening minutes either way. Separate retrospective data-quality exclusions from information available to the live strategy at decision time. Pin the data capture, raw and prepared hashes, runtime-rule snapshot, evaluator push evidence, and exact output/variant set before any real-data execution, following [Trial #2’s convention and provenance precedent](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions.md:36).
+> 
+> ### §7 non-overlap
+> 
+> The **hypothesis is distinct enough to register**: an OI-conditioned, 30 minute price-tail event followed by cooling and a reversal entry differs from Trial #1’s S/R levels and TSMOM filter, Trial #2’s daily continuation breakout, and E2E #74’s rolling price-extreme Donchian channel. A static check should forbid a rolling **price high/low channel**, while allowing the stated rolling *volatility* peak.
+> 
+> The distinction does **not** answer L4, L6, L7, or L8 by itself. Four hours of maximum holding does not establish gross movement above **22 bps plus funding**; both arms can lose after costs; placebo superiority alone is insufficient; and a favorable early year cannot justify a later regime filter or a longer rerun. Precommit realized holding-time and year-by-year reporting, with no post-result filter. L9 does not waive the zero-liquidation gate, and L10’s same-day P1 result does not validate the new cross-day eligibility ([learnings L1–L10](/home/cms/project/BTC_Futures_E2E/docs/learnings.md:6)).
+> 
+> **VERDICT: FIX-PLAN-FIRST**
+> 
+> Codex session ID: 01a0ec59-96b6-7f13-92b3-1214ffc1100e
+> Resume in Codex: codex resume 01a0ec59-96b6-7f13-92b3-1214ffc1100e
