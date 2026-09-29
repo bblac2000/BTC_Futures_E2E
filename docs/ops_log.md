@@ -6341,3 +6341,42 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - A: n 732 · ρ̂ −0.115 · gross +12.89 bps [−1.50, +27.83] · net −1.18 bps [−15.74, +13.57] · σ 157.8 · SR̂ −0.0075 · PSR(0) 0.420 · SR* 0.140.
 - 보고(판정에 쓰이지 않음): P1 실패 추출 0/1000(포화 없음) · P1 p95 −12.24 · P2 −3.39/−3.67 · P3 −19.69 · P4 정의 200 · p95 −2.00 · B n 472 net −0.43 · A/B 일별 대비 +0.11 [−0.83, +1.08] · B − 비수축 A +3.75 · 매수보유 일간 Sharpe 0.0248 > A −0.0066 · 청산 이유 sl 219 · time_exit 295 · tp 100 · trail 118 · 보유 중앙 392분 · 연도별 net 2024 +7.45 · 2025 −6.44 · 2026 −7.17 · 건너뜀 12/744(바닥 7 · 천장 5).
 - OOS 미개봉(IS REJECT) · 트라이얼 #1 OOS 영구 닫힘.
+
+## 2026-09-29 — 트라이얼 #2 실행·판정 **after-pass**(advisor + Codex task-muma9dg4-k9kp2c **ACCEPT-RECORD**)
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1·2 | ✅ | 판정 산술·보고 합계 일치 · P1 청산 5.2%는 설계 결과(시간 청산만 · SL 없음 · 10~30x)이지 회계 결함 아님 |
+| advisor | 3 | ✅ | report.json `buy_and_hold.is_label`은 **ACCEPT였다면 붙었을 접미어**(A 일간 Sharpe −0.0066 < 매수보유 0.0248)이지 판정이 아니다 |
+| advisor | 4 | ✅ | 교훈·헌법 기각 목록 후보는 사용자 보고에 **제안**(learnings.md·스킬 미수정 · 승인 뒤) |
+| advisor | 5 | ✅ | 메모리 갱신 |
+| advisor | 6 | ✅ | 푸시는 요청 시 |
+| Codex | — | ✅ | 순서·출처·해시(입력 1,266 · 출력 1,053 · 핀 9) 일치 · 판정 기계적 · #40의 매수보유 문구는 요약이나 뜻 정확(보고 전용) |
+
+### advisor 원문(verbatim)
+> You're at the run after-pass (Codex running); this is the advisor half. I re-derived the verdict from the numbers in your transcript and checked the report's internal consistency. No blocker on the verdict. Findings:
+> 
+> **1. Verdict arithmetic checks out.** G0: 732 ≥ 48; ρ̂ = −0.115 → floor 0.15 → n_eff = 732/1.6 = 457.5 ≥ 30 ✓. G1: gross CI_lo −1.50 < 0 ✗. G2/flat: mean net −1.18 ✗. G-B: PSR(0) 0.420 ≤ 0.5 ✗. MDE = (2.2414 + 0.8416)·157.8/√457.5 = 22.74 ✓ > 20 → 검정력 부족. String matches convention 26. Placebos correctly unjudged at priority 3.
+> 
+> **2. Report ties out — no anomaly.** Exits 219+295+100+118 = 732; directions 360+372; skips 732+12 = 744; V_A 910 = 912−2, V_B 890 = 910−20 — exactly §5's gap arithmetic; P1 exits 38,401+693,599 = 732×1000; gross−net = 14.07 ≈ §2's 14 bps + funding. P1's 5.2% liquidation rate is a design consequence (time-exit only, no SL, at 10–30x), not an accounting fault — say so in the report.
+> 
+> **3. One wording trap in report.json.** `buy_and_hold.is_label` literally reads `"ACCEPT — 수동(매수보유)을 이기지는 못함"` under a REJECT verdict. Registry #40 paraphrased it correctly; in the user report present it as the Sharpe comparison (A −0.0066 < B&H 0.0248 → the suffix *would* have applied), never as a label. One ops_log line noting the field is the would-be label.
+> 
+> **4. Missing follow-through — CLAUDE.md/memory require it after a REJECT.** Trial #1 produced L1–L5 in `docs/learnings.md` plus constitution rejected-findings rows (proposed in the report, skill never edited). Trial #2 owes the same. Candidates from the artifacts, for the user's approval: (a) daily 0.5·R breakout with SL = O_d — gross +12.9 bps ≈ cost, net ≈ 0; (b) beat all four placebos yet failed every edge gate — placebo-robustness ≠ edge; (c) year drift 2024 +7.5 → 2025/26 ≈ −7; (d) SL = O_d gave 0 liquidations at 10–30x while SL-less P1 liquidated 5.2% — the survival design worked; (e) P1 placement did not saturate (0/1000). Propose, don't write the constitution.
+> 
+> **5. Update `trial02-status.md`** — it still says "next = evaluator push checkpoint". New state: IS REJECT (#40), OOS never opened for this trial, learnings/constitution proposal pending, docs commits unpushed.
+> 
+> **6. Seven docs commits (#38…#40) are unpushed.** Push only on request — ask in the report; secret-scan again if approved. Do not propose trial #3.
+> 
+> **Sequence:** Codex verdict → log both verbatim with positions → item 3 line + item 5 → commit → report. Report (≤100-char bullets): verdict + priority; five gates with numbers; survival; MDE; placebos as information; P1 no saturation; B&H comparison; year drift; OOS closed; proposed learnings for approval; push question.
+
+### Codex 원문(verbatim · task-muma9dg4-k9kp2c)
+> **The IS record is consistent with the preregistered order and verdict.** Registry #38 records H pushed at 05:16:14Z, before prepare began at 05:16:42Z. The pins commit precedes verify. All 218 record files are accounted for; the 216 stage records have consistent heads and provenance. All 1,266 evaluation input hashes, 1,053 recorded output hashes, nine data pins, and the report and verdict hashes match.
+> 
+> Under [prereg §7 and §7-2](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:151), A has no liquidation and G0 passes, while G1, G2, G-B, and flat fail. That selects priority 3. The [report](/home/cms/project/BTC_Futures_E2E/var/backtest/t2/IS/evaluation/report.json:327) gives MDE **22.743 bps > 20**, so `REJECT(§7-2: 검정력 부족)` follows mechanically; `placebo_rejects` is empty. The trade totals and known two-minute data gap reconcile with the artifacts.
+> 
+> [Registry #40](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:48) abbreviates the buy-and-hold label instead of quoting the report’s conditional `ACCEPT — …` string exactly. Its meaning is accurate, it is report-only, and it does not affect the recorded REJECT.
+> 
+> VERDICT: ACCEPT-RECORD
+> 
+> Codex session ID: 01a0ebce-715f-7e41-834f-2a53a779177d
+> Resume in Codex: codex resume 01a0ebce-715f-7e41-834f-2a53a779177d
