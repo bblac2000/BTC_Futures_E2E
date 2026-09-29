@@ -6793,3 +6793,323 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 내려받은 사본 `cmp` = 커밋 4cd51b2 판 바이트 동일 · 36,450 bytes · SHA256 `9b8d2cdf…` · Drive md5 `4911a64e…` = 로컬.
 - `OOS_end = 2026-09-28T23:59:59.999Z`(271일 · 기계적). tf_v1 = §1 표 20~39행 SHA256 `ae58c8a0…`.
 - 다음: 단계 2 구현 before-pass(advisor + Codex) → 판정을 사용자에게 보고 → 사용자 확인 전 (a)~(f) 착수 없음.
+
+## 2026-09-29 — 트라이얼 #3 **단계 2(구현) before-pass**(advisor + Codex task-mumhco26-r03krx FIX-PLAN-FIRST → r2 task-mumhj6mb-ud19lx FIX-PLAN-FIRST → r3 task-mumhn9pb-1xqso6 FIX-PLAN-FIRST → r4 task-mumhp9wv-inqqix **PROCEED**)
+- 코드 없음 · 실데이터 없음. 계획 r1(요지)→r4 원문은 아래. 사용자가 판정을 본 뒤에만 (a)~(f) 착수.
+
+### 항목별 입장(Claude Code)
+| 출처 | # | 입장 | 반영(계획 r2~r4) |
+|---|---|---|---|
+| advisor | 1 비용 격자 기준 | ✅ | S4: net 분모의 scalable_cost_bps · net_k = net + (1−k)·cost · 청산 수수료·펀딩 불변 |
+| advisor | 2 청산 다리 슬리피지 | ✅ 확인 | 청산 체결도 sender.send_market(engine.py:668) · (b) 첫 테스트 = 10 + 12 bps |
+| advisor | 3 가져오기(수정 금지) | ✅ | S6: *_t2.py 무수정 · range 매개 함수만 import · ops_log 기록 |
+| advisor | 4 OOS 가드 3면 | ✅ | S7: 범위 고정 · 로더 단언 · var/t3/ 전용 · t3_s0·var/backtest 입력 금지 |
+| advisor | 5 구조적 사실(쿨다운 720 > 366) | ✅ | S2/S2': position_busy·entry_refused 0 단언 · 훅 술어 엄격 |
+| advisor | 6 P3 방향 | ✅ | S11 |
+| advisor | 7 비트맵 공유·주입 | ✅ | S10 |
+| advisor | 8 누락 규약 | ✅ | S12 체크리스트에 전부 |
+| advisor | 9 자정 넘는 펀딩 | ✅ | S9 테스트 3종 |
+| advisor | 10 성능 | ✅ | 접두합 |
+| advisor | 11 순서 | ✅ | 이 기록 → 사용자 보고 → 대기 |
+| Codex | 1 단계 순서(판정기 푸시 전 실캡처 금지) | ✅ | S1 |
+| Codex | 2 P2 사전 훅 | ◐ 부분 | 새 훅 대신 구조적 사실(advisor 5) + 전략의 명시 busy 검사 + 0 단언(S2') — Codex r2·r4 수용 |
+| Codex | 3 트라이얼 #3 출처 사슬 | ✅ | S3 t3_provenance/t3_stages |
+| Codex | 4 비용 격자 항등식 | ✅ | S4(advisor 1과 같음) |
+| Codex | 5 OOS 진입점 분리 | ✅ | S7 · OOS 진입점은 날짜 있는 레지스트리 행 id 없이는 거부 |
+| Codex | 6 시계·결정 시점 sl_dist | ✅ | S8 |
+| Codex | 7 깔때기·적격 구분 | ✅ | S10 |
+| Codex | 8 시간 청산 일정 | ✅ | S9 |
+| Codex | 9 규약 행 | ✅ | S12 |
+| Codex | 10 헤더 상태 | ✅ | S13 파일 무수정 · #50이 상태 권위 |
+| Codex r2 | P1 튜플 시드 | ✅ | S6': p1_core 무수정 · SeedSequence 튜플 엔트로피 · 동일성 테스트 |
+| Codex r3 | has_position은 속성 | ✅ | r4 |
+
+### 계획 r1(브리프) 원문
+> # Trial #3 (T-FLUSH) step 2 — implementation BEFORE-PASS brief (no code yet)
+> 
+> Anchored 2026-09-29: registry #50 (Drive createdTime 2026-09-29T09:31:46.486Z · doc SHA256 9b8d2cdf… · tf_v1 = §1 table lines 20–39 = ae58c8a0…),
+> decisions #47 (+#49 hash correction), rules snapshot #48 (parsed values identical to #36). Window (B): IS 2024-01-01→2025-12-31, OOS 2026-01-01→2026-09-28 (CLOSED).
+> Spec = docs/trials/trial_03_preregistration.md (§1 rules, §3/§3-1 gates+evaluator, §4 placebos, §4-1 staging, §5 data, §7 verdicts, §11 implementation list).
+> User order: (a) data prep incl. OI · (b) PaperSender slippage parameter (shared layer, own before/after pass) · (c) time-exit hook at fill+240 ·
+> (d) strategies/trial03 state machine + P2/P3 variants + rolling-channel static check · (e) P1 cross-day eligibility, per-arm streams ·
+> (f) evaluator. Test-first, stop-and-report after each. Implementation-convention registry row before any P&L. Evaluator committed+pushed
+> before any run. IS outputs opened together per arm. OOS closed.
+> 
+> ## Plan per step (what exists vs what is new)
+> 0 anchor module strategies/trial03/anchor.py: own constants (createdTime, Drive id, doc SHA, tf_v1 SHA+line range, window B ms, OOS_end,
+>   N=6, seed, pinned SR̂ #1A/#1B/#2A/#2B + report SHAs, rules-snapshot SHAs #48). Imports nothing from trial01/02 anchors. Test: file SHA
+>   and tf_v1 SHA recomputed from the committed doc equal the constants.
+> (a) backtest/prepare_t3.py (new; prepare_t2 imports the trial02 anchor so it cannot be reused as-is — factor or copy with PROVENANCE-style
+>   note in ops_log): mark 1m + kline 1m + funding REST for [2023-10-02 00:00Z, 2025-12-31 23:59Z]; OI from binance.vision daily metrics zips
+>   for the same range, raw kept + hashed; audit/stop rules §5 (duplicate create_time with different values → stop; identical → merge;
+>   non-5-min boundary or unparsable → stop); manifest, data pins row, verify. HARD GUARD: no input row/bar/funding/OI ≥ 2026-01-01 00:00Z
+>   is read (OOS closed). NOTE: var/t3_s0/metrics already holds zips through 2026-06-30 (S0 counts only) and var/backtest holds trial #2
+>   mark data through 2026-06-30 — both contain OOS-period data for trial #3; prepare_t3 must capture fresh and must filter by range
+>   before parsing values; the S0 directory is not an input.
+> (b) PaperSender already has `slippage_rate` (default PAPER_SLIPPAGE_RATE 2 bps, #7). New: plumb an explicit keyword through
+>   backtest/engine_replay.replay() and backtest/placebo_exec (sizing_decision, run_time_exit, p1_null_distribution); default = unchanged
+>   2 bps; golden tests that trial #1/#2 paths are byte-identical; trial #3 passes Decimal("0.0006"). Own before/after pass.
+> (c) Existing replay hook `exit_at_bar_open(bar)` (trial #2 23:59: funding → assert no pending entry → open-gap liquidation → TIME_EXIT at
+>   open → bar_events → skip on_bar → call on_minute_closed). Trial #3 strategy returns True at fill_minute+240. Argument: no pending entry
+>   can exist at that bar (one position per arm; events during a position are position_busy; T_min 20 means no intent at the hook minute).
+>   Need: the strategy must know the fill minute (from ctx.bar_events FILL). Possibly zero engine change.
+> (d) strategies/trial03/: per-arm state machine (§1): daily quantile at 00:00 from d−90..d−1 (99% of 129,600 defined), r30 on mark closes,
+>   OI_now/OI_prev with +5 min availability and ≤10 min age, cooldown 12h per arm started by every qualified event, cooling (T_min 20, rv5
+>   ddof1 ≤ 0.5·rv_peak over [t0−30, t_e], T_max 120), decision gate at t_e close: ATR_15m (14 complete 15-min buckets ending ≤ T), SL=m∓1.5ATR,
+>   sl_dist band [0.44%, 5%], decision-time B2 gate via canonical size_entry(m, SL, E_ref) → EntryIntent(sl fixed price). Engine re-sizes at fill
+>   (existing). Admissibility (future-dependent: complete mark days over [t0−270, t0+366], funding validity on [t0, t0+366]) is INJECTED by the
+>   harness from the prepared validity (as trial #2 injected V), never computed from future bars inside the strategy. Variants whitelist:
+>   base, P2(+1,+5: no re-decision; fill at t_e+k+1 open if book flat, else position_busy), P3 (reverse fill direction; SL = mirror about m).
+>   Static check: no rolling price max/min channel in strategies/trial03 (rv_peak rolling volatility max explicitly allowed by name).
+> (e) backtest/p1_t3.py: (a)–(f) conventions with cross-day eligibility: t eligible iff [t, t+h−1] lies in complete mark days inside the window
+>   and every 00/08/16 funding boundary inside has a validated funding; streams L SeedSequence((20260929,2)).spawn(1000), S (20260929,3);
+>   slippage 6 bps; time exit; failures >10 → 폐기.
+> (f) backtest/evaluate_t3.py + verdict_t3.py: two arms; per arm G0/G1/G2/G-B/flat/survival/P1/P2/P3; CI 99.1667% (0.41667/99.58333);
+>   bootstrap streams SeedSequence((20260929,1)).spawn(8) IS k0–3; SR* over defined of 6 values, n_trials 6; V recomputed from prepared inputs
+>   and compared to each run's record; verdict string `L: … | S: …` with survival; B&H suffix ACCEPT-only; cost grid report-only.
+>   Provenance chain reused from t2_provenance (push-first H, fingerprint, verify receipt, exact outputs).
+> 
+> ## Risks / questions for reviewers
+> R1 P3 decision-time B2 gate: §4 says judgment in the original direction, fill direction reversed. Proposal: decision-time gate uses the
+>    ORIGINAL direction+SL (it is part of 판정); fill-time re-sizing uses the mirrored SL and reversed side. Pre-commit as convention?
+> R2 Cost grid formula (report-only): proposal — per trade record fee_bps and slippage_bps (entry+exit, vs mark) separately;
+>    net_k = gross − k·(fee_bps + slip_bps) − funding_bps, k ∈ {0.5, 1.0, 1.5}; assert net_1.0 == recorded net_bps within Decimal exactness.
+>    Liquidation trades: fee component = liquidation fee? Proposal: liquidation fee is NOT scaled (it is not fee+slippage of a fill).
+> R3 gross_bps on liquidation = mark→estimated liquidation price (§3-1). Fine?
+> R4 Admissibility injection: harness computes per-arm admissible t0 set? Admissibility depends only on t0 (not arm) → one set of
+>    admissible minutes (bitmap) shared by both arms and all variants; strategy checks membership. OK?
+> R5 OOS guard: how strong? Proposal: prepare_t3 refuses any range end > 2025-12-31T23:59:59.999Z; loaders assert max ts; evaluator refuses
+>    OOS inputs (OOS functions pre-committed but not callable without a user-dated registry row id).
+> R6 E_ref reset per entry + N_stat ledger (reuse trial #2 sizing_capital).
+> R7 Performance: daily quantile over 129,600 floats × ~730 days; OI lookups; P1 1000 draws × 2 arms with cross-day eligibility (prefix sums
+>    over complete-day and funding-valid masks). Memory: trial #2 used ~2.35 GB/child for ~2.5y+21d; trial #3 is ~2.25y + 91d warm-up.
+> R8 Funding at boundary-minute fill: engine settles funding before fill in the same minute → a position filled in the boundary minute does
+>    not pay (matches §1). Holds crossing 00:00 pay the 00:00 funding (trial #2 never held across midnight — first exercise of that path).
+> R9 Two arms = two independent replays (separate engines) per variant — no shared state.
+> R10 What must be pre-committed in the conventions row before any P&L (list candidates): quantile index convention (which minutes of d−90..d−1,
+>    r30 at minute t uses t−30 of the previous day ok), OI parse (create_time format, timezone), rv5 window exact minutes, ATR bucket
+>    alignment, admissible bitmap construction, P2 queue semantics, P3 gate direction (R1), cost grid (R2), liquidation gross (R3),
+>    B&H series, output schema/CLI, provenance chain, V equality check, degenerate stats rules, overflow = refuse.
+> R11 Reuse vs copy: prepare_t2/p1_t2/evaluate_t2/verdict_t2 are trial-#2-pinned artifacts (H = 63c1760). Proposal: do NOT modify them;
+>    trial #3 modules are new files that import only generic helpers (stats_t2 functions, placebo_exec, engine_replay). Any shared-helper
+>    change → golden test proving trial #2 outputs unchanged.
+
+### advisor 원문(verbatim)
+> This is the advisor half of the step-2 before-pass. I read the brief against the anchored r3 (`9b8d2cdf…`) and the code you inspected. Overall the plan is faithful; nothing in it contradicts the anchored text. Findings numbered for the log, blocking ones first.
+> 
+> **1. BLOCKER — R2 cost-grid formula will fail its own assertion; fix the basis before it becomes a convention.** `gross_bps` is mark→mark on the entry-bar mark basis; `net_bps` is Δwallet on the `qty × fill_entry` basis (§1 통계 원장). Those bases differ by the 6 bps fill offset, so `gross − (fee+slip) − funding ≠ net` exactly. Define the grid *from* net so ×1.0 reproduces it by construction: record per trade `cost_bps = fee_bps + slip_bps` on the net basis (qty × fill_entry), then `net_k = net_bps + (1 − k)·cost_bps`, k ∈ {0.5, 1.0, 1.5}; funding untouched. Liquidation trades: `cost_bps` = entry-leg fee+slip only (no exit fill, liquidation fee not scaled). Test: verdict object is bit-identical with the grid removed (report-only).
+> 
+> **2. BLOCKER — verify slippage reaches the exit legs, not just entry.** §2 says both fills. Confirm `Engine` routes SL fills (worse of SL/open) and `TIME_EXIT` through `PaperSender.quote_fill_price` with the same `slippage_rate`, and that liquidation does not. If any exit leg bypasses the sender, 22 bps is not what the engine charges. This is the first thing (b)'s test should assert: a synthetic round trip at 6 bps costs exactly 10 + 12 bps before funding.
+> 
+> **3. MAJOR — R11: import, don't factor.** `prepare_t2.py` is pinned under trial #2's H. Its functions that take explicit `(start_ms, end_ms)` (`capture`, `read_archive_rows`, `analyze(expect_range)`, `build(expect_range)`, `verify_manifest`) are reusable as-is; only `window_range()` reads the trial02 anchor. `prepare_t3.py` imports those and supplies its own range + the OI path. Zero edits to any `*_t2.py`. Same rule for `p1_t2`/`evaluate_t2`/`verdict_t2`: new files, import generic helpers (`stats_t2`, `placebo_exec`, `engine_replay`). Any shared-helper signature change (only `placebo_exec` for the slippage kwarg) needs a golden test that trial #2's committed outputs are byte-identical. Don't call this "PROVENANCE" — that header is for E2E copies; an ops_log entry is the right record.
+> 
+> **4. MAJOR — OOS guard has three surfaces, not one.** (i) `prepare_t3` refuses `end_ms > 2025-12-31T23:59:59.999Z` and its captures/filters are range-bounded before value parsing (you have this). (ii) Every loader (`load_prepared_pinned`, OI loader, funding loader) asserts `max(ts) ≤ IS_END` — a second independent check. (iii) `var/t3_s0/metrics` and `var/backtest` (trial #2 mark data) both hold 2026 data; make `prepare_t3` write to a new `var/t3/` and take the OI zips from a fresh range-limited capture, not from `var/t3_s0`. Record in the conventions row that S0's directory is not an input.
+> 
+> **5. Structural fact that simplifies (c) and P2 — assert it, don't implement around it.** Cooldown = 720 min starts at every qualified event; the longest possible span from t0 to exit is 120 + 1 + 240 = 361 min (P2+5: 366). So no qualified event can occur while a position is open: `position_busy` is unreachable in base, P2 and P3 alike, and no pending entry can exist at the fill+240 hook bar. Keep the spec's `position_busy` branch (it's anchored), but add a test that the count is 0 and a harness assertion that flags >0 as a bug. Your hook argument is airtight for the same reason. Make the hook predicate strictly `position_open ∧ bar.open_ms == fill_open_ms + 240·60_000` and test the SL-closed-early case returns False. Also assert `open_at_end is None` for every run (§1 span end ≤ window end guarantees it).
+> 
+> **6. R1 — agree: decision-time gate in the original direction, fill re-size reversed.** §4 "판정은 원 방향으로". Because SL is a fixed price about `m` in trial #3, P3 needs no `SlFromFill`: emit `EntryIntent(direction=reversed, sl=m ± 1.5·ATR)`. Simpler than trial #2 — say so in the conventions row so a reviewer doesn't look for the trial #2 mechanism.
+> 
+> **7. R4 — agree: one admissible-t0 bitmap shared by both arms and all variants.** Admissibility depends only on t0. The strategy checks membership; the harness computes it from prepared validity (complete-day mask + funding-boundary mask). Also inject the complete-day mask itself: V needs "d is a complete mark day", which is future-dependent within d. Quantile validity (99% of d−90..d−1 defined) is causal and stays inside the strategy. Convention: state which is injected and which is computed, and that the evaluator recomputes both from prepared inputs (counts of defined r30 only — no r30 values).
+> 
+> **8. Conventions the brief's R10 list is missing** (each is a two-implementer fork):
+> - **CI percentiles exact**: code uses `α = 0.05/6`, `lo = α/2 = 1/240`, `hi = 1 − 1/240`; the spec's "0.41667 / 99.58333" are rounded displays. `stats_t2.valid_day_bootstrap_mean(level=1 − 0.05/6)`.
+> - **SL price rounding**: `m ∓ 1.5·ATR` is not tick-aligned. Pre-commit: engine SL = HALF_UP to tick (§1 "가격 HALF_UP"); `sl_dist` for the band check = `1.5·ATR/m` as written (unrounded).
+> - **r30/rv5 numeric path**: Decimal closes → float64 → `math.log`; quantile via `numpy.quantile(..., method="linear")`; tail compare in float64. ATR in Decimal (it produces a price).
+> - **Quantile trigger**: computed when the 23:59 bar of d−1 closes (= 00:00 of d), before the first bar of d is judged; "≥ 99%" means `defined ≥ ceil(0.99 × 129,600) = 128,304`.
+> - **OI row identity**: by `create_time` only, regardless of which daily file; duplicate rule applies across files; availability = `create_time + 5 min` (exact ms); age compared at bar-close ms.
+> - **Warm-up**: strategy receives bars from 2023-10-02 for state only; no event, skip, or funnel entry before `IS_START`; funnel denominator = window bar closes only.
+> - **Cooldown boundary**: `t ≥ cooldown_end` allowed (끝 제외).
+> - **Funding source for admissibility**: the validated REST set from prepare; a boundary with no validated record → `not_admissible` for every t0 whose [t0, t0+366] contains it.
+> - **Per-arm engines**: two `replay()` calls per variant, no shared object; 8 base/variant subprocesses + 2 P1.
+> - **Output schema + CLI** per arm, exact-outputs set for provenance (as #37's item 16).
+> 
+> **9. R8 — agree, and name it as the first exercise of the across-midnight funding path.** Trial #2 never held past 23:59. Test: a synthetic hold across 00:00 pays exactly one funding at the 00:00 bar's step ①; a fill at the 08:00 bar's open pays nothing at 08:00; a time-exit at the 16:00 bar pays 16:00 before exiting.
+> 
+> **10. R7 — fine.** Prefix sums over the complete-day and funding-valid masks make P1 eligibility O(1) per candidate t; the 1,000-draw budget per slot is the trial #1 rule, keep it.
+> 
+> **11. Sequence after Codex lands:** log both verbatim with a positions table → if FIX-PLAN-FIRST, brief r2 + narrow re-check → PROCEED → commit → report to the user. The user's instruction is explicit: they must *see* the verdict before (a) starts. Report in this order: createdTime `2026-09-29T09:31:46.486Z` (two sources agree, bytes identical), pushed HEAD `8ca3b07`, the rclone shared-client_id notice (non-blocking), then the before-pass verdict and the conventions candidates. Then stop. No `prepare_t3.py`, no test file, until they reply.
+> 
+> Nothing here reopens an anchored value. Items 1–4 change what you build; 5–10 are conventions to pre-commit in the registry row before any P&L.
+
+### Codex 원문(verbatim · task-mumhco26-r03krx)
+> I verified the committed document SHA256 and the §1 table SHA256 against registry #50. This was a read-only review; I did not open market returns or OI values or run a backtest.
+> 
+> 1. **BLOCKER — The proposed data-prep order conflicts with the anchored staging order.** [§4-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:99) requires the evaluator to be committed and pushed **before data capture**. The brief puts data prep first. Implement and test `prepare_t3.py` first if desired, but move its real capture, audit, manifest, pins, and verify run after the complete evaluator and execution code are frozen and pushed. Record that distinction in the step plan.
+> 
+> 2. **BLOCKER — P2 cannot be implemented exactly through the current close-only strategy interface.** P2 must test whether the book is flat **at the delayed fill bar’s open**. [replay()](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:77) accepts an intent only after the preceding bar closes, while [Engine.request_entry()](/home/cms/project/BTC_Futures_E2E/paper/engine.py:204) refuses it if a position exists then. A position could close at the target open. Add a narrowly scoped pre-bar P2 hook that checks the book and submits the saved intent at that open, after funding and before the normal bar evaluation. Test that boundary case, plus occupied and empty target opens. Keep the original decision gate and fixed SL; only fill-time B2 is rerun.
+> 
+> 3. **BLOCKER — Trial #2 provenance cannot simply be “reused.”** [t2_provenance.py](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:17) hardcodes Trial #2 pins, evaluator files, and fingerprint files; [t2_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:32) hardcodes its runs and outputs. Create Trial #3 specific provenance and stage definitions, or parameterize the generic machinery while leaving the Trial #2 contract byte identical. Freeze the **full** Trial #3 dependency fingerprint, exact output inventory for both arms and their P1 parts, evaluator commit H, pushed pins, and verify receipt before results are opened. The brief names the chain but omits the required Trial #3 stage implementation.
+> 
+> 4. **MAJOR — The proposed cost-grid identity is generally false.** [gross_bps and net_bps](/home/cms/project/BTC_Futures_E2E/backtest/returns.py:27) have different entry denominators: mark open versus actual entry fill. Consequently `gross − fee − slip − funding` need not equal recorded net at ×1, even with exact Decimal arithmetic. Precommit an exact ledger decomposition, including the denominator residual, or define `net_k = recorded_net_1 + (1−k) × scalable_cost_bps` with scalable costs expressed on the recorded net denominator. Treat liquidation separately: it has no exit fill, and the liquidation fee remains unscaled. Assert the ×1 identity for normal and liquidated trades before P&L.
+> 
+> 5. **MAJOR — The OOS guard needs to separate today’s IS-only entrypoint from later authorized OOS use.** An unconditional `prepare_t3` refusal of every end date after 2025 would prevent the anchored OOS stage. Make the present capture and loaders IS-only, with exact range assertions and no route to existing Trial #2 or S0 files. Define a separate OOS entrypoint that remains gated until the user’s post-IS decision and a dated registry row. Select source files and bound REST requests by the permitted range **before parsing price or OI fields**; Trial #2’s archive reader currently opens broad year files and filters rows afterward ([prepare_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:89), [data.py](/home/cms/project/BTC_Futures_E2E/backtest/data.py:103)). Tests should use synthetic fixtures.
+> 
+> 6. **MAJOR — Clock conventions and the P1 `sl_dist` source must be fixed before runs.** [§1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:23) distinguishes a bar’s open timestamp, its close decision time, and OI availability. [ReplayContext.now_ms](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:125) is the last millisecond of a bar, whereas the anchored decision time is the next exact minute boundary. Define one conversion and use that boundary consistently for r30, OI `c+5`, the 30-minute OI comparison, cooling, and intent timing. Also emit **decision-time** `sl_dist` explicitly: replay’s existing trade field is the [post-fill distance](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:101), which can differ and must not silently become P1’s source pair.
+> 
+> 7. **MAJOR — Preserve the anchored funnel and validity distinctions.** The first-failure order is `quantile_invalid → no_tail → not_admissible → in_cooldown → oi_missing → oi_not_decreasing`, followed by the entry funnel ([§7-3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:148)). Missing or nondecreasing OI must never start cooldown. A future-completeness bitmap may be injected into historical strategy runs because [§1 explicitly specifies it](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:35); do not derive it from future bars inside the strategy or use that historical rule for forward paper. Base, P2, and P3 share the event bitmap. **P1 has its distinct cross-day eligible-minute rule** in [§4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:92).
+> 
+> 8. **MAJOR — Make time-exit scheduling conditional on a live filled position.** The existing hook skips `Engine.on_bar` and forbids a new intent on every hook bar ([engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:87)). Track `EntryFilled`, schedule fill minute +240, and clear the schedule on any earlier `PositionClosed`. Test funding at 00:00, an open-gap liquidation, and a position stopped before its scheduled exit. The brief’s assertion that no pending entry can exist at a hook minute is insufficient without these state transitions.
+> 
+> 9. **MAJOR — Specify the remaining Trial #3 evaluation and source checks in the convention row.** Commit the exact 90-day sample indexing and 99% threshold; `rv5` and `rv_peak` behavior with undefined inputs; 15-minute ATR bucket alignment and 225-minute requirement; OI UTC parsing, deduplication, age and availability; bitmap endpoints; P1 cross-day minute ordering and funding checks; P2 queue behavior; P3 gate direction; cost-grid and liquidation decomposition; B&H daily series; zero-trade and degenerate statistics; both-arm output schema; and refusal on actual float64 overflow. The evaluator must independently recompute V, reject trades outside V and incomplete inventories, use the eight specified bootstrap streams, and apply [§7’s priority order](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:123). Register these conventions **before any real-data P&L**.
+> 
+> 10. **MINOR — The anchored file’s opening “draft” status is stale.** Its bytes correctly match registry #50; [the header](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:3) predates anchoring. Leave the anchored file untouched and cite registry #50 as the status authority.
+> 
+> ### R1–R11
+> 
+> | Question | Review answer |
+> |---|---|
+> | R1 | **Yes.** P3’s decision-time B2 gate uses the original direction and original SL; fill-time B2 uses the reversed direction and SL mirrored about decision mark `m`. Record this convention. |
+> | R2 | **Revise.** The stated formula fails the ×1 identity because gross and net have different denominators. Use the exact decomposition in finding 4; do not scale liquidation fee. |
+> | R3 | **Yes.** Liquidation gross uses mark entry to the estimated liquidation price, as [§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:82) specifies. |
+> | R4 | **Yes for base/P2/P3**, shared across arms because admissibility depends on `t0`. P1 uses its separate duration-dependent eligible-minute set. |
+> | R5 | Use an IS-only guarded entrypoint now and a separately gated OOS entrypoint later. Refuse wrong ranges and out-of-range parsed inputs. |
+> | R6 | **Yes.** Reset execution wallet on each successful fill using `sizing_capital`; keep the separate fixed `N_stat` ledger. [Engine already resets on fill](/home/cms/project/BTC_Futures_E2E/paper/engine.py:494). |
+> | R7 | Cache each day’s quantile and OI lookup indices; use prefix counts for P1 eligibility. Profile only synthetic data before P&L. Memory estimates are planning assumptions, not a rule change. |
+> | R8 | **Yes.** Replay settles boundary funding before that minute’s fill. Test a hold crossing 00:00 and a fill at 00:00. |
+> | R9 | **Yes.** Use separate engine and wallet state for L and S in every variant; their G-B calculation alone shares realized Sharpe inputs. |
+> | R10 | Finding 9 is the minimum convention-row checklist; include exact CLI, inventory, fingerprint and pins/receipt fields. |
+> | R11 | **Yes.** Keep Trial #2 pinned modules unchanged. New Trial #3 modules may import generic helpers. Any shared-helper change needs a before/after Trial #1/#2 byte comparison; note that [p1_core’s RNG](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:77) presently accepts an integer seed, so Trial #3’s tuple streams require a Trial #3 wrapper or backward-compatible extension. |
+> 
+> **VERDICT: FIX-PLAN-FIRST.** The staging order, P2 execution point, Trial #3 provenance implementation, and exact cost-grid accounting need explicit corrections before Step 2 proceeds.
+> 
+> Codex session ID: 01a0ec84-313d-7583-a165-bbb366f96be1
+> Resume in Codex: codex resume 01a0ec84-313d-7583-a165-bbb366f96be1
+
+### 계획 r2 원문
+> # Trial #3 step 2 — plan r2 (resolutions of the before-pass: advisor 1–11 + Codex task-mumhco26-r03krx 1–10, R1–R11)
+> 
+> S1 STAGING (Codex 1): code-and-test order (a)–(f) as the user listed, all on SYNTHETIC fixtures; then (g) trial-#3 provenance/stages;
+>    then conventions registry row; then after-pass; then evaluator + all execution code frozen, committed, pushed (H) → ONLY THEN the real
+>    capture/audit/manifest/pins/verify (§4-1 step 4) → IS runs → evaluator once. No real-data read of price/OI values before H is pushed.
+> S2 P2 (Codex 2 vs advisor 5): no new pre-bar hook. Structural fact: cooldown 720 min starts at every qualified event; max t0→exit span is
+>    120+1+240 = 361 min (P2+5: 366) < 720 ⇒ no qualified event can occur while a position is open or pending, and the book is always flat at
+>    the delayed fill open. The P2 intent is submitted at the close of bar t_e+k (fills at t_e+k+1 open) through the normal path; the anchored
+>    position_busy branch stays (as a recorded skip if request_entry refuses), plus a harness assertion: position_busy count > 0 in any run
+>    ⇒ run fails as a bug. Tests: synthetic sequences proving position_busy = 0 under base/P2(+1,+5)/P3, and the refusal branch on a forced
+>    fixture (cooldown shortened in a test-only config) records position_busy.
+> S3 PROVENANCE (Codex 3): new backtest/t3_provenance.py + t3_stages.py (trial-#3 pins, evaluator file list, full dependency fingerprint,
+>    exact output inventory for L and S × {base, P2+1, P2+5, P3} + P1 parts, verify receipt, H push preflight). t2_* files untouched.
+> S4 COST GRID (advisor 1 = Codex 4): record per trade scalable_cost_bps = (entry fee + entry slippage + exit fee + exit slippage) in USDT
+>    divided by (qty × fill_entry) × 1e4 (the net denominator); net_k = net_bps + (1 − k)·scalable_cost_bps, k ∈ {0.5, 1.0, 1.5}; funding and
+>    liquidation fee never scaled; liquidation trades: entry leg only. Tests: ×1.0 reproduces recorded net exactly (normal + liquidated);
+>    verdict object identical with the grid removed.
+> S5 SLIPPAGE (advisor 2): exits already go through sender.send_market (engine.py:668). (b) test: synthetic round trip at 6 bps costs
+>    exactly 10 bps fees + 12 bps slippage (± tick rounding) before funding; liquidation not via sender. Default 2 bps paths byte-identical
+>    (trial #1/#2 golden). placebo_exec gets an explicit slippage kwarg, default unchanged.
+> S6 IMPORT, DON'T FACTOR (advisor 3, Codex R11): prepare_t3 imports range-parameterised prepare_t2 functions only; no edits to *_t2.py;
+>    p1_core RNG takes int seeds → trial-#3 wrapper builds Generators from SeedSequence tuples (no p1_core change). ops_log records reuse.
+> S7 OOS GUARD (advisor 4, Codex 5): IS-only entrypoint now: range fixed to [2023-10-02 00:00Z, 2025-12-31 23:59:59.999Z]; file selection by
+>    filename date and REST requests bounded BEFORE any field is parsed (no broad year files); every loader asserts min/max ts; output dir
+>    var/t3/ only; var/t3_s0 and var/backtest are never inputs (asserted by path check). OOS entrypoint defined but refuses to run without a
+>    user-dated registry row id argument that exists in trial_registry.md.
+> S8 CLOCKS (Codex 6): T(bar) = open_ms + 60,000 exact for all causal comparisons (r30 pairing, OI c+5min availability and ≤10-min age,
+>    30-min OI comparison at T−30min, cooling durations, cooldown_end, quantile trigger at 00:00 = close of d−1's 23:59 bar); never
+>    ReplayContext.now_ms (last ms). Decision-time sl_dist and SL price recorded in the trade record; P1 source pairs use decision-time
+>    sl_dist (never the post-fill distance field).
+> S9 HOOK (Codex 8, advisor 5): time-exit schedule set on EntryFilled (fill_open_ms + 240 min), cleared on any earlier PositionClosed;
+>    predicate = position open ∧ bar.open_ms == scheduled. Tests: hold across 00:00 pays 00:00 funding once; fill at 08:00 open pays nothing;
+>    exit at 16:00 pays 16:00 first; open-gap liquidation on the hook bar; SL-closed-early ⇒ predicate False; open_at_end is None in every run.
+> S10 FUNNELS / BITMAPS (Codex 7, advisor 7): injected = (i) admissible-t0 bitmap (complete mark days over [t0−270, t0+366] ∧ validated funding
+>    at every boundary in [t0, t0+366]) shared by L/S and base/P2/P3, (ii) complete-day mask for V; computed causally in-strategy = quantile
+>    validity, r30, OI, cooling, ATR. P1 uses its own duration-dependent eligible-minute rule (§4). Forward paper never uses the historical
+>    bitmap. Funnel first-failure order exactly §7-3; oi_missing / oi_not_decreasing never start cooldown. Warm-up bars feed state only; no
+>    event/skip/funnel entry before IS_START; funnel denominator = window bar closes.
+> S11 P3 (R1 agreed): decision-time B2 gate original direction + original SL; fill-time: reversed side, SL mirrored about m. Trial #3 SL is a
+>    fixed price, so no SlFromFill mechanism (trial #2's) is needed.
+> S12 CONVENTIONS ROW CHECKLIST (advisor 8, Codex 9) — registered before any real-data P&L: CI exact α = 0.05/6, lo = 1/240, hi = 1 − 1/240
+>    (0.41667/99.58333 are displays); SL price HALF_UP to tick, band sl_dist = 1.5·ATR/m unrounded; numeric path (Decimal closes → float64
+>    log; numpy linear quantile; ATR in Decimal); quantile sample = r30 at every 1m close in days d−90..d−1 (r30 may reach into d−91);
+>    defined ≥ ceil(0.99·129,600) = 128,304; rv5 undefined if any of its 6 closes missing → cooling condition false for that bar, rv_peak
+>    over defined rv5 only (undefined inside the span cannot occur: span inside complete days); ATR buckets UTC-aligned 15-min, 14 TRs
+>    need 15 complete buckets; OI identity by create_time across files, UTC parse, availability = create_time + 300,000 ms, age compared
+>    at T; cooldown t ≥ cooldown_end allowed; funding source = validated REST set; P1 minute order ascending, funding check per boundary;
+>    P2/P3 as S2/S11; cost grid S4; liquidation gross S4/R3; B&H daily kline close series; zero-trade/degenerate stats; float64 overflow
+>    = refuse; per-arm output schema + CLI + exact inventory + fingerprint + pins/receipt fields; two replays per variant, no shared state;
+>    evaluator recomputes V and the admissible bitmap counts, rejects trades outside V and incomplete inventories, uses the 8 streams, §7
+>    priority order.
+> S13 Header status line of the anchored file stays "초안 r3" (Codex 10) — registry #50 is the status authority; file untouched.
+
+### Codex 원문(verbatim · task-mumhj6mb-ud19lx)
+> ## Narrow re-check
+> 
+> | Before-pass finding | Status | Assessment of plan r2 |
+> |---|---|---|
+> | 1. Staging | **CLOSED** | S1 puts synthetic work, the conventions row, after-pass, and the pushed code freeze before real capture and IS execution. |
+> | 2. P2 busy handling | **PARTIAL** | S2’s **no-pre-bar-hook conclusion is sound**, but its proposed `position_busy` recording path does not match the current replay code. |
+> | 3. Provenance | **CLOSED** | S3 specifies trial-specific pins, fingerprints, inventory, receipt, and push checks. |
+> | 4. Cost grid | **CLOSED** | S4 fixes the denominator, scaled components, liquidation treatment, and a ×1.0 reconciliation check. |
+> | 5. OOS guard | **CLOSED** | S7 bounds the IS input and requires a user-dated registry authorization for OOS. |
+> | 6. Clocks | **CLOSED** | S8 uses the exact bar close for causal comparisons and preserves decision-time SL data. |
+> | 7. Funnels and validity | **CLOSED** | S10 separates the shared admissibility mask, V, and causal strategy checks; it also fixes the first-failure order. |
+> | 8. Time-exit hook | **CLOSED** | S9 schedules from `EntryFilled`, clears on closure, and covers the funding and gap cases. |
+> | 9. Conventions | **CLOSED** | S12 pins the previously open numeric, schema, evaluator, and output choices before real P&L. |
+> | 10. Anchored header | **CLOSED** | S13 leaves the anchored file untouched and uses registry #50 for status. |
+> 
+> **S2 proof.** The anchored rules start a 720-minute cooldown at *every* qualified event, including a skipped one, and cap cooling at 120 minutes; P2+5 adds at most five bars before fill, followed by a 240-minute hold ([§1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:26), [§4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:93)). Even the plan’s conservative 366-minute bound leaves 354 minutes before the next qualified event in that arm. The books are independent and start flat. The replay processes a pending entry at the next bar’s open, and the engine refuses an entry if either a position or pending entry exists ([replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:125), [engine](/home/cms/project/BTC_Futures_E2E/paper/engine.py:204)). Thus a valid run needs no new pre-bar hook for P2 busy detection.
+> 
+> The remaining S2 mismatch is specific: when `request_entry` raises `EntryRefused`, replay currently records **`entry_refused`**, not `position_busy` ([replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:127)). Pin an explicit strategy busy check or a narrowly typed refusal mapping so the forced fixture records the anchored reason. Do not map every refusal to busy.
+> 
+> **New verdict-relevant gap — S6 P1 streams.** The plan says a trial-#3 wrapper will build generators from tuple `SeedSequence`s without changing `p1_core`. The current `p1_draw_generic` accepts no generator: it creates its own through `p1_rng(cfg, draw)`, whose config declares an integer `master_seed` ([p1_core.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:25), [draw path](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:104)). Specify how the exact anchored L/S tuple streams reach that draw path, and test their identity. Otherwise P1’s random placements and rejection result can differ.
+> 
+> This was a read-only plan review; I did not read market data or run the backtest.
+> 
+> **VERDICT: FIX-PLAN-FIRST**
+> 
+> Codex session ID: 01a0ec88-d55d-7b03-a1ca-66e422e19d61
+> Resume in Codex: codex resume 01a0ec88-d55d-7b03-a1ca-66e422e19d61
+
+### 계획 r3 원문
+> # Trial #3 step 2 — plan r3 (only the two items from re-check task-mumhj6mb-ud19lx; S1, S3–S13 unchanged from r2)
+> 
+> S2' P2/busy recording: the trial-#3 strategy performs an explicit busy check BEFORE emitting an intent: if ctx.has_position() (position
+>    or pending entry, backtest/engine_replay.py:47) it records ctx.skip("position_busy") (cooldown already started by the qualified event)
+>    and emits nothing. replay()'s generic `entry_refused` path is NOT remapped. Harness assertions per run: count(position_busy) == 0 and
+>    count(entry_refused) == 0, else the run fails as a bug (structurally unreachable: 720-min cooldown > 366-min max span). Tests: forced
+>    fixture with a test-only shortened cooldown records position_busy via the strategy check; a separate fixture proves entry_refused
+>    is never produced on the trial-#3 path.
+> S6' P1 streams: no edit to p1_core.py (trial #2 fingerprint). numpy's SeedSequence accepts a sequence of ints as entropy, so the trial-#3
+>    wrapper builds P1Config(master_seed=(20260929, 2) for L / (20260929, 3) for S, draws=1000, slot_attempts=1000, fail_limit=10) and
+>    p1_rng(cfg, d) = Generator(PCG64(SeedSequence((20260929, arm)).spawn(1000)[d])) exactly as §4(e) states. The annotation mismatch
+>    (master_seed: int) is handled by a single typed cast in p1_t3.py with a comment citing this item. Tests: for d ∈ {0, 1, 999} and
+>    both arms, the first 16 integers(0, 2**31) from p1_rng(cfg, d) equal those from an independently constructed
+>    np.random.Generator(np.random.PCG64(np.random.SeedSequence((20260929, arm)).spawn(1000)[d])); L and S streams differ; the draw path
+>    (p1_draw_generic) is exercised end-to-end on a synthetic source with a golden placement.
+
+### Codex 원문(verbatim · task-mumhn9pb-1xqso6)
+> **S6' closes the P1 stream gap.** `p1_rng` passes `master_seed` directly to `SeedSequence`, and NumPy accepts a sequence of nonnegative integers as entropy. The proposed tuples therefore produce the specified L and S streams without changing [p1_core.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:77). [NumPy SeedSequence documentation](https://numpy.org/doc/stable/reference/random/bit_generators/generated/numpy.random.SeedSequence.html).
+> 
+> **S2' has one implementation-breaking error as written:** `ReplayContext.has_position` is a property, so `ctx.has_position()` would raise a `TypeError` when the busy check is reached. Specify `if ctx.has_position:` in the strategy and forced fixture. With that correction, the explicit `position_busy` record and per-run zero-count assertions address the recording gap while leaving replay’s generic `entry_refused` path intact. See [engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:46).
+> 
+> No other verdict-relevant gap found in this narrow, read-only check. No runs were performed.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0ec8b-bc9c-7621-bc96-7ac315823efc
+> Resume in Codex: codex resume 01a0ec8b-bc9c-7621-bc96-7ac315823efc
+
+### 계획 r4 원문
+> # Trial #3 step 2 — plan r4 (= r3 with the property fix; the two items from re-check task-mumhj6mb-ud19lx; S1, S3–S13 unchanged from r2)
+> 
+> S2' P2/busy recording: the trial-#3 strategy performs an explicit busy check BEFORE emitting an intent: if ctx.has_position: (property, not a call — position
+>    or pending entry, backtest/engine_replay.py:47) it records ctx.skip("position_busy") (cooldown already started by the qualified event)
+>    and emits nothing. replay()'s generic `entry_refused` path is NOT remapped. Harness assertions per run: count(position_busy) == 0 and
+>    count(entry_refused) == 0, else the run fails as a bug (structurally unreachable: 720-min cooldown > 366-min max span). Tests: forced
+>    fixture with a test-only shortened cooldown records position_busy via the strategy check; a separate fixture proves entry_refused
+>    is never produced on the trial-#3 path.
+> S6' P1 streams: no edit to p1_core.py (trial #2 fingerprint). numpy's SeedSequence accepts a sequence of ints as entropy, so the trial-#3
+>    wrapper builds P1Config(master_seed=(20260929, 2) for L / (20260929, 3) for S, draws=1000, slot_attempts=1000, fail_limit=10) and
+>    p1_rng(cfg, d) = Generator(PCG64(SeedSequence((20260929, arm)).spawn(1000)[d])) exactly as §4(e) states. The annotation mismatch
+>    (master_seed: int) is handled by a single typed cast in p1_t3.py with a comment citing this item. Tests: for d ∈ {0, 1, 999} and
+>    both arms, the first 16 integers(0, 2**31) from p1_rng(cfg, d) equal those from an independently constructed
+>    np.random.Generator(np.random.PCG64(np.random.SeedSequence((20260929, arm)).spawn(1000)[d])); L and S streams differ; the draw path
+>    (p1_draw_generic) is exercised end-to-end on a synthetic source with a golden placement.
+
+### Codex 원문(verbatim · task-mumhp9wv-inqqix)
+> The r4 corrections check out. [`ReplayContext.has_position`](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:46) is a property covering both an open position and a pending entry, so `if ctx.has_position:` is correct. [`p1_rng`](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:77) passes the configured seed to `SeedSequence`; the proposed tuple produces the specified arm stream without changing `p1_core.py`. I also confirmed the first draw matches the independently constructed stream and differs between L and S.
+> 
+> This is a plan confirmation, not a confirmation that the proposed tests or trial #3 implementation have run.
+> 
+> **VERDICT: PROCEED**
+> 
+> Codex session ID: 01a0ec8d-290c-79b2-8077-7c1c23f9ad45
+> Resume in Codex: codex resume 01a0ec8d-290c-79b2-8077-7c1c23f9ad45
