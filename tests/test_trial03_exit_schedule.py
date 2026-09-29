@@ -35,6 +35,7 @@ H_MS = 240 * MINUTE_MS
 R6 = D("0.0006")
 REGIME = RegimeSizing("t", D("0.01"), 50, 100)
 SL = D("59700")
+SL_SHORT = D("60300")
 RATE, FMARK = D("0.0001"), D("60000")
 
 
@@ -56,13 +57,16 @@ def flat(start: int, n: int, over: dict[int, Bar1m] | None = None, drop: set[int
 class Scripted:
     """정해진 분 마감에 롱 의도 · 트라이얼 #3 일정(체결 + 240) · busy 검사 · 종료 봉 누락 가드."""
 
-    def __init__(self, decide_at: list[int]):
+    def __init__(self, decide_at: list[int], direction: Direction = Direction.LONG):
+        self.direction, self.sl = direction, (SL if direction is Direction.LONG else SL_SHORT)
         self.sched = TimeExitSchedule(HOLD_MIN)
         self.decide_at = set(decide_at)
         self.log: list[dict] = []
         self.open_closes = 0
+        self.eng = None
 
-    def before_minute(self, b: Bar1m, _eng) -> None:
+    def before_minute(self, b: Bar1m, eng) -> None:
+        self.eng = eng
         self.sched.guard(b)
 
     def exit_at_bar_open(self, b: Bar1m) -> bool:
@@ -74,13 +78,13 @@ class Scripted:
             self.open_closes += 1
         if bar.open_ms in self.decide_at:
             busy_check(ctx, self.log, bar.open_ms)
-            return EntryIntent(Direction.LONG, SL, None, REGIME, decided_ms=ctx.now_ms, decision_mark=bar.d("mark_close"))
+            return EntryIntent(self.direction, self.sl, None, REGIME, decided_ms=ctx.now_ms, decision_mark=bar.d("mark_close"))
         return None
 
 
-def run(bars: list[Bar1m], decide: int, fundings: list[Funding] | None = None):
+def run(bars: list[Bar1m], decide: int, fundings: list[Funding] | None = None, direction: Direction = Direction.LONG):
     events: list[object] = []
-    s = Scripted([decide])
+    s = Scripted([decide], direction)
     r = replay(bars, fundings or [], s, rules=RULES, limits=SizingLimits(), equity=D("1000"), on_event=events.append,
                slippage_rate=R6)
     return r, s, events
@@ -163,12 +167,17 @@ def test_missing_exit_bar_followed_by_later_bar_raises_before_any_engine_event()
         replay(flat(DAY0, 400, drop={due}), f, s, rules=RULES, limits=SizingLimits(), equity=D("1000"),
                on_event=events.append, slippage_rate=R6)
     assert not [e for e in events if isinstance(e, PositionClosed)]
+    assert s.eng is not None and s.eng.position is not None                  # 포지션은 열린 채(청산 안 됨)
+    assert s.eng.position.funding_paid == 0                                  # 다음 봉의 펀딩이 정산되기 전에 멈췄다
 
 
 def test_missing_exit_bar_at_end_of_input_raises_after_replay():
     d = DAY0 + 60 * MINUTE_MS
-    r, s, _ = run(flat(DAY0, 200), d)
-    assert r.open_at_end is not None
+    last = d + MINUTE_MS + H_MS - MINUTE_MS                                   # 입력이 t_f+239에서 끝난다
+    bars = flat(DAY0, (last - DAY0) // MINUTE_MS + 1)
+    assert bars[-1].open_ms == last
+    r, s, _ = run(bars, d)
+    assert r.open_at_end is not None and s.sched.due == last + MINUTE_MS
     with pytest.raises(MissingExitBar):
         s.sched.assert_no_due()
 
@@ -227,3 +236,32 @@ def test_a_240_minute_hold_pays_at_most_one_funding():
     """구조적 사실: 경계는 480분 간격, 지불 = (체결 분, 체결 분 + 240] 안의 경계 → 모든 체결 분에서 ≤ 1."""
     bounds = [0, 480, 960, 1440]
     assert max(sum(1 for x in bounds if f < x <= f + HOLD_MIN) for f in range(1440)) == 1
+
+
+# ── 숏(Arm S도 판정 대상) ────────────────────────────────────────────────────
+def _short_exit_bar(o: str, lo: str | None = None, hi: str | None = None):
+    d = DAY0 + 60 * MINUTE_MS
+    due = d + MINUTE_MS + H_MS
+    return run(flat(DAY0, 400, over={due: bar(due, o, lo, hi)}), d, direction=Direction.SHORT)
+
+
+def test_short_exit_bar_open_beyond_liquidation_is_liquidation():
+    r, _, ev = _short_exit_bar("70000")
+    assert closed(ev).reason is ExitReason.LIQUIDATION and r.trades[0]["direction"] == Direction.SHORT.value
+
+
+def test_short_exit_bar_open_beyond_sl_only_is_time_exit_at_open():
+    r, _, ev = _short_exit_bar("60350")                               # SL 60300 너머 · 추정 청산가 아래
+    c = closed(ev)
+    assert c.reason is ExitReason.TIME_EXIT
+    assert all(f.price == adverse_fill_estimate(side_for(Direction.SHORT, Intent.EXIT), D("60350"), TICK, R6) for f in c.fills)
+    t = r.trades[0]
+    assert D(t["exit_ref"]) == D("60350") and D(t["exit_ref"]) >= D(t["sl"])      # X9 입력(숏)
+
+
+@pytest.mark.parametrize("name", ["00", "08", "16"])
+def test_short_funding_crossed_received_once(name):
+    b = BOUNDARIES[name]
+    r, _, ev = run(flat(b - 300 * MINUTE_MS, 900), b - 61 * MINUTE_MS, [Funding(b, str(RATE), str(FMARK))], direction=Direction.SHORT)
+    c = closed(ev)
+    assert c.reason is ExitReason.TIME_EXIT and c.funding_paid_usdt == -_one_settlement(D(r.trades[0]["qty"]))   # 숏 · 양수 율 → 수취

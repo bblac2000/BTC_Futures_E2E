@@ -7639,3 +7639,61 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0edb1-ea8a-7353-a4ad-bf89dee21342
 > Resume in Codex: codex resume 01a0edb1-ea8a-7353-a4ad-bf89dee21342
+
+## 2026-09-30 — 트라이얼 #3 (c) **after-pass**(advisor + Codex task-mumteweu-o66k9s **FIX-FIRST**) → 테스트 보강
+- 코드: 6653d3f(모듈 + 테스트 21) · 공유 코드 변경 없음(`git diff --stat dc23273 -- backtest/engine_replay.py backtest/placebo_exec.py paper/ sizing/ exchange/` 빈 출력) → 트라이얼 #2 재실행 불필요(사용자 규칙).
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 숏 미검증 | ✅ | 숏 테스트 5개(종료 봉 청산 갭 · SL 갭 → time_exit · 펀딩 가로지름 00/08/16 수취 −qty·mark·rate) |
+| advisor | 2 (d) 배선 요구 | ✅ | (d) 계획·규약: before_minute에서 guard · 하네스가 replay 뒤 assert_no_due · on_minute_closed 첫 문장이 observe — 프로토콜 검사 + 테스트 |
+| advisor | 3 busy 경로 쿨다운 | ✅ | (d): §1 34행대로 쿨다운 시작 → busy_check |
+| advisor | 4 순서 증거 과장 금지 | ✅ | Codex 1과 함께: 테스트가 엔진 포지션의 funding_paid == 0을 직접 확인(가드 끈 변형은 0.174 USDT 정산 — 뮤테이션 확인) |
+| advisor | 5 규약 문구 | ✅ | 구현 선택 행에 그대로 |
+| advisor | 6 기록 | ✅ | 메모리 갱신 |
+| Codex | 1 누락 봉 테스트가 '펀딩 전' 주장을 증명 못 함 | ✅ | 엔진 포지션 funding_paid == 0 단언 + 뮤테이션 확인 |
+| Codex | 2 입력 끝 테스트 정밀도 | ✅ | 입력이 정확히 t_f+239에서 끝나게 · due == last+1분 |
+| Codex | 3 이의 없음 · X9 입력 신뢰 가능 | ✅ | — |
+- 검사: 1254 passed · ruff · pyright 0.
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (c) after-pass. The implementation matches r3 §1 lines 31–35 and plan r4; the shared diff against `dc23273` is empty, so the user's no-rerun rule applies. Codex will likely confirm the mechanics. What your checks didn't cover:
+> 
+> **1. MAJOR — every replay test in this file is LONG-only, and arm S is a judged arm.** Three paths (c) claims to have verified are direction-dependent and untested for shorts:
+> - `liquidate_if_open_beyond`: short branch is `open ≥ liq_price_est` (engine.py:292).
+> - Funding sign: `PositionClosed.funding_paid_usdt` is "+ = 지불"; a short with positive rate *receives*, so the assertion is `== −qty·mark·rate`. Don't assume — assert it.
+> - X9 input for shorts: `exit_ref ≥ sl`.
+> Add: one short crossed-funding test, one short exit-bar liquidation-gap test, one short SL-gap → time_exit test (SL 60300, open 60350 — below the ~0.9% short liq distance at 100x). Test-only change, no module edit. Do it before the report; the user listed "9 funding" tests and will assume both arms.
+> 
+> **2. Wiring requirements the (c) module can't enforce — pin them for (d) now.** `guard` only runs if the strategy implements `before_minute`; `assert_no_due` only runs if the harness calls it after `replay()`; `observe` only sees a fill if it's the *first* statement in `on_minute_closed` (an early return before it would miss `EntryFilled`). Put all three in the conventions list and in the (d) plan as protocol checks with tests. Right now the guarantee lives only in a test fixture (`Scripted`).
+> 
+> **3. Busy-path cooldown.** §1 line 34: "포지션 중의 적격 이벤트 = `position_busy`(쿨다운은 시작)". `busy_check` raises immediately; in (d) the strategy must start the cooldown *before* calling it, or the forced-fixture test can't observe the anchored behaviour. Note for the (d) plan, not a (c) change.
+> 
+> **4. Ordering evidence — state it precisely in the report.** The gap test proves "no `PositionClosed`," not "no funding settled" (`FundingSettled` is discarded by replay). The guard-before-funding claim rests on code order (`pre_hook` line 79–80 precedes the funding loop at 86), not on a test. Say so; don't overclaim.
+> 
+> **5. Conventions to pin in the implementer-choices row (final wording, from what was built):**
+> - Clock: `due = open_ms(bar with EntryFilled) + 14,400,000`; `time_exit.ts_ms` = exit bar `open_ms`; hold = bars t_f … t_f+239 (240 closes with position open).
+> - Exit bar t_f+240: funding → liquidation iff open beyond est. liq (≤ long / ≥ short, boundary inclusive) → `time_exit` at open via `adverse_fill_estimate(…, 0.0006)`; high/low not evaluated. Bars t_f…t_f+239: liquidation then SL, intrabar mark high/low, SL fill basis worse-of(SL, open).
+> - Missing exit bar: fail (gap → `MissingExitBar` at next bar before funding; end of input → after replay). No substitute bar.
+> - `position_busy`: strategy-owned record, then `PositionBusyError`; invariant (720 > 366).
+> - Funding order verified by outcome (`funding_paid_usdt`, exact wallet decomposition), not timestamps.
+> - `exit_reason` = existing `time_exit`; no new trade fields.
+> - X9 (f, report-only): count of `time_exit` rows with `Decimal(exit_ref) ≤ Decimal(sl)` (long) / `≥` (short), from trade-record strings.
+> - `HOLD_MIN = 240` defined in `strategies/trial03/exit_schedule.py`; (d) config imports it.
+> 
+> **6. Records before the report:** `memory/trial03-status.md` still says "WAITING on user exit-bar decision" — update to "(c) done, after-pass MERGE, waiting before (d)". Log advisor + Codex verbatim with positions; report with the `git diff --stat dc23273 -- backtest/engine_replay.py backtest/placebo_exec.py paper/ sizing/ exchange/` output shown empty.
+> 
+> **Sequence:** Codex lands → log both → add the short tests (item 1) + any Codex fixes → full suite → commit → push → memory → report → stop before (d). Item 1 is the only thing that changes what ships; 2–5 change what you write.
+
+### Codex 원문(verbatim · task-mumteweu-o66k9s)
+> 1. **FIX-FIRST — the missing-bar test does not prove its “before funding” claim.** [The test](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_exit_schedule.py:156) supplies funding on the first bar after the gap, but asserts only that no `PositionClosed` event was emitted. [Replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:84) does not send funding events to `on_event`, so that assertion would still pass if funding settled before `MissingExitBar` was raised. Add an observable check that funding was not settled, as plan r4’s X4 requires. The current code order appears correct; the gap is in the test.
+> 
+> 2. **Minor test precision:** [The end-of-input case](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_exit_schedule.py:168) stops well before the due bar. It exercises `assert_no_due()`, but ending at `t_f+239` would directly test a missing scheduled exit bar.
+> 
+> 3. **No other objection found.** The schedule and replay hook match [r3 §1 lines 31–35](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:31) and [plan r4](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:7626). The boundary-minute fill test is meaningful: an incorrectly charged fill would make its zero-funding assertion fail. For X9, completed paper `time_exit` trade records reliably contain `exit_ref` from the exit bar’s mark open and the fixed `sl` from the entry decision. The commit and diff against `dc23273` show no shared-code changes.
+> 
+> I attempted the permitted test command, but `uv` could not create its cache lock on the read-only filesystem; I cannot confirm a passing test run here.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0edb9-5423-79c0-aa9e-327f5a2ab19a
+> Resume in Codex: codex resume 01a0edb9-5423-79c0-aa9e-327f5a2ab19a
