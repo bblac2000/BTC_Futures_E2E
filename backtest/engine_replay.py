@@ -17,6 +17,9 @@
 - 훅 분에는 `on_minute_closed` 뒤에도 대기 진입이 없어야 한다(날을 넘는 진입 금지 — late_cross가 막아야 한다).
 - 청산 수수료 기준은 `limits.liq_fee_on_liq_price`(트라이얼 #2 §1)로 엔진·사이징에 함께 들어간다.
 - 전략에 `before_minute(bar, engine)`이 있으면 그 분의 **펀딩·엔진 처리 전에** 부른다(검사 전용 — 트라이얼 #2 날 경계 가드).
+
+트라이얼 #3 (b)(계획 r2 B1 · 기본 = 레지스트리 #7 2 bps — 트라이얼 #1·#2·봇 경로 불변): `slippage_rate`는 이 재생의 `PaperSender`
+불리 체결 모델 매개변수다(진입 견적·진입·모든 청산 체결 · 청산(liquidation)은 송신기를 거치지 않는다). 트라이얼 #3 = 0.0006(§2).
 """
 from __future__ import annotations
 
@@ -30,6 +33,7 @@ from backtest.placebo_exec import mark_bar
 from backtest.returns import trade_return
 from exchange.gate import Mode
 from exchange.rules import RuntimeRules
+from paper.config import PAPER_SLIPPAGE_RATE
 from paper.engine import Engine, EntryIntent, EntryRefused
 from paper.sender import PaperSender
 from paper.types import EntryFilled, EntrySkipped, ExitReason, PositionClosed
@@ -65,8 +69,9 @@ class ReplayResult:
 
 def replay(bars: Sequence[Bar1m], fundings: Sequence[Funding], strategy: Strategy, *, rules: RuntimeRules,
            limits: SizingLimits, equity: Decimal, on_event: Callable[[object], None] | None = None,
-           sizing_capital: Decimal | None = None) -> ReplayResult:
-    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits, sizing_capital=sizing_capital)
+           sizing_capital: Decimal | None = None, slippage_rate: Decimal = PAPER_SLIPPAGE_RATE) -> ReplayResult:
+    eng = Engine(rules, PaperSender(rules, slippage_rate=slippage_rate), mode=Mode.PAPER, wallet=equity, limits=limits,
+                 sizing_capital=sizing_capital)
     exit_hook: Callable[[Bar1m], bool] | None = getattr(strategy, "exit_at_bar_open", None)
     pre_hook: Callable[[Bar1m, Engine], None] | None = getattr(strategy, "before_minute", None)
     ctx = ReplayContext(eng)

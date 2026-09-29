@@ -22,6 +22,7 @@ from backtest.returns import TradeReturn, trade_return
 from exchange.gate import Mode
 from exchange.orders import Direction, Intent, side_for
 from exchange.rules import RuntimeRules
+from paper.config import PAPER_SLIPPAGE_RATE
 from paper.engine import Engine
 from paper.sender import PaperSender
 from paper.types import ExitReason, MarkBar, PositionClosed
@@ -40,9 +41,9 @@ def mark_bar(b: Bar1m) -> MarkBar:
 
 
 def sizing_decision(entry_mark: Decimal, direction: int, sl_dist: Decimal, rules: RuntimeRules, limits: SizingLimits,
-                    equity: Decimal, regime: RegimeSizing):
+                    equity: Decimal, regime: RegimeSizing, *, slippage_rate: Decimal = PAPER_SLIPPAGE_RATE):
     d = _dir(direction)
-    fill = PaperSender(rules).quote_fill_price(side_for(d, Intent.ENTRY), entry_mark)
+    fill = PaperSender(rules, slippage_rate=slippage_rate).quote_fill_price(side_for(d, Intent.ENTRY), entry_mark)
     sl = fill * (1 - sl_dist) if d is Direction.LONG else fill * (1 + sl_dist)
     return fill, size_entry(fill, sl, d, equity, regime, rules, limits)
 
@@ -56,15 +57,17 @@ class TimeExitResult:
 
 def run_time_exit(bars: dict[int, Bar1m], fundings: Sequence[Funding], *, entry_ms: int, h: int, direction: int,
                   sl_dist: Decimal, rules: RuntimeRules, limits: SizingLimits, equity: Decimal,
-                  regime: RegimeSizing, reason: ExitReason = ExitReason.MANUAL) -> TimeExitResult:
+                  regime: RegimeSizing, reason: ExitReason = ExitReason.MANUAL,
+                  slippage_rate: Decimal = PAPER_SLIPPAGE_RATE) -> TimeExitResult:
     """`reason`: 시간 청산 체결의 엔진 사유(트라이얼 #1 기본 MANUAL 그대로 · 트라이얼 #2는 TIME_EXIT — 손익 무관 · 2f G6)."""
     first = bars[entry_ms]
-    fill, dec = sizing_decision(first.d("mark_open"), direction, sl_dist, rules, limits, equity, regime)
+    fill, dec = sizing_decision(first.d("mark_open"), direction, sl_dist, rules, limits, equity, regime,
+                                slippage_rate=slippage_rate)
     if not dec.ok or dec.leverage is None:
         return TimeExitResult(False, "sizing_refused", None)
     d = _dir(direction)
     commission = dec.qty * fill * rules.commission.taker
-    eng = Engine(rules, PaperSender(rules), mode=Mode.PAPER, wallet=equity, limits=limits)
+    eng = Engine(rules, PaperSender(rules, slippage_rate=slippage_rate), mode=Mode.PAPER, wallet=equity, limits=limits)
     nf = min((f.funding_ms for f in fundings if f.funding_ms > entry_ms), default=entry_ms + 8 * 3_600_000)
     eng.restore_position({
         "direction": d.value, "qty": str(dec.qty), "entry_price": str(fill), "leverage": dec.leverage,
@@ -107,7 +110,8 @@ def run_time_exit(bars: dict[int, Bar1m], fundings: Sequence[Funding], *, entry_
 
 
 def p1_null_distribution(draws, bars: dict[int, Bar1m], fundings: Sequence[Funding], *, rules: RuntimeRules,
-                         limits: SizingLimits, equity: Decimal, regime: RegimeSizing) -> list[dict[str, str | int]]:
+                         limits: SizingLimits, equity: Decimal, regime: RegimeSizing,
+                         slippage_rate: Decimal = PAPER_SLIPPAGE_RATE) -> list[dict[str, str | int]]:
     """성공한 추출마다 **트레이드당 평균 net_bps**(P1 귀무분포의 한 점). 실패 추출은 넣지 않는다(규약 f).
     각 배치 슬롯은 `run_time_exit`로 정본 엔진을 거친다. 결과는 Decimal 문자열 — 바이트 비교 가능."""
     out: list[dict[str, str | int]] = []
@@ -117,7 +121,7 @@ def p1_null_distribution(draws, bars: dict[int, Bar1m], fundings: Sequence[Fundi
         nets = []
         for p in dr.placed:
             r = run_time_exit(bars, fundings, entry_ms=p.entry_ms, h=p.h, direction=p.direction, sl_dist=p.sl_dist,
-                              rules=rules, limits=limits, equity=equity, regime=regime)
+                              rules=rules, limits=limits, equity=equity, regime=regime, slippage_rate=slippage_rate)
             if not r.ok or r.ret is None:
                 raise AssertionError(f"추출 {dr.draw} 슬롯 {p.slot}: 배치 때 수락된 사이징이 실행에서 거부됐다")
             nets.append(r.ret.net_bps)
