@@ -245,3 +245,22 @@ def test_audit_counts_bar_kline_origin(tmp_path):
     P.build(out)
     a = json.loads((out / "source_audit.json").read_text())
     assert (a["bars_kline_archive"], a["bars_kline_rest"], a["bars_kline_missing"]) == (8, 1, 1)
+
+
+@pytest.mark.parametrize("series", ["mark", "kline"])
+def test_malformed_terminal_rest_row_is_captured_then_stops_with_audit(tmp_path, series):
+    """캡처 경로: 페이지 마지막 행의 시각이 비정상이어도 캡처는 원시를 보존하고, build()가 감사와 함께 중단한다."""
+    rows = [arow(T0 + i * MIN) for i in range(10) if i != 4]
+    bad = (mark if series == "mark" else kline)(T0 + 4 * MIN)
+    bad[0] = "x"
+
+    class BadRest(FakeRest):
+        def get(self, path, params=None, *, signed=False):
+            r = super().get(path, params, signed=signed)
+            if (series == "mark" and "markPrice" in path) or (series == "kline" and path.endswith("/klines")):
+                return Response(200, list(r.data) + [bad], {})
+            return r
+    out = run(tmp_path, rows, BadRest({T0 + 4 * MIN: kline(T0 + 4 * MIN)}, {T0 + 4 * MIN: mark(T0 + 4 * MIN)}))
+    with pytest.raises(P.SourceStop):
+        P.build(out)
+    assert (out / "source_audit.json").exists() and not (out / "bars_1m.parquet").exists()

@@ -166,9 +166,11 @@ def _pages(client: Any, path: str, params: dict[str, Any], start_ms: int, end_ms
         page = client.get(path, params | {"startTime": t, "endTime": end_ms, "limit": limit}, signed=False).data
         if not page:
             break
-        pages.append(page)
-        last = page[-1][ts_key]
-        nxt = int(last) + step
+        pages.append(page)                                    # 원시 그대로 먼저 보존 — 비정상 행은 build()가 감사와 함께 중단
+        try:
+            nxt = int(page[-1][ts_key]) + step
+        except (KeyError, IndexError, TypeError, ValueError):
+            break                                             # 마지막 행 시각이 비정상 → 페이지 넘김 중단(Codex K impl r2)
         if nxt <= t:
             break
         t = nxt

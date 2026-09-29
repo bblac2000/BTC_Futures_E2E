@@ -6227,3 +6227,18 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb69-b385-7ab1-ac79-c6fa78a18e9d
 > Resume in Codex: codex resume 01a0eb69-b385-7ab1-ac79-c6fa78a18e9d
+
+## 2026-09-29 — K 구현 재확인 r2(Codex task-mum6ks52-uy3rrl **FIX-FIRST**) → 수정
+- 페이지 넘김이 마지막 행의 비정상 시각을 캡처 중에 변환해 감사 전에 예외 → ✅ 동의 → 페이지를 먼저 보존하고 넘김만 중단 · build()가 감사와 함께 중단 · 캡처 경로 시험(mark · kline).
+
+### Codex 원문(verbatim · task-mum6ks52-uy3rrl)
+> The per-bar kline counts and stale documentation are corrected. The new REST parser also records malformed timestamps as stops when the rows reach `build()`.
+> 
+> **One blocker remains:** [pagination](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:169) converts the last row’s timestamp before `capture()` writes the page. If that timestamp is malformed, capture raises before `build()` can write `source_audit.json`. The new [test](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t2.py:229) inserts a bad row into an already captured file, so it does not cover this path. Preserve and audit a malformed terminal REST row, and add a capture-path test.
+> 
+> The step-2 code and [conventions](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions.md) are **not yet ready** for the 2i registry row or push checkpoint. This was a read-only review; I did not access `var/` or market data. I could not run the test suite because the available Python lacks `pyarrow`.
+> 
+> VERDICT: FIX-FIRST
+> 
+> Codex session ID: 01a0eb70-0b22-7372-a79e-32a552f84ef5
+> Resume in Codex: codex resume 01a0eb70-0b22-7372-a79e-32a552f84ef5
