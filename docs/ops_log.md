@@ -7432,3 +7432,155 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
  "verdict_rerun_equal": true
 }
 ```
+
+## 2026-09-29 — 트라이얼 #3 (c) 시간 청산 훅 **before-pass**(advisor + Codex task-mumqvoi8-jz937g **FIX-PLAN-FIRST**) → 계획 r2 · **종료 봉 규칙은 사용자 결정 대기**
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 동치 주장 정확히 | ✅ | X2 |
+| advisor | 2 누락 봉 가드 시점 | ✅ | X4(i) · before_minute는 펀딩 전 · 테스트로 확인 |
+| advisor | 3 busy 기록은 메모리 | ✅ | X5 |
+| advisor | 4 ms 산술·240봉 | ✅ | X3 |
+| advisor | 5 경계 최대 1회 | ✅ | X6 |
+| advisor | 6 Q3 | ✅ | X6 |
+| advisor | 7 규약 문장 | ✅ | X2 |
+| advisor | 8 공유 변경 확인 | ✅ | X8 |
+| advisor | 9 순서 | ✅ | — |
+| Codex | 1 종료 봉 규칙 미해결(BLOCKER) | ✅ | X1 — 사용자 결정(A/B/C) 전 코드 없음 |
+| Codex | 2 동치 주장 범위 | ✅ | X2 · X7 |
+| Codex | 3 입력 끝 누락 | ✅ | X4(ii) |
+| Codex | 4 busy 기록 | ✅ | X5 |
+
+### 계획 r1 원문
+> # Trial #3 step (c) — time-exit hook at fill+240: BEFORE-PASS plan (no code yet)
+> 
+> Anchored r3 lines (verbatim):
+> - §1 line 31 시간 청산: "체결 분 + **240분** 봉(`H = 4시간`)의 처리: ① 그 분의 펀딩 → ② 시가가 이미 추정 청산가 너머면 청산(`liquidation`) → ③ 아니면
+>   **시가에 `time_exit`**(MARKET reduceOnly 전량) · 그 봉의 고가·저가로는 판정하지 않는다"
+> - §1 line 32 봉 안 순서: "① 펀딩 정산(추정 청산가 재계산) → ② 대기 진입이 있으면 시가에 체결 → ③ 청산 판정 → SL(체결 기준 = SL과 시가 중 불리한 쪽) ·
+>   TP·트레일 **없음**"
+> - §1 line 35 판정 가능 구간: "[t0 − 270분, t0 + 120 + 5 + 240 + 1분] … 이 구간이 걸친 모든 UTC 날이 완전한 mark 날 … 전진 페이퍼의 결손은 이 규칙이 아니라 G-F 실행 결함"
+> 
+> ## User conventions (2026-09-29) and how they map to r3
+> C1 Clock (user 1): exit bar = t_f + 240 min where t_f = fill bar open_ms; the exit order is placed at that bar's open and filled at its
+>    mark open with the adverse-fill model (6 bps in trial #3, via replay(slippage_rate=…)); the hold covers the 240 bars t_f … t_f+239.
+>    = r3 line 31. ✔
+> C2 Same-minute priority (user 2) — CONFLICT with r3 line 31 in the exit bar. User text: funding → liquidation → stop-loss → time exit,
+>    "a stop that triggers in the exit bar takes precedence". r3: in bar t_f+240 only ① funding → ② open-gap liquidation → ③ time_exit at the
+>    open; that bar's high/low are NOT evaluated, so no SL check exists in that bar. Proposal: implement r3 (anchored; a different order would
+>    need a correction document). Economic note: the only case the orders can differ is an open that gaps beyond SL but not beyond the
+>    liquidation price; SL's fill basis would be worse-of(SL, open) = open — the same price and fill as time_exit at the open — so P&L is
+>    identical and only the exit_reason label differs (time_exit per r3). In bars t_f … t_f+239 the existing engine path applies unchanged:
+>    funding → (pending entry fill at open) → liquidation check on mark high/low → SL check intrabar on mark high/low with fill basis
+>    worse-of(SL, open) (paper/engine.py on_bar: sl_ref = min(pos.sl, open) long / max short; _evaluate(low, high)). SL is intrabar, not close.
+> C3 Funding tests (user 3) in this step: for each boundary 00:00/08:00/16:00: (a) crossed during the hold → paid exactly once, in that bar
+>    before any evaluation; (b) fill in the boundary minute → not paid (replay settles funding before the fill in that minute and only if a
+>    position exists); (c) time exit in the boundary minute → paid first, then exit. 9 tests via replay with the trial-#3 hook.
+> C4 Position busy (user 4): an event arriving while a position (or pending entry) is open → the strategy records ctx.skip("position_busy")
+>    (the anchored §7-3 reason) and raises PositionBusyError → the run fails. Synthetic test with a test-only short cooldown. (Plan r4 S2'
+>    recorded + harness-asserted zero; the user now wants it to raise immediately — both satisfied: recorded, then raise.)
+> C5 Missing bar at t_f+240 (user 5; "unless r3 says otherwise — quote r3"): r3 line 35 makes the exit bar part of every admissible event's
+>    span and requires complete mark days, so in the backtest the exit bar cannot be missing; forward paper gaps are G-F execution defects
+>    (line 35 last clause). Proposal (r3): no "next bar within 5 minutes" rule; a missing exit bar in any backtest run → MissingExitBar raised,
+>    run fails (would indicate an admissibility bug). Implementation: the schedule detects a bar with open_ms > scheduled exit while a
+>    position is still open → raise.
+> C6 exit_reason (user 6): existing ExitReason.TIME_EXIT = "time_exit"; no new fields on trade records; no new enum value.
+> 
+> ## Implementation
+> - No change to backtest/engine_replay.py or paper/ expected: the existing hook (exit_at_bar_open → assert no pending → funding already
+>   settled → liquidate_if_open_beyond(open) → close_now(open, TIME_EXIT) → bar_events → skip on_bar → on_minute_closed) is exactly r3 line 31.
+>   If a shared change turns out necessary → trial #2 regression re-run (user).
+> - New strategies/trial03/exit_schedule.py (trial-#3 only): TimeExitSchedule — on EntryFilled in ctx.bar_events (bar t_f) sets due = t_f +
+>   240·60,000; on PositionClosed clears; predicate exit_at_bar_open(bar) = due is not None ∧ bar.open_ms == due; guard(bar): due is not None ∧
+>   bar.open_ms > due → MissingExitBar. H = 240 from trial-#3 config constant (tf_v1 value).
+>   Wiring order inside the strategy (for (d)): replay calls exit_at_bar_open(b) BEFORE the bar's events; the schedule learns the fill from
+>   ctx.bar_events in on_minute_closed of bar t_f (fill happens at t_f's open inside on_bar). Guard is called from before_minute (the
+>   existing pre-hook) so a skipped exit bar is detected at the first later bar.
+> - PositionBusyError helper for (d): busy_check(ctx) → ctx.skip("position_busy") then raise.
+> - Tests (test-first, synthetic): predicate True exactly at t_f+240 and never otherwise; SL-closed-early clears the schedule (predicate False
+>   at t_f+240, no TIME_EXIT); open-gap liquidation on the exit bar → LIQUIDATION not TIME_EXIT; gap beyond SL but not liq on the exit bar →
+>   TIME_EXIT at open (r3), fill == adverse_fill_estimate(open, 6 bps); exit fill at 6 bps; hold = 240 bars (entry_ms and exit_ms differ by
+>   240 min); missing exit bar → MissingExitBar; position busy raises; the 9 funding tests; open_at_end is None.
+> 
+> ## Questions
+> Q1 Is implementing r3's exit-bar order (no SL check in bar t_f+240) correct given the user's convention 2, and is the "economically
+>    identical, label differs" analysis right?
+> Q2 C5: agree that r3 precludes a "next bar within 5 minutes" rule for the backtest?
+> Q3 Any engine path where funding at the boundary minute could be settled after the fill (C3b) or not before the exit (C3c)?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (c) before-pass. The plan is right on the two conflicts — r3 line 31 governs the exit bar, and line 35 makes a missing exit bar an admissibility bug, not an execution rule. Flagging both rather than picking is correct. Findings, blocking first:
+> 
+> **1. BLOCKER — the "economically identical, label differs" claim in C2 is not exactly true; state the difference honestly.** In the gap-beyond-SL-not-beyond-liq case both exits fill at the open through the same 6 bps adverse model, so the fill price is identical. But `gross_bps` is not: the SL path's `ref_mark` is `min(SL, open)` = open for a long gap — same — so gross is identical too in that specific case. Where they *do* differ is one step earlier: if the open gaps beyond SL, the SL path would fire in the *non-hook* `on_bar` only if it were evaluated at all, and r3 says it isn't. So the real statement is: "P&L, fill, and gross are identical; only `exit_reason` differs (time_exit per r3, never sl)." Drop "economically identical" — say "identical wallet, fill and gross; different label." The user reads §7-3's exit-reason breakdown, so the label matters and the claim must be exact.
+> 
+> **2. MAJOR — C5's guard placement has a timing hole.** You put `MissingExitBar` detection in `before_minute`, which fires at the *first bar after* the missing one. But if the missing bar is t_f+240 and the next present bar is t_f+241, the position is still open at t_f+241's funding step and `on_bar` — the engine will evaluate SL/liquidation on that bar before your guard sees it. Move the guard so it runs before funding: `before_minute` is called first (engine_replay line ~79, before the funding loop), so that's fine — but verify by test that a synthetic gap at t_f+240 raises *before* any engine event at t_f+241 (assert no `PositionClosed` in the trade list and `MissingExitBar` raised). If `before_minute` isn't early enough, this needs a shared change, which triggers the trial #2 rerun.
+> 
+> **3. MAJOR — C4 raises after `ctx.skip("position_busy")` — check that `replay()` doesn't swallow the exception.** Line 127-128: `except EntryRefused as e: ctx.skip("entry_refused", …)`. A `PositionBusyError` raised inside `on_minute_closed` propagates (it's not `EntryRefused`), good. But the skip record is written to `ctx.decisions`, which lives in memory — when the exception propagates out of `replay()`, the caller gets nothing back. The "recorded, then raise" promise means the harness must catch `PositionBusyError`, persist what it has, then re-raise. That's (d)/(g) harness work; note it in the plan now so the test for (c) asserts only "raises" and the persistence test is deferred.
+> 
+> **4. C1 boundary — pin the ms arithmetic exactly.** "t_f + 240 min" = `fill_bar.open_ms + 240 · 60_000`. The fill event arrives in `ctx.bar_events` during `on_minute_closed` of bar t_f (fill executed in that bar's `on_bar` at its open). Convention: `due = bar.open_ms + 14_400_000` where `bar` is the one whose `bar_events` contains `EntryFilled`. Test: entry_ms in the trade record == t_f, exit_ms == t_f + 14_400_000 − 1 (close_ms) or == t_f + 14_400_000 (open) — check which `close_now`'s `ts_ms` is (replay passes `t`, the open) and pin it. The user said "240 bars" — assert the count, not just the timestamps.
+> 
+> **5. Funding C3 — one case the 9-test grid misses.** Fill at 00:00 open, exit at 08:00 open: pays 08:00 once. Fill at 23:59 close (decision) → fill at 00:00 open: pays nothing at 00:00. Both covered. Missing: a hold that crosses *two* boundaries (e.g. fill 07:00, exit 11:00 crosses only 08:00 — fine; but fill 23:00 → exit 03:00 crosses 00:00 only). With H = 240 min, at most one boundary can be crossed (boundaries are 480 min apart). Assert that as a test: no admissible hold pays funding twice. It's a structural fact worth pinning.
+> 
+> **6. Q3 — funding-before-fill is in the replay loop, not the engine.** Line 86-89: funding settles only if `eng.position is not None`; a pending entry is not a position, so a fill at the boundary minute pays nothing. Line 87-94 hook path: funding loop runs before `hook_bar` evaluation → exit-in-minute pays first. Both hold as written. The test should assert the funding event's `ts_ms` < the exit fill's `ts_ms` in the hook bar, and that `funding_paid_usdt` on `PositionClosed` equals exactly one settlement's amount.
+> 
+> **7. MINOR — C2 wording for the conventions row.** "SL is intrabar (mark high/low) with fill basis worse-of(SL, open), liquidation checked first on the same bar; the exit bar t_f+240 evaluates neither — funding → open-gap liquidation → time_exit at open." That's the full sentence to pin; the current plan splits it across two paragraphs.
+> 
+> **8. Zero shared change is the expected outcome — confirm with a diff before the after-pass.** If `git diff --stat dc23273 -- backtest/engine_replay.py paper/` is empty after (c), state that in the report and skip the trial #2 rerun per the user's rule. If it isn't empty, the rerun is mandatory before reporting.
+> 
+> **9. Sequence:** Codex → log both verbatim with positions → if FIX-PLAN-FIRST, revise and narrow re-check → PROCEED → build test-first (`strategies/trial03/exit_schedule.py` + `tests/test_trial03_exit_schedule.py`) → after-pass → push → report → stop before (d). In the report, lead with the two r3 conflicts and quote lines 31 and 35 — the user asked for exactly that on #5 and will want the same treatment on #2.
+> 
+> Nothing here changes what you build; items 1, 4, 7 change what you *write*, items 2, 3, 5 add tests.
+
+### Codex 원문(verbatim · task-mumqvoi8-jz937g)
+> 1. **BLOCKER — the exit-bar rule is unresolved.** The recorded Trial #3 preregistration says funding, then liquidation if the *open* crosses the liquidation price, then `time_exit` at the open; it explicitly excludes that bar’s high and low ([§1, line 31](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:31)). The replay hook implements exactly that ([engine_replay.py:92](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:92)). User convention 2 is a later explicit instruction, so the plan cannot silently discard it. **Fix:** reconcile the convention with the anchored rule before coding. If the intended SL check is only an open gap, specify that and document the resulting `sl` versus `time_exit` label rule. If “triggers in the exit bar” includes its high or low, the exit can no longer be unconditionally filled at that bar’s open; the execution rule and preregistration need a formal correction. The anchor recorded for this document is in [anchor.py:11](/home/cms/project/BTC_Futures_E2E/strategies/trial03/anchor.py:11).
+> 
+> 2. **MAJOR — the economic-equivalence claim is too broad.** For an **open already beyond SL but short of liquidation**, both paths use the open as the reference, so the adverse fill and P&L match; the exit reason differs. An SL reached later through the exit bar’s high or low is a different case, and using that later price to override an open fill would use future bar information. **Fix:** limit the equivalence claim to open-gap stops and add separate tests for an intrabar SL crossing and an intrabar liquidation crossing under the resolved rule. Exit-reason counts also change even in the equal-P&L case ([§7-3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:151)).
+> 
+> 3. **MAJOR — the missing-bar guard misses an end-of-stream gap.** A guard that raises only when it sees `bar.open_ms > due` cannot detect a replay that ends before the scheduled exit. Replay currently returns such a position as `open_at_end` ([engine_replay.py:139](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:139)). **Fix:** have the Trial #3 harness check the schedule after replay and raise `MissingExitBar` when a due exit remains within the promised input window; test both a skipped exit bar followed by a later bar and one at the end of input.
+> 
+> 4. **MINOR — clarify the busy-event assertion.** `ctx.skip()` records in a replay context that is never returned when `PositionBusyError` is raised ([engine_replay.py:54](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:54)). **Fix:** test the exception and inspect a strategy-owned log if the recorded reason must be asserted. Keep the immediate failure explicitly an invariant check; the preregistration otherwise defines `position_busy` as a reported skip ([§1, line 34](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:34)).
+> 
+> **Q1:** Neither the plan’s silent choice of r3 nor a literal intrabar-SL override is ready to implement. The anchored r3 rule governs the registered trial as written; the later user convention governs what the reviewer must address. Reconcile them formally first. The plan’s equal-P&L analysis is correct only for an open-gap SL.
+> 
+> **Q2:** Yes. Complete mark days across the admissible span include the scheduled exit bar ([§1, line 35](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:35)). A “next bar within five minutes” backtest fill would change the rule. Fail on a missing required bar, including the terminal case above.
+> 
+> **Q3:** With a boundary funding record in the supplied minute, no: replay settles it before either entry or the exit hook ([engine_replay.py:84](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:84)). Thus a fill in that minute pays none, while a position exiting in that minute pays first. This depends on the admissibility check supplying exactly one verified record per boundary; replay itself does not enforce that input condition.
+> 
+> **VERDICT: FIX-PLAN-FIRST**
+> 
+> Codex session ID: 01a0ed78-6359-7b42-a3b7-77d2aba1b680
+> Resume in Codex: codex resume 01a0ed78-6359-7b42-a3b7-77d2aba1b680
+
+### 계획 r2 원문
+> # Trial #3 (c) plan r2 — resolutions (advisor 1–9 + Codex task-mumqvoi8-jz937g 1–4); exit-bar rule held for the user (Codex 1)
+> 
+> X1 EXIT-BAR RULE — USER DECISION (Codex 1 BLOCKER). Options:
+>    (A) r3 line 31 as anchored: bar t_f+240 = ① funding → ② liquidation iff the OPEN is beyond the estimated liquidation price →
+>        ③ time_exit at the open; that bar's high/low are not evaluated; an open that gaps beyond SL but not beyond liquidation is
+>        labelled time_exit. Existing replay hook already does exactly this; no document change.
+>    (B) Same execution as (A), but an open gap beyond SL (not liq) is labelled `sl`. Fill, wallet and gross identical to (A)
+>        (both reference the open: SL fill basis = worse-of(SL, open) = open); only exit_reason and the §7-3 exit-reason counts differ.
+>        Changes §1 line 31 text → tf_v1 table hash changes → per §1 line 41 "값이 하나라도 바뀌면 새 버전·새 트라이얼".
+>    (C) Literal intrabar SL in the exit bar (high/low) with precedence over time_exit: changes execution (exit not at the open) and
+>        §1 lines 31–32 → new tf_v1 / new trial (N rises); also needs a formal correction before any code.
+>    Recommendation: (A). (B)/(C) cannot be applied to the anchored trial #3 without a new version/trial.
+> X2 Wording (advisor 1/7, Codex 2): equivalence claim limited to the open-gap-beyond-SL case: identical fill, wallet and gross; different
+>    exit_reason label (and §7-3 counts). An SL/liquidation reached only through the exit bar's high/low is a different case and, under
+>    (A), is not evaluated in that bar. Conventions-row sentence: "SL is intrabar (mark high/low) with fill basis worse-of(SL, open),
+>    liquidation checked first on the same bar, in bars t_f … t_f+239; the exit bar t_f+240 evaluates neither — funding → open-gap
+>    liquidation → time_exit at the open."
+> X3 Clock (advisor 4): due = open_ms of the bar whose bar_events contain EntryFilled + 14,400,000; time_exit ts_ms = the exit bar's open_ms
+>    (replay passes t to close_now); tests assert exit_ms − entry_ms == 14,400,000 AND that exactly 240 bars (t_f … t_f+239) were processed
+>    with the position open.
+> X4 Missing exit bar (Codex 3, advisor 2): (i) guard in before_minute — replay calls it before the funding loop — raises MissingExitBar at
+>    the first bar with open_ms > due while scheduled (test asserts no PositionClosed and no funding settled on that later bar);
+>    (ii) terminal case: the harness calls schedule.assert_no_due() after replay → MissingExitBar if a due exit remains (end of input).
+>    No "next bar within 5 minutes" rule (r3 line 35: exit bar lies inside every admissible span; forward gaps are G-F defects).
+> X5 Busy (Codex 4, advisor 3): strategy-owned log records position_busy, then raises PositionBusyError; (c) tests assert the raise and the
+>    strategy-owned record; persisting logs on failure is harness work in (d)/(g). Stated as an invariant check (unreachable given 720 > 366).
+> X6 Funding (advisor 5/6, Codex Q3): 9 tests (00/08/16 × crossed / fill-in-minute / exit-in-minute) + structural test: with H = 240 and
+>    boundaries 480 min apart, a hold pays at most one funding; assert funding ts < exit fill ts in the hook bar and PositionClosed
+>    funding_paid_usdt == exactly one settlement amount. Input condition (one verified record per boundary) is enforced by admissibility.
+> X7 Additional tests (Codex 2): intrabar SL crossing in bar t_f+239 → sl; intrabar liquidation crossing in t_f+239 → liquidation; in the exit
+>    bar, high/low beyond SL or liq but open not → time_exit at open (under (A)).
+> X8 Shared-change check (advisor 8): expected zero change to backtest/engine_replay.py and paper/; `git diff --stat dc23273 -- backtest/engine_replay.py
+>    paper/` reported; non-empty → trial #2 regression re-run before reporting.
