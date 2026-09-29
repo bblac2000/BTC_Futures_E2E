@@ -5737,3 +5737,48 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb26-6a06-7023-b5d7-8cfacbcf9eb2
 > Resume in Codex: codex resume 01a0eb26-6a06-7023-b5d7-8cfacbcf9eb2
+
+## 2026-09-29 — 2g 설계 r2 재확인(Codex task-mum3ud68-heqeab **FIX-PLAN-FIRST**) → r3
+- #3·#4·#5 CLOSED · #1·#2 PARTIAL(병합 내용 동일성 · 기록 종류별 출처) · 곁파일·meta·유효일 확장 → ✅ 동의 → H12~H15.
+
+### 설계 r3 변경
+> # 2g design r3 — artifact check pins (Codex r2)
+> 
+> H12 P1 merge content: merged p1_draws.json == concatenation of the validated parts' draws sorted by draw id (byte-equal after the same
+>     canonical serialization), merged p1_null.jsonl rows == concatenation of parts' null rows sorted by draw id (row-equal). Only then is
+>     p95 computed.
+> H13 Provenance per record kind (independent table):
+>     prepare: {evaluator_commit, fingerprint, variant="prepare"}; module backtest.prepare_t2, args [];
+>     verify:  {evaluator_commit, fingerprint, pins_commit, variant="verify"}; module backtest.prepare_t2, args ["--verify"];
+>     post-verify runs (A, B, P2×2, P3, P4×200, P1 parts, P1_merge): {evaluator_commit, fingerprint, pins_commit, manifest_sha256,
+>     variant=<name>}. All: returncode 0, run.git_head == provenance.head, no "+dirty".
+> H14 `_records/` inventory = run records (prepare, verify, 205 strategy runs, P1_part_*, P1_merge) + exactly two sidecars
+>     (verify_receipt.json, p1_merge_expect.json); anything else → refusal. Sidecars are checked by content (receipt = recomputed;
+>     expect = recomputed from part records).
+> H15 meta.json checks for every strategy run: variant_name/variant (name table), pins == data_pins, pins_commit == record, manifest_sha256
+>     == receipt, bo_v1_sha256 == anchor.BO_V1_SHA256, rules_snapshot_sha256 == anchor.RULES_SNAPSHOT_SHA256, git_head == record
+>     provenance.head, gate == {evaluator_commit, pins_commit, manifest_sha256, fingerprint} of the receipt, n_trades / n_first_cross ==
+>     line counts. Valid-day membership: every trade's entry day ∈ V_A for A, P2_delay1, P2_delay5, P3_invert, P4_draw*; ∈ V_B for B.
+
+### Codex 원문(verbatim · task-mum3ud68-heqeab)
+> **The r2 design is not ready to implement.** It resolves the statistical and disposition rules, but the artifact checks still have contradictions and leave one P1 result check unspecified.
+> 
+> | Before-pass blocker | Status | Re-check |
+> |---|---|---|
+> | 1. P1 artifact contract | **PARTIAL** | H2 covers both output sets, draw IDs and null-row counts. It does not explicitly require the merged draw and null values to equal the validated parts. Matching IDs alone would permit a different P1 p95. Require the merge to equal the parts’ concatenation, sorted by draw ID. |
+> | 2. Proof of what ran | **PARTIAL** | H2 adds commands, exact output sets and metadata checks, but “each record” requires `pins_commit` and `manifest_sha256` even though the current `prepare` record has neither and `verify` lacks `manifest_sha256` ([stage code](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:106)). Define provenance requirements separately for prepare, verify and post-verify runs. |
+> | 3. Valid-day bootstrap | **CLOSED** | H1 samples exactly the valid-day list, retains empty valid days and excludes invalid days. |
+> | 4. Data failure versus refusal | **CLOSED** | H3 separates a verified empty `V_A`, documented source unavailability requiring a registry decision, and incomplete artifacts that receive no verdict. |
+> | 5. Degenerate lag-one correlation | **CLOSED** | H4 checks both lagged slices and non-finite results before setting undefined ρ̂ to zero. |
+> 
+> **Other points:** H5–H11 address the earlier B&H, B-only reporting, liquidation, skip-rate, output, boundary-test, numeric-domain and later-stage concerns. Two artifact details still need to be pinned down:
+> 
+> - H2’s “no extra record” inventory must distinguish run records from the required `_records/verify_receipt.json` and `_records/p1_merge_expect.json` sidecars ([stage code](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:72), [merge code](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:172)).
+> - Extend the metadata and valid-day checks to every verdict input: check `meta.json`’s `git_head`, `gate`, `pins_commit`, `bo_v1_sha256` and rules-snapshot hash against their pinned values ([emitted fields](/home/cms/project/BTC_Futures_E2E/strategies/trial02/run.py:53)); require P2, P3 and every P4 trade entry day to belong to `V_A`, as H2 already requires for A and B.
+> 
+> This was a read-only design review. I did not access `var/` or market data.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0eb29-fab2-7ea3-9e34-77edf0f8efde
+> Resume in Codex: codex resume 01a0eb29-fab2-7ea3-9e34-77edf0f8efde
