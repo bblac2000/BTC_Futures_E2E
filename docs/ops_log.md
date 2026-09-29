@@ -6242,3 +6242,15 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb70-0b22-7372-a79e-32a552f84ef5
 > Resume in Codex: codex resume 01a0eb70-0b22-7372-a79e-32a552f84ef5
+
+## 2026-09-29 — K 구현 재확인 r3(Codex task-mum6qj2o-1ivqt8) **MERGE** — 단계 2 코드·규약 확정
+
+### Codex 원문(verbatim)
+> The r2 pagination blocker is resolved. `capture()` retains a REST page before reading its terminal timestamp; if that timestamp is malformed, pagination stops and `build()` records the source stop in `source_audit.json`. The new test covers this capture path for both mark and kline pages. I found no new issue in the requested diff.
+> 
+> The step-2 code and [trial_02_conventions.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions.md) are ready for the 2i registry row and push checkpoint. The working tree is clean and `git diff --check` passes. This was a read-only review; I did not run tests or access `var/` or market data.
+> 
+> **VERDICT: MERGE**
+> 
+> Codex session ID: 01a0eb74-22ab-7352-a450-94b4ce2786cc
+> Resume in Codex: codex resume 01a0eb74-22ab-7352-a450-94b4ce2786cc
