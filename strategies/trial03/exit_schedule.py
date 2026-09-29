@@ -54,9 +54,9 @@ class TimeExitSchedule:
             raise MissingExitBar(f"입력이 종료 봉 {self.due} 전에 끝났다")
 
 
-def busy_check(ctx: Any, log: list[dict[str, Any]], ts_ms: int) -> None:
+def busy_check(ctx: Any, log: list[dict[str, Any]], ts_ms: int, *, arm: str | None = None) -> None:
     """적격 이벤트를 내기 직전에 부른다: 포지션·대기 진입이 있으면 기록(§7-3 `position_busy`) 후 실행 실패."""
     if ctx.has_position:
-        log.append({"ts_ms": ts_ms, "reason": "position_busy"})
+        log.append({"kind": "busy", "arm": arm, "ts_ms": ts_ms, "reason": "position_busy"})
         ctx.skip("position_busy")
         raise PositionBusyError(f"{ts_ms}: 포지션 중 적격 이벤트")

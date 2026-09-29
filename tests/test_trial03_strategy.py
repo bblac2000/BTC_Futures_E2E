@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import subprocess
 import sys
 from collections.abc import Callable
@@ -18,7 +19,7 @@ from exchange.orders import Direction, Intent, side_for
 from paper.sender import adverse_fill_estimate
 from sizing.position import size_entry
 from strategies.trial03 import anchor as A
-from strategies.trial03.config import LIMITS, REGIME
+from strategies.trial03.config import LIMITS, REGIME, TF_V1, TfParams
 from strategies.trial03.exit_schedule import PositionBusyError
 from strategies.trial03.features import OiIndex
 from strategies.trial03.harness import Admissibility, RulesSnapshotMismatch, complete_days, load_rules, v_days
@@ -71,6 +72,24 @@ def test_end_to_end_known_ledger(arm):
     net = (D(t["wallet_after"]) - D(1000)) / (D(t["qty"]) * D(t["entry_fill"])) * 10_000
     assert D(t["net_bps"]) == net and D(-23) < net < D(-21)               # 가격 평평 → 명목 22 bps
     assert s.funnel["in_cooldown"] == len(S.tails(r)) - 1
+
+
+GOLDEN = json.loads((ROOT / "tests" / "fixtures" / "golden_trial03_e2e.json").read_text())
+
+
+@pytest.mark.parametrize("arm", ARMS)
+def test_end_to_end_matches_committed_golden(arm):
+    """배선(위 테스트)과 별개로 값 자체를 고정 — size_entry·엔진 안의 회귀도 잡는다(advisor (d) after #1)."""
+    r = S.run(S.Scenario(arm=arm))
+    g = GOLDEN[arm]
+    t = r.trades[0]
+    assert {k: t[k] for k in g["trade"]} == g["trade"] and t["t3"] == g["intent"]
+    assert dict(r.strategy.funnel) == g["funnel"] and dict(r.strategy.entry) == g["entry"]
+    assert S.digest(r) == g["digest"]
+
+
+def test_real_runs_use_tf_v1_unchanged():
+    assert TF_V1 == TfParams()
 
 
 # ── 이벤트 깔때기 ────────────────────────────────────────────────────────────
@@ -257,7 +276,8 @@ def test_position_busy_records_after_cooldown_start_then_raises(arm):
     with pytest.raises(PositionBusyError):
         replay(bars, fund, s, rules=S.RULES, limits=LIMITS, equity=D(1000), sizing_capital=D(1000), slippage_rate=D("0.0006"))
     busy = s.events[-1]
-    assert busy["reason"] == "position_busy" and s.cooldown_end == busy["ts_ms"] + 25 * M
+    assert busy["kind"] == "busy" and busy["arm"] == arm and busy["reason"] == "position_busy"
+    assert s.cooldown_end == busy["ts_ms"] + 25 * M
 
 
 # ── 변형 P2 · P3 ─────────────────────────────────────────────────────────────
@@ -267,6 +287,10 @@ def test_p2_fill_timing(arm, k):
     r = S.run(S.Scenario(arm=arm), Variant(delay=k))
     t, i = r.trades[0], r.trades[0]["t3"]
     assert t["entry_ms"] == i["t_e"] + k * M and i["decided_ms"] == i["t_e"] + k * M - 1
+    pend = [e for e in r.strategy.events if e.get("state") == "ENTRY_PENDING"][0]
+    assert pend["t"] == i["t_e"] + k * M                                 # 상태 기록은 의도를 낸 봉의 마감(시간순)
+    ts = [e["t"] for e in r.strategy.events if e["kind"] == "state"]
+    assert ts == sorted(ts)
     base = S.run(S.Scenario(arm=arm)).trades[0]["t3"]
     assert {x: i[x] for x in ("t0", "t_e", "m", "sl", "sl_dist")} == {x: base[x] for x in ("t0", "t_e", "m", "sl", "sl_dist")}
 
@@ -309,9 +333,12 @@ def _fund_all(days: int) -> list[Funding]:
 
 
 def test_admissibility_real_window_end_edge():
-    adm = Admissibility([], [], window_end=A.IS_END_MS)
-    t_1754 = A.IS_END_MS + 1 - 366 * M                                   # 2025-12-31 17:54Z
-    assert adm(t_1754) == "window_end" and adm(t_1754 - M) != "window_end"
+    """2025-12-31 하루를 완전하게 주면 17:53은 판정 가능(구간 [13:23, 23:59] · 경계 없음), 17:54는 window_end."""
+    d0 = A.IS_END_MS + 1 - S.DAY
+    bars = [Bar1m(d0 + k * M, "1", "1", "1", "1", "1", "1", 1, "0", "0", "1", "1", "1", "1", "archive") for k in range(1440)]
+    adm = Admissibility(bars, [], window_end=A.IS_END_MS)
+    t_1754 = A.IS_END_MS + 1 - 366 * M
+    assert adm(t_1754) == "window_end" and adm(t_1754 - M) is None
 
 
 def test_admissibility_closed_interval_day_set_and_funding_upper_end():
@@ -332,6 +359,30 @@ def test_v_days_are_complete_and_quantile_valid():
     assert v_days(r.strategy, complete_days(sc.bars())) == [(S.DAY0 + S.DAY) // S.DAY, (S.DAY0 + 2 * S.DAY) // S.DAY]
 
 
+def test_input_validation_and_duplicate_minutes():
+    from strategies.trial03.harness import InputError, validate_inputs
+    sc = S.Scenario()
+    bars, fund = sc.bars(), sc.fundings()
+    validate_inputs(bars, fund)
+    with pytest.raises(InputError):
+        validate_inputs(bars[:10] + [bars[9]] + bars[10:], fund)                  # 중복 분
+    with pytest.raises(InputError):
+        validate_inputs(bars, fund + [fund[0]])                                    # 펀딩 버킷 중복
+    with pytest.raises(InputError):
+        validate_inputs(bars, [Funding(fund[0].funding_ms, "NaN", "60000")])        # 비유한 율
+    with pytest.raises(InputError):
+        validate_inputs(bars, [Funding(fund[0].funding_ms + 3_600_000, "0", "60000")])   # 격자 밖
+    assert (S.DAY0 // S.DAY) not in complete_days(bars[:10] + [bars[9]] + bars[10:1439])
+
+
+def test_run_arm_without_rules_uses_pinned_snapshot():
+    import inspect
+
+    from strategies.trial03 import harness as H
+    assert inspect.signature(H.run_arm).parameters["rules"].default is None
+    assert "load_rules()" in inspect.getsource(H.run_arm)
+
+
 def test_load_rules_pins_snapshot_48_and_taker():
     rules = load_rules()
     assert rules.commission.taker == D("0.0005")
@@ -346,7 +397,7 @@ def test_determinism_in_process_and_across_spawned_processes(arm):
     assert d1 == d2
     outs = {subprocess.run([sys.executable, "-m", "tests.fixtures.t3_scenario", arm], cwd=ROOT, capture_output=True,
                            text=True, check=True).stdout.strip() for _ in range(2)}
-    assert outs == {d1}
+    assert outs == {d1} == {GOLDEN[arm]["digest"]}
 
 
 # ── 정적 검사 ────────────────────────────────────────────────────────────────

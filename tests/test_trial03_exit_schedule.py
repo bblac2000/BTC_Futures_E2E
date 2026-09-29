@@ -187,7 +187,7 @@ def test_event_while_position_open_is_recorded_then_raises():
     s = Scripted([d, d + 10 * MINUTE_MS])
     with pytest.raises(PositionBusyError):
         replay(flat(DAY0, 400), [], s, rules=RULES, limits=SizingLimits(), equity=D("1000"), slippage_rate=R6)
-    assert s.log == [{"ts_ms": d + 10 * MINUTE_MS, "reason": "position_busy"}]
+    assert s.log == [{"kind": "busy", "arm": None, "ts_ms": d + 10 * MINUTE_MS, "reason": "position_busy"}]
 
 
 # ── 펀딩 00/08/16 × 가로지름 / 경계 분 체결 / 경계 분 시간 청산 ─────────────────

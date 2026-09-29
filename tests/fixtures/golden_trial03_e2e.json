@@ -1,0 +1,96 @@
+{
+ "L": {
+  "digest": "f69d8a8727b6a361602d495cece2d645eea937de2a9e62c78245c3a132996420",
+  "entry": {
+   "exit.time_exit": 1,
+   "filled": 1
+  },
+  "funnel": {
+   "in_cooldown": 36,
+   "no_tail": 2843,
+   "qualified": 1
+  },
+  "intent": {
+   "arm": "L",
+   "atr": "272.1642857142857142857142857",
+   "decided_ms": 1740910379999,
+   "decision_leverage": 30,
+   "decision_notional": "1418.5296",
+   "decision_qty": "0.024",
+   "intent_dir": "LONG",
+   "intent_sl": "58697.20",
+   "kind": "intent",
+   "m": "59105.4",
+   "o_e": 1740910320000,
+   "sl": "58697.20",
+   "sl_dist": "0.006907091882830140248244177835",
+   "sl_raw": "58697.15357142857142857142857",
+   "t0": 1740909180000,
+   "t_e": 1740910380000,
+   "variant": "base"
+  },
+  "trade": {
+   "direction": "LONG",
+   "entry_fill": "59140.90",
+   "entry_ms": 1740910380000,
+   "exit_ms": 1740924780000,
+   "exit_reason": "time_exit",
+   "exit_ref": "59106.9",
+   "gross_bps": "0.2537839182206701925712371458",
+   "leverage": 30,
+   "net_bps": "-21.74572081250031703947691023",
+   "qty": "0.022",
+   "sl": "58697.20",
+   "wallet_after": "997.17066470000"
+  }
+ },
+ "S": {
+  "digest": "72e0201d43b0359969541981427e446f07d5b6cc1edb6d0047479a35e6a1c9eb",
+  "entry": {
+   "exit.time_exit": 1,
+   "filled": 1
+  },
+  "funnel": {
+   "in_cooldown": 37,
+   "no_tail": 2842,
+   "qualified": 1
+  },
+  "intent": {
+   "arm": "S",
+   "atr": "273.2142857142857142857142857",
+   "decided_ms": 1740910319999,
+   "decision_leverage": 30,
+   "decision_notional": "1461.7464",
+   "decision_qty": "0.024",
+   "intent_dir": "SHORT",
+   "intent_sl": "61315.90",
+   "kind": "intent",
+   "m": "60906.1",
+   "o_e": 1740910260000,
+   "sl": "61315.90",
+   "sl_dist": "0.006728741925216498370911475675",
+   "sl_raw": "61315.92142857142857142857143",
+   "t0": 1740909120000,
+   "t_e": 1740910320000,
+   "variant": "base"
+  },
+  "trade": {
+   "direction": "SHORT",
+   "entry_fill": "60869.50",
+   "entry_ms": 1740910320000,
+   "exit_ms": 1740924720000,
+   "exit_reason": "time_exit",
+   "exit_ref": "60907.1",
+   "gross_bps": "-0.1641871668026683698348769663",
+   "leverage": 30,
+   "net_bps": "-22.19610806725864349140374079",
+   "qty": "0.022",
+   "sl": "61315.90",
+   "wallet_after": "997.02765480000"
+  }
+ },
+ "_meta": {
+  "created": "2026-09-30",
+  "what": "trial #3 (d) synthetic end-to-end golden (tests/fixtures/t3_scenario.py Scenario(arm)) \u2014 regenerate only with a registry note"
+ }
+}

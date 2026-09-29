@@ -7985,3 +7985,82 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ede0-9a3b-7791-a5b8-415e65a1ab19
 > Resume in Codex: codex resume 01a0ede0-9a3b-7791-a5b8-415e65a1ab19
+
+## 2026-09-30 — 트라이얼 #3 (d) **after-pass**(advisor + Codex task-mumvi9y5-teeetv **FIX-FIRST**) → 수정
+- 코드 497fc34 · 공유 코드 변경 없음(dc23273 대비 빈 diff) → 트라이얼 #2 재실행 불필요.
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 끝에서 끝 테스트 자기참조 | ✅ | tests/fixtures/golden_trial03_e2e.json(암마다 다이제스트·트레이드·의도·깔때기) · 교차 프로세스 결정론도 커밋된 다이제스트와 비교 |
+| advisor | 2 기록 일관성 | ✅ | ENTRY_PENDING 시각 = 의도를 낸 봉 마감 · busy 기록에 kind·arm · 체결 봉 open 단언(fill_open) |
+| advisor | 3 규약 추가 | ✅ | 규약 초안에(TF_V1 불변 테스트 · Decimal 문맥 · Admissibility 순서 · b = t0 펀딩 · 실패 시 기록 보존은 (g) 미결) |
+| advisor | 4 보고 틀 | ✅ | 보고에 |
+| advisor | 5 규약 초안 | ✅ | docs/trials/trial_03_conventions.md(초안) · 행 문안(추가 안 함) |
+| advisor | 6 순서 | ✅ | — |
+| Codex | 1 실행 경계에서 입력·규칙 고정 미강제(MAJOR) | ✅ | validate_inputs(중복·비정렬 분 · 펀딩 버킷 중복·격자 밖·비유한) · complete_days 중복 분 → 불완전 · run_arm(rules=None) → load_rules()(#48 단언) · rules 인자는 테스트 픽스처 전용 · 테스트 |
+| Codex | 2 P2 상태 시각 역행 | ✅ | advisor 2와 같음 · P2 테스트가 상태 시각 오름차순 단언 |
+| Codex | 3 창 끝 테스트 절반 | ✅ | 2025-12-31 완전한 날을 주고 17:53 None · 17:54 window_end |
+- 검사: 전체 스위트 통과(아래 커밋) · ruff · pyright 0.
+
+### 요약 원문
+> # Trial #3 (d) AFTER-PASS — built vs plan r3
+> Commit 497fc34 (pushed): strategies/trial03/{config,features,strategy,harness}.py; tests/test_trial03_features.py (12),
+> tests/test_trial03_strategy.py (61), tests/fixtures/t3_scenario.py. Shared code: `git diff --stat dc23273 -- backtest/engine_replay.py
+> backtest/placebo_exec.py paper/ sizing/ exchange/` empty → no trial #2 rerun. Suite 1327 passed; ruff; pyright 0.
+> Design as plan r2/r3: per-arm Trial03 (IDLE/COOLING/DELAYED/ENTRY_PENDING/IN_POSITION/COOLDOWN; FLUSH_QUALIFIED is the instant
+> 'qualified' tail record), on_minute_closed order: sched.observe → engine events → features (warm-up too) → [window only] COOLDOWN→IDLE
+> if T ≥ cooldown_end → advance (cooling/decision/P2 emission) → classify (event funnel). Decision B2 = size_entry(m raw, SL normalized,
+> original dir, E_ref) (r3 line 29; user req. 7's 6 bps decision quote NOT used — flagged). P3 intent SL = normalize_price(mirrored raw).
+> Harness: Admissibility (closed time-point span, window_end → incomplete → funding), run_arm (replay 6 bps, sizing_capital E_ref,
+> finish(), invariants, sum checks, trades_t3 join), load_rules (#48 SHAs + taker), v_days.
+> Tests: e2e per arm with hand-checked ledger (decision/fill sizing, fills, exit ref, net); quantile_invalid; r30_undefined + incomplete;
+> funding; window_end; cooldown 719/720; oi_missing absent/unusable (no cooldown); oi_not_decreasing then qualified; not_cooled at +121;
+> decision exactly at +120 and one bar later not_cooled; sl_dist floor/ceiling; no retry after abort; sizing_rejected decision (rules fixture
+> MIN_NOTIONAL 1e6); sl_crossed_before_fill; sizing_rejected_fill (fill open far → liq gate); normalization (MIN_NOTIONAL 1000 + favourable
+> gap); exits sl/liquidation with full state sequence and IDLE at t0+720; position_busy (cooldown 25 min) records after cooldown start
+> then raises; P2 +1/+5 timing and frozen decision; P2 edge (+120, k=5); P3; warm-up flush → nothing; flush straddling window start;
+> admissibility real 17:53/17:54 edge, midnight day-set, 16:00 funding upper end; V days; load_rules; determinism in-process and in two
+> subprocesses; static checks.
+> Known test-scenario notes: the +120 cooling boundary uses arm-specific flush phase (S flush one bar later) because of alternating-noise
+> parity. Questions: objections; gaps between plan r3 and code; anything for the conventions row.
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (d) after-pass. The code matches plan r3 and the anchored lines it cites; the funnels are exhaustive and exclusive by construction and the harness sum checks enforce it; shared code is untouched (diff against `dc23273` empty). No blocker. Items your checks didn't cover, then the report shape the user asked for.
+> 
+> **1. MAJOR — the end-to-end "known ledger" test is partly tautological.** Its expected qty/leverage come from `size_entry(quote, …)` and expected fills from `adverse_fill_estimate(…)` — the same functions the engine calls. That proves wiring, not values; a future regression inside `size_entry` or the engine would pass it. Freeze a golden: write `tests/fixtures/golden_trial03_e2e.json` holding, per arm, the scenario digest (`S.digest`) plus the literal trade fields (entry_ms, exit_ms, entry_fill, qty, leverage, sl, exit_ref, net_bps) and the intent record. Test = equality with the file. That's the same device as trial #1/#2's `golden_*.json`, and it also makes the cross-process determinism test compare against a committed value rather than against itself.
+> 
+> **2. MINOR — three log/consistency fixes, all trial-3-only:**
+> - `_emit` records `_to("ENTRY_PENDING", ev["t_e"])`; for P2 the transition actually happens at the emission bar. Use the emission bar's close (`ctx.now_ms + 1`) so the state log is chronological.
+> - `busy_check` appends `{"ts_ms", "reason"}` — the only record without `kind`. Give it `"kind": "busy"` (and `arm`) so the JSONL is uniform for (g)/(f). It lives in `exit_schedule.py`; that's fine to touch — it's code under review, not an anchored artifact.
+> - On `EntryFilled`, assert `bar.open_ms == expected fill open` (`o_e + (k+1)·60,000`, stored on `ev` at decision). Admissibility makes a mismatch impossible; the assert turns "impossible" into "checked," which is the trial's whole discipline.
+> 
+> **3. Conventions that only became visible from the code — add to the draft:**
+> - Real runs use `TF_V1` unchanged; `TfParams` overrides exist for tests only. Add `assert TF_V1 == TfParams()` as a test and state that the (g) CLI accepts no params override.
+> - Decimal context: strategy arithmetic (ATR, m, SL_raw, sl_dist) runs under the process default context; the (g) CLI must call `decimal.setcontext(decimal.Context())` first (trial #2 pattern). `size_entry` uses its own exec context. The intent record strings depend on this.
+> - `Admissibility` first-failure order: `window_end → incomplete → funding` (your docstring has it; pin it).
+> - Funding at exactly `b = t0` is required (literal `[t0, t0+366]`), even though no position can exist at t0 — conservative, say so.
+> - On any run failure (`PositionBusyError`, `MissingExitBar`, `RunInvariantError`) the strategy's in-memory event log is lost because `replay()` doesn't return; (g) must catch, persist, re-raise. Already deferred — record it as an open item, not silently.
+> 
+> **4. Report shape — the user will read for these, in this order:**
+> - **Requirement 7 conflict, quoted.** Line 29 "결정 시점 B2 게이트(기준가 m · SL 가격 · E_ref로 정본 size_entry)" and line 30 "엔진이 실행 시점에 B2 재사이징(예상 체결가 …)". Say plainly the 6 bps decision quote was my (b) suggestion carried into your report and then into their req 7, and that the anchored text governs — same resolution as convention 2. Effect: none on fills (fill-time quote unchanged); decision gate slightly less strict than the withdrawn wording.
+> - **Name mappings.** User req 1 aliases → §7-3 names (`cooling_timeout`→`not_cooled`, `sizing_gate_fail`→`sizing_rejected_{decision|fill}`, `quantile_invalid_day`→`quantile_invalid`). User states → code states: FLUSH_QUALIFIED is the instantaneous `qualified` tail record; `DELAYED` (P2) and `ENTRY_PENDING` are added between COOLING and IN_POSITION.
+> - **Expected zeros** (D11): `sizing_rejected_decision`, `sizing_rejected_fill`, `normalization` are structurally ~0 under #48 at E_ref 1,000; tests force them with rules fixtures. Say it so a zero in the real run isn't read as "untested."
+> - **Cooldown test result**: +719 `in_cooldown`, +720 `qualified`, quoting line 27 "끝 제외".
+> - The +120 boundary test's arm-specific flush phase is a synthetic-noise artifact; one sentence, so the reviewer doesn't wonder.
+> 
+> **5. The conventions deliverable.** Write `docs/trials/trial_03_conventions.md` with status **DRAFT** in its header, numbered items 1–N covering (a)–(d) plus the (e)/(f) pins already made (P1 rate at placement and execution, tuple seeds, decision-time `sl_dist` from `trades_t3`, cost grid, X9, CI fractions, the OI decision with both readings quoted and the S0 130-slot count, degenerate stats/overflow refusal). Commit it as a draft; draft the registry row text (mirroring #37: file SHA256 + commit, "이 행 뒤 파일 불변") but **do not append it** — the user said they review the full text as a step boundary. State explicitly: (e)–(g) will add items shown to them as diffs; the row lands with the final SHA before the evaluator push; no real-data P&L before that.
+> 
+> **6. Sequence:** Codex lands → log both verbatim with positions → items 1–2 (tests re-run: 1327 → +N) → commit → push → conventions draft + row text → memory (`(d) done, waiting on user: req-7 conflict acknowledgement + conventions review before (e)`) → report → stop. If Codex objects only to log-shape items, fold them into the same commit; if it finds a funnel gap, that's a FIX-FIRST loop before the report.
+
+### Codex 원문(verbatim · task-mumvi9y5-teeetv)
+> 1. **MAJOR — the harness does not enforce its input pins.** [run_arm](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:106) accepts arbitrary rules without calling `load_rules`; [complete_days](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:64) can treat a day with a duplicate minute as complete; and [Admissibility](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:80) counts a funding row without validating its rate or mark. The preparation path normally checks these inputs, but the callable harness does not guarantee plan r3’s “validated” inputs or pinned rules. **Fix:** enforce those checks at the production run boundary, with an explicit fixture-only rules path, and test duplicate minutes and malformed funding.
+> 
+> 2. **MAJOR — P2 records the wrong state-transition time.** A delayed intent is emitted at the later bar close, but [_emit](/home/cms/project/BTC_Futures_E2E/strategies/trial03/strategy.py:238) records `ENTRY_PENDING` at the original `t_e`. Its state history therefore moves backward in time. **Fix:** stamp that transition with the emitting bar’s close (`ctx.now_ms + 1`), and assert the state timestamp in the P2 timing tests.
+> 
+> 3. **MINOR — the stated window-edge test proves only half its claim.** [test_admissibility_real_window_end_edge](/home/cms/project/BTC_Futures_E2E/tests/test_trial03_strategy.py:311) supplies no bars or funding, so 17:53 returns `incomplete`; it never proves that 17:53 is admissible. **Fix:** supply complete touched days and required funding, then assert `None` at 17:53 and `window_end` at 17:54.
+> 
+> The current event and entry control paths are mutually exclusive and their count checks reconcile. The 73 targeted tests passed in read-only mode. The diff from `dc23273` shows no shared-code changes. The conventions row should explicitly retain the raw-`m` decision B2 choice and the corrected P2 state timestamp.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0edee-fcfa-7dd3-a8d3-383283615e46
+> Resume in Codex: codex resume 01a0edee-fcfa-7dd3-a8d3-383283615e46

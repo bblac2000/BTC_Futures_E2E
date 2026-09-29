@@ -169,7 +169,7 @@ class Trial03:
             return
         self._tail(rec, "qualified")
         self.cooldown_end = t + self.p.cooldown_ms                     # §1 34행: 바쁨이어도 쿨다운은 시작
-        busy_check(ctx, self.events, t)                                 # 포지션·대기 진입 → 기록 후 PositionBusyError
+        busy_check(ctx, self.events, t, arm=self.arm)                   # 포지션·대기 진입 → 기록 후 PositionBusyError
         peak = [v for (u, v) in self.rv_hist if u >= t - self.p.rv_peak_lookback_ms and v is not None]
         self.ev = {"t0": t, "rv_peak": max(peak) if peak else None}
         self._to("COOLING", t)
@@ -199,7 +199,7 @@ class Trial03:
             if bar.open_ms > self.ev["emit_open"]:
                 raise RunInvariantError(f"P2 지연 의도의 봉 {self.ev['emit_open']}이 없다")
             if bar.open_ms == self.ev["emit_open"]:
-                busy_check(ctx, self.events, t)
+                busy_check(ctx, self.events, t, arm=self.arm)
                 return self._emit(ctx)
         return None
 
@@ -229,6 +229,7 @@ class Trial03:
             self.ev["intent_sl"] = str(normalize_price(m + k * atr if long_ else m - k * atr, self.rules.symbol_rules))
         else:
             self.ev["intent_dir"], self.ev["intent_sl"] = self.dir.value, str(sl)
+        self.ev["fill_open"] = bar.open_ms + (self.variant.delay + 1) * MINUTE_MS     # 체결 봉 open(계획 D4′)
         if self.variant.delay:
             self.ev["emit_open"] = bar.open_ms + self.variant.delay * MINUTE_MS
             self._to("DELAYED", t)
@@ -243,7 +244,7 @@ class Trial03:
                                           "decision_qty", "decision_notional", "intent_dir", "intent_sl")}}
         self.events.append(rec)
         self.intents.append(rec)
-        self._to("ENTRY_PENDING", ev["t_e"])
+        self._to("ENTRY_PENDING", ctx.now_ms + 1)                     # 의도를 낸 봉의 마감(P2는 지연된 봉)
         return EntryIntent(Direction(ev["intent_dir"]), Decimal(ev["intent_sl"]), None, REGIME, decided_ms=ctx.now_ms,
                            decision_mark=Decimal(ev["m"]))
 
@@ -264,6 +265,8 @@ class Trial03:
             if isinstance(e, EntryFilled):
                 if self.state != "ENTRY_PENDING":
                     raise RunInvariantError(f"대기 의도 없이 체결 {bar.open_ms}")
+                if self.ev is None or bar.open_ms != self.ev["fill_open"]:
+                    raise RunInvariantError(f"체결 봉 {bar.open_ms} ≠ 기대 {None if self.ev is None else self.ev['fill_open']}")
                 self.entry["filled"] += 1
                 self.filled_intents.append(self.intents[-1])
                 self.events.append({"kind": "filled", "arm": self.arm, "t": t, "fill_open": bar.open_ms,

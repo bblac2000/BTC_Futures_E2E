@@ -40,6 +40,32 @@ class RulesSnapshotMismatch(RuntimeError):
     pass
 
 
+class InputError(RuntimeError):
+    """실행 입력이 준비 규약을 어긴다(중복·비정렬 분 · 펀딩 버킷 중복 · 비유한 율/mark) — 실행하지 않는다."""
+
+
+def validate_inputs(bars: Sequence[Bar1m], fundings: Sequence[Funding]) -> None:
+    """실행 경계 검사(Codex (d) after #1): 봉 open_ms는 분 정렬·엄격 증가(중복 없음) · 펀딩은 00/08/16 버킷마다 최대 1건 ·
+    율·mark는 유한 Decimal(mark 양수). 준비 단계가 이미 보장하지만 하네스가 다시 단언한다."""
+    prev = None
+    for b in bars:
+        if b.open_ms % MINUTE_MS or (prev is not None and b.open_ms <= prev):
+            raise InputError(f"봉 {b.open_ms}: 정렬 안 됨 또는 중복·역순")
+        prev = b.open_ms
+    seen: set[int] = set()
+    for f in fundings:
+        bkt = f.funding_ms - f.funding_ms % MINUTE_MS
+        if bkt % DAY not in GRID or bkt in seen:
+            raise InputError(f"펀딩 {f.funding_ms}: 격자 밖 또는 버킷 중복")
+        seen.add(bkt)
+        try:
+            rate, mark = Decimal(f.rate), Decimal(f.mark)
+        except (InvalidOperation, ValueError) as e:
+            raise InputError(f"펀딩 {f.funding_ms}: 해석 불가") from e
+        if not (rate.is_finite() and mark.is_finite() and mark > 0):
+            raise InputError(f"펀딩 {f.funding_ms}: 비유한 율 또는 mark")
+
+
 def load_rules(snapshot_dir: Path | None = None, expected: dict[str, str] | None = None) -> RuntimeRules:
     d = snapshot_dir or ROOT / A.RULES_SNAPSHOT_DIR
     want = A.RULES_SNAPSHOT_SHA256 if expected is None else expected
@@ -62,15 +88,16 @@ def _finite_pos(v: str) -> bool:
 
 
 def complete_days(bars: Sequence[Bar1m]) -> set[int]:
-    per: dict[int, set[int]] = defaultdict(set)
+    """완전한 mark 날 = 정렬 분 1,440개가 **한 번씩**(중복 분이 있으면 그 날은 완전하지 않다) · mark 4필드 유한 양수."""
+    per: dict[int, list[int]] = defaultdict(list)
     bad: set[int] = set()
     for b in bars:
         d = b.open_ms // DAY
         if b.open_ms % MINUTE_MS or not all(_finite_pos(x) for x in (b.mark_open, b.mark_high, b.mark_low, b.mark_close)):
             bad.add(d)
             continue
-        per[d].add(b.open_ms)
-    return {d for d, s in per.items() if len(s) == 1440 and d not in bad}
+        per[d].append(b.open_ms)
+    return {d for d, s in per.items() if len(s) == 1440 and len(set(s)) == 1440 and d not in bad}
 
 
 class Admissibility:
@@ -104,8 +131,12 @@ class T3Run:
 
 
 def run_arm(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequence[Sequence[Any]], unusable: Sequence[int],
-            arm: str, variant: Variant, *, rules: RuntimeRules, p: TfParams = TF_V1,
+            arm: str, variant: Variant, *, rules: RuntimeRules | None = None, p: TfParams = TF_V1,
             window: tuple[int, int] = (A.IS_START_MS, A.IS_END_MS), admissible: Admissibility | None = None) -> T3Run:
+    """`rules=None`(실행 경로) → #48 스냅샷을 `load_rules`로 단언해 쓴다. `rules`를 넘기는 것은 **테스트 픽스처 전용**이다
+    ((g) CLI는 넘기지 않는다 — 정적 검사)."""
+    validate_inputs(bars, fundings)
+    rules = load_rules() if rules is None else rules
     adm = admissible or Admissibility(bars, fundings, p=p, window_end=window[1])
     s = Trial03(arm, rules=rules, oi=OiIndex(oi_rows, unusable, p), admissible=adm, variant=variant, p=p, window=window)
     r = replay(bars, fundings, s, rules=rules, limits=LIMITS, equity=p.e_ref, sizing_capital=p.e_ref, slippage_rate=p.slippage)
@@ -129,4 +160,4 @@ def v_days(s: Trial03, days: set[int]) -> list[int]:
     return sorted(d for d, ok in s.q_valid.items() if ok and d in days)
 
 
-__all__ = ["Admissibility", "RulesSnapshotMismatch", "T3Run", "complete_days", "load_rules", "run_arm", "v_days"]
+__all__ = ["InputError", "validate_inputs", "Admissibility", "RulesSnapshotMismatch", "T3Run", "complete_days", "load_rules", "run_arm", "v_days"]
