@@ -7148,3 +7148,166 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
   ③ 준비가 날별·전체 사용 불가 슬롯 수를 기록 · 결과 보고는 사용 불가 값 때문에 oi_missing이 된 후보 플러시 수를 보통 oi_missing과 따로 · ④ **IS 5분 격자의 0.5% 초과 → 데이터 품질 중단**.
 - 구현: `analyze_oi` 감사에 `unusable_slots`(유효 값이 하나도 없는 create_time · 유효 중복이 있으면 제외) · `unusable_per_day` · `unusable_total` · `unusable_is_slots` · `is_grid_slots` ·
   `oi_unusable_over_cap` 중단(IS 슬롯만 · 워밍업은 기록만) · 산출물 `oi_unusable.json`(PREPARED에 추가 · 적재기가 네 번째 값으로 반환 · 범위 단언). 테스트 26개 통과.
+
+## 2026-09-29 — 트라이얼 #3 (b) 슬리피지 매개변수(공유 계층) **before-pass**(advisor + Codex task-mumjervv-nvo0zi **FIX-PLAN-FIRST**) → 계획 r2
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 트레이드 기록 필드 추가 금지 | ✅ | B1 |
+| advisor | 2 회귀 검사 기계 | ◐ | 네트워크 없음·쓰기 금지 동의 · 지문만 우회하는 _evaluate 대신 계산 함수 직접 호출(Codex 2: 기록된 절대 경로·인벤토리 검사 때문에 우회 실행이 성립 안 함) |
+| advisor | 3 우회 허용 · 워크트리 무의미 | ✅ | B3(진단으로 표기) |
+| advisor | 4 순서 | ✅ | B4(기준선은 워크트리에서) |
+| advisor | 5 Q3 기록 | ✅ | B7 |
+| advisor | 6 정확한 등식 | ✅ | B5 T1 |
+| advisor | 7 청산 경로 확인 | ✅ 확인 | `_liquidate`는 송신기를 거치지 않는다(engine.py:607) · T3는 Codex 3 방식 |
+| advisor | 8 결정 시점 B2 견적 | ✅ | B6 · 규약 행 |
+| advisor | 9 T6 문구 | ✅ | B5 |
+| advisor | 10 Q2 | ✅ 확인 | replay.py·step_e.py는 Engine을 따로 만들지 않는다 |
+| Codex | 1 표본 부족(BLOCKER) | ✅ | B2 전체 205 실행 + P1 1,000 + 병합 |
+| Codex | 2 우회는 판정기 재실행이 아님 | ✅ | B3 진단 표기 · 정식 재실행은 하지 않는 이유 기록 |
+| Codex | 3 T3 불변식 | ✅ | B5 T3 |
+| Codex | 4 P1 두 지점 배선 | ✅ | B1 · B6 |
+| Codex | 5 T1 기준 | ✅ | B5 T1 |
+
+### 브리프 원문
+> # Trial #3 step 2 (b) — PaperSender slippage parameter: shared-layer BEFORE-PASS brief (no code yet)
+> 
+> Spec: trial_03_preregistration.md §2 — registered cost 22 bps = taker 5×2 + slippage 6 bps × 2 + funding; "슬리피지는 체결 기준가 대비 불리 방향 +
+> 불리 tick 반올림(레지스트리 #7 모델의 매개변수만 2 → 6 bps) — 진입·청산 두 체결 모두, 사이징·실행·P1·G2 전부 같은 모델". Plan r5 S5.
+> 
+> ## Current code (read)
+> - paper/sender.py: `adverse_fill_estimate(side, ref_mark, tick, rate=PAPER_SLIPPAGE_RATE)`; `PaperSender(rules, *, slippage_rate=PAPER_SLIPPAGE_RATE)`
+>   already exists (quote_fill_price and send_market use self.slippage_rate). LiveSender (sender.py:147) calls adverse_fill_estimate with the
+>   default — bot/live sizing path; NOT touched.
+> - Engine: entry fill quote via sender.quote_fill_price (engine.py:440) + send_market (466); exits (SL/TP/TIME_EXIT/close_now) via
+>   sender.send_market (668). Liquidation does not go through the sender (verify in tests).
+> - backtest/engine_replay.py:69 `Engine(rules, PaperSender(rules), ...)` — no way to pass a rate.
+> - backtest/placebo_exec.py:45 sizing_decision → `PaperSender(rules).quote_fill_price`; :67 run_time_exit → `Engine(rules, PaperSender(rules))`;
+>   p1_null_distribution → run_time_exit. Callers: backtest/p1_run.py (trial #1), backtest/p1_t2.py (trial #2).
+> - ops/run_bot.py:382 bot engine `PaperSender(rules)` — NOT touched.
+> 
+> ## Proposed change (minimal, default-preserving)
+> 1. engine_replay.replay(..., slippage_rate: Decimal = PAPER_SLIPPAGE_RATE) → PaperSender(rules, slippage_rate=slippage_rate).
+> 2. placebo_exec.sizing_decision(..., slippage_rate=PAPER_SLIPPAGE_RATE); run_time_exit(..., slippage_rate=...) uses it for both the sizing
+>    quote and the Engine's PaperSender; p1_null_distribution(..., slippage_rate=...) passes through. Keyword-only, default = #7 value.
+> 3. No change to paper/sender.py, paper/engine.py, paper/config.py, ops/, sizing/, exchange/. Trial-#3 value 0.0006 lives in trial-#3 config
+>    (step d), never as a default anywhere.
+> 4. Trial #1/#2 callers unchanged (they pass nothing → 2 bps).
+> 
+> ## Tests (test-first)
+> T1 synthetic round trip through replay() at slippage 0.0006: entry fill = mark_open×(1+0.0006) rounded adverse to tick; time exit fill =
+>    mark_open×(1−0.0006) adverse tick (long); Δwallet = −(fees 2×5 bps on fills) − slippage cost; net_bps vs gross_bps difference = 10 + 12 bps
+>    within tick rounding bound. Short symmetric.
+> T2 SL exit and close_now exits carry the same rate (quote vs fill).
+> T3 liquidation exit price is not moved by slippage (rate 0.0002 vs 0.0006 → identical liquidation fill/loss for identical path).
+> T4 placebo_exec.run_time_exit at 0.0006: sizing quote and exit fill both at 6 bps; default call bit-identical to before (golden).
+> T5 existing goldens unchanged: tests/fixtures/golden_replay_nohook.json, golden_p1_trial01.json, golden_live_engine.json; full suite.
+> T6 a static check that no module under backtest/, paper/, ops/ other than tests and strategies/trial03 passes a non-default rate.
+> 
+> ## Trial #2 bit-identity (user requirement)
+> Trial #2's provenance fingerprint (backtest/t2_provenance.py FINGERPRINT_*) includes paper/*.py, sizing/*.py, exchange/*.py,
+> engine_replay.py, placebo_exec.py → after this change trial #2's GATED evaluator/stages refuse by design (fingerprint ≠ H 63c1760).
+> Proposal: scripts/t2_regression_check.py (read-only on var/backtest/t2/IS; writes only to a temp dir):
+>  (i) re-run trial #2 runs with the CURRENT code by calling strategies.trial02.run.execute(name, prepared, tmp, pins, pins_commit) directly
+>      (gate bypassed, no provenance record written) for A, B, P2_delay1, P2_delay5, P3_invert, P4_draw000..004, and P1 part 000-124 via
+>      backtest/p1_t2_run; compare SHA256 of trades.jsonl, crosses.jsonl, days.jsonl, validity.json (and P1 outputs) with the existing
+>      var/backtest/t2/IS/runs files; meta.json compared with git_head/gate fields removed;
+>  (ii) re-run the evaluator computation on a temp copy of var/backtest/t2/IS (evaluation/ excluded) with the fingerprint gate bypassed
+>      inside the script only, and compare report.json SHA256 with 9223047c… (and verdict.txt).
+>  Run the script BEFORE the change (baseline — must already match; proves the check reproduces) and AFTER the change; record both outputs
+>  verbatim. The evaluator's import closure contains no engine/sender/placebo module, so (i) is the substantive proof and (ii) the user-asked
+>  hash comparison.
+> Q1 Is bypassing the gate inside a check script acceptable, or should (ii) run in a git worktree at H with only the run outputs copied?
+> Q2 Any other consumer of PaperSender/engine_replay/placebo_exec that could change?
+> Q3 Should the trial #2 fingerprint breakage be recorded as a registry note (trial #2 closed; its evaluator can no longer be re-run on main
+>    without checking out H)?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (b) before-pass. The brief is faithful to §2 and correctly minimal (no `paper/*.py`, `ops/`, `sizing/`, `exchange/` edits). Findings, blocking first:
+> 
+> **1. BLOCKER — do not add fields to the trade record in (b), even though (f)'s cost grid will want them.** S4 needs entry fill, exit fill and commissions per trade, and `engine_replay`'s trade dict records `exit_ref` (the mark reference), not the exit fill. It is tempting to add fields now while touching the file — but your regression criterion is byte-identity of trial #2's `trades.jsonl`, and any new key breaks it. Trial #3 gets fill prices through the existing `replay(..., on_event=...)` callback (engine fill events already carry the fill and `raw.slippage_rate`). Verify before (d) that `EntryFilled`/`PositionClosed` events expose fill price and commission; if they do, no shared change is ever needed for S4.
+> 
+> **2. Regression check — mechanics that will bite:**
+> - `var/backtest` is 11 GB. Don't `copytree`; build the temp base from **symlinks** to `prepared/`, `runs/`, `_records/`. `_evaluate` only reads those and writes `evaluation/` under the temp base; `verify_rebuild` copies `raw/` to its own tempdir. Check free disk before the rebuild copy.
+> - Construct `Stages(..., fetch=False)` and call `_evaluate(..., fetch=False)` so the check never touches the network.
+> - The bypass should be exactly one thing: `PV.fingerprint` returning the receipt's recorded fingerprint, inside the script, documented in its docstring. Don't monkeypatch `require_clean` or the pins/receipt checks — those should still pass.
+> - Confirm `p1_t2_run` exposes a gate-free callable (like `run.execute`). If its only entry is `main()` with `gate_cli`, the script replicates main minus the gate; don't edit `p1_t2_run.py`.
+> - `meta.json` diff: strip `git_head` and `gate` only; `pins_commit` must still match.
+> 
+> **3. Q1 — bypass is acceptable; the worktree alternative proves nothing.** A worktree at H runs old code. What you need is *new* code on *old* inputs. Conditions: the script lives in `scripts/` and is committed before the baseline run; it never writes under `var/backtest/t2`; both outputs (baseline and post-change) are logged verbatim with SHA256 per file.
+> 
+> **4. Order — the baseline is the first build action, not a pre-pass action.** Codex verdict → log both verbatim with positions → commit the check script → run baseline (must already match; if it doesn't, stop — something changed since 63c1760 that you haven't accounted for) → (b) edits test-first → re-run → after-pass → report. No `engine_replay`/`placebo_exec` edit before Codex lands.
+> 
+> **5. Q3 — yes, record it, with a hash.** After (b), trial #2's gated evaluator and stages refuse on `main` by design. Note in ops_log: "trial #2 provenance re-runs require checkout ≤ `a395667` (last commit with fingerprint = H 63c1760's set)". No registry row unless Codex asks; trial #2 is closed.
+> 
+> **6. T1 — assert exact equality, not a bound.** The engine is Decimal; the test should compute expected fills with `adverse_fill_estimate(side, mark, tick, Decimal("0.0006"))` and assert `==`. Then assert `Δwallet` decomposes exactly: entry commission + exit commission + (fill_entry − mark_open)·qty + (mark_ref − fill_exit)·qty for long, sign-flipped for short. "Within tick rounding" hides bugs.
+> 
+> **7. T3 — check the liquidation path before writing the assertion.** Grep `engine.py` for how liquidation closes. If it routes through `_exit` → `send_market`, slippage is being applied to a liquidation fill, which contradicts §1 ("손실 = 남은 격리 지갑 + 수량 × 추정 청산가 × liquidationFee"). T3 as designed would catch it — but if it fails, that's a spec finding to report, not a test to loosen. If liquidation is separate (likely), T3 passes and you've proved the claim.
+> 
+> **8. Convention for (d), surfaced now because it depends on this change:** the decision-time B2 gate must quote `m` through the same adverse model (`adverse_fill_estimate(side, m, tick, 0.0006)`), not use `m` raw — otherwise decision and fill gates use different price bases and §2's "사이징·실행 전부 같은 모델" is violated. Pin in the conventions row. Also: trial #3 tests should assert fill events carry `raw.slippage_rate == "0.0006"`.
+> 
+> **9. T6 — narrow the wording.** "No non-default `slippage_rate=` argument anywhere except `strategies/trial03/` and tests." Passthrough kwargs (`slippage_rate=slippage_rate`) in `placebo_exec`/`engine_replay` are the only other occurrences allowed.
+> 
+> **10. Q2 — `p1_run.py` (trial #1) calls `sizing_decision` positionally; a trailing keyword-only kwarg with default leaves it untouched. `backtest/replay.py` and `step_e.py` didn't appear in your grep for `PaperSender(` — confirm they don't construct an Engine another way.**
+> 
+> Nothing here changes the shared-layer scope: two files, two keyword-only parameters, defaults = #7. The P1 part rerun (~3 min) plus the evaluator rebuild (~1 min) is the whole cost of the proof.
+
+### Codex 원문(verbatim · task-mumjervv-nvo0zi)
+> ## BEFORE-PASS findings
+> 
+> 1. **BLOCKER — The proposed sample cannot prove Trial #2 bit identity.** It covers five of 200 P4 variants and 125 of 1,000 P1 draws. The evaluator requires the complete inventory and P1 coverage ([evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:45), [evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:108)). **Fix:** compare all 205 strategy runs, all P1 parts covering draws 0–999, and the merged P1 files before and after the change. Generate P1 from the newly reproduced A output. Compare every output byte; compare `meta.json` after removing only the expected `git_head` and `gate` fields. Reset the Decimal context as the Trial #2 CLIs do ([run.py](/home/cms/project/BTC_Futures_E2E/strategies/trial02/run.py:63), [p1_t2_run.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:101)).
+> 
+> 2. **MAJOR — The proposed evaluator bypass is not an evaluator rerun.** Its preflight checks the frozen fingerprint and receipt; its inventory checks recorded commands containing absolute prepared paths and all outputs; its metadata checks the original gate ([evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:99), [evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:120), [evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:354)). Copying outputs to a temp directory and bypassing one fingerprint check does not satisfy those checks. **Fix:** label a gate-bypassed report recomputation as a *diagnostic* hash comparison. For an authoritative evaluator rerun, use clean code at H with the complete pinned inputs, records, and provenance, accounting for relocated paths. Do not replace or modify the closed Trial #2 evaluation.
+> 
+> 3. **MAJOR — T3 asserts an invariant the model does not have.** The sender is not called for liquidation, but a different entry slippage changes entry price, potentially quantity and leverage, estimated liquidation price, and loss. Liquidation has no fill price in its `PositionClosed` event ([engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:607)). **Fix:** restore an *identical* position into engines with 2 and 6 bps senders, trigger liquidation, and assert no sender order and identical liquidation events/loss. Separately test that a full replay may change its liquidation outcome through entry sizing.
+> 
+> 4. **MAJOR — Trial #3 P1 still needs explicit wiring at both decision and execution.** Trial #2’s P1 calls `sizing_decision` during placement and `run_time_exit` during execution ([p1_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2.py:45), [p1_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2.py:58)). **Fix:** add the proposed defaulted keyword through `sizing_decision`, `run_time_exit`, and `p1_null_distribution`; pass it to both sender instances. In Trial #3’s later P1 caller, pass its config rate to placement **and** execution, with an integration test showing both use 6 bps. The Step 2(b) shared API alone cannot establish §2’s P1 requirement ([preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:55)).
+> 
+> 5. **MINOR — T1’s “22 bps within tick rounding” assertion needs a precise basis.** `net_bps` divides wallet change by quantity × *entry fill*, while gross uses mark references ([engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:112)). That denominator creates a small difference even with zero tick rounding. **Fix:** assert exact adverse rounded entry and exit prices and exact wallet arithmetic; treat 22 bps as the nominal cost, with a tolerance that includes both tick effects and the entry-fill denominator.
+> 
+> ## Q1–Q3
+> 
+> **Q1:** Direct function calls that skip Trial #2’s gate are acceptable for a clearly marked regression diagnostic, once the baseline reproduces the complete recorded output. A worktree at H is preferable for an **authoritative** rerun. Copying only run outputs into it is insufficient for the evaluator’s pinned inputs, records, paths, and receipt checks.
+> 
+> **Q2:** Other relevant consumers are Trial #1’s [run.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_run.py:53) and [strategy runner](/home/cms/project/BTC_Futures_E2E/strategies/trial01/run.py:72), Trial #2’s [harness.py](/home/cms/project/BTC_Futures_E2E/strategies/trial02/harness.py:72) and P1 caller, and the bot’s [PaperSender construction](/home/cms/project/BTC_Futures_E2E/ops/run_bot.py:382). `make_sender` also constructs a default PaperSender; LiveSender’s quote retains the default 2 bps. With the proposed default-preserving signatures and unchanged callers, these paths should retain their behavior; the full comparison must verify the Trial #2 claim.
+> 
+> **Q3:** Yes. Append a registry note, and record the before/after evidence in `docs/ops_log.md` as required by [CLAUDE.md](/home/cms/project/BTC_Futures_E2E/CLAUDE.md). State that Trial #2 remains closed under H and its original fingerprint, while the current main branch intentionally fails its provenance gate. Do not describe a bypassed diagnostic as a new Trial #2 evaluation.
+> 
+> **Does the proposed procedure prove Trial #2 is unaffected?** No. Its partial run coverage cannot establish bit identity, and its evaluator bypass cannot establish a valid gated rerun.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0ecb8-f39f-7290-b172-2c83fa8e5259
+> Resume in Codex: codex resume 01a0ecb8-f39f-7290-b172-2c83fa8e5259
+
+### 계획 r2 원문
+> # Trial #3 (b) plan r2 — resolutions (advisor 1–10 + Codex task-mumjervv-nvo0zi 1–5, Q1–Q3)
+> 
+> B1 Scope unchanged: two files (backtest/engine_replay.py replay(); backtest/placebo_exec.py sizing_decision, run_time_exit,
+>    p1_null_distribution) gain a keyword-only `slippage_rate: Decimal = PAPER_SLIPPAGE_RATE`; run_time_exit passes it to BOTH the sizing
+>    quote and the Engine's PaperSender. No other shared file changes. NO new trade-record fields (advisor 1): trial #3 obtains fills and
+>    commissions via replay's on_event callback (checked in (d)); byte-identity of trial #2 trades.jsonl is the criterion.
+> B2 Regression = FULL coverage (Codex 1): scripts/t2_regression_check.py re-runs, with direct gate-free calls and decimal.setcontext as the
+>    trial #2 CLIs do, ALL 205 strategy variants (A, B, P2_delay1, P2_delay5, P3_invert, P4_draw000..199) via strategies.trial02.run.execute,
+>    ALL P1 draws 0..999 in the recorded 8 parts via backtest.p1_t2_run.run_range using the newly reproduced A output, and the P1 merge via
+>    p1_t2_run.merge; writes only to a temp/scratch dir outside var/backtest/t2; compares SHA256 of every output file with the recorded
+>    files in var/backtest/t2/IS/runs (meta.json compared after removing only git_head and gate). Parallel jobs = 3 (2.35 GB/child measured).
+> B3 Evaluator comparison = DIAGNOSTIC, labelled as such (Codex 2, Q1): the script recomputes report.json with evaluate_t2's own functions
+>    (load_prepared_pinned on the real prepared dir, DY.validity, compute, verdict_is, verdict_string, the same report dict and JSON dump
+>    settings) WITHOUT the provenance/inventory/write steps, on (a) the recorded runs and (b) the re-run outputs; compares SHA256 with the
+>    closed report 9223047c… and verdict.txt. Not a new trial #2 evaluation; the closed evaluation/ is never touched. An authoritative
+>    gated rerun is not done: the evaluator is one-shot (evaluation/ exists) and after (b) main intentionally fails trial #2's fingerprint;
+>    a rerun at H would execute H's code on H's inputs, i.e. reproduce the original evaluation, and says nothing about the new code.
+> B4 Order (advisor 4): log before-pass → commit + push the check script → BASELINE run in a git worktree at that commit (pre-change code;
+>    must already match — else stop) → (b) edits test-first in main → commit → AFTER run in main → after-pass → report.
+> B5 Tests: T1 exact equality (advisor 6, Codex 5): expected fills = adverse_fill_estimate(side, mark, tick, 0.0006) ==; Δwallet decomposed
+>    exactly (entry + exit commission, (fill_entry − mark_open)·qty, (mark_ref − fill_exit)·qty; short sign-flipped); 22 bps stated as nominal.
+>    T2 SL and close_now exits at the same rate. T3 (Codex 3) restore an identical position into engines with 2 bps and 6 bps senders,
+>    trigger liquidation, assert no sender order and identical liquidation event/loss; separately show a full replay's liquidation outcome
+>    may differ via entry sizing (documented, not asserted equal). T4 run_time_exit at 6 bps uses 6 bps for sizing quote and exit fill;
+>    default path bit-identical (golden). T5 existing goldens + full suite. T6 (advisor 9) static check: no non-default `slippage_rate=`
+>    literal outside strategies/trial03 and tests; passthrough `slippage_rate=slippage_rate` in the two modules only.
+> B6 Trial #3 P1 (Codex 4): the trial-#3 P1 caller (step e) passes the config rate to placement (sizing_decision) AND execution
+>    (run_time_exit); integration test there. Decision-time B2 gate (step d) quotes m through adverse_fill_estimate(side, m, tick, 0.0006)
+>    (advisor 8) — pinned in the conventions row; fill events asserted to carry raw.slippage_rate == "0.0006".
+> B7 Q3: registry note + ops_log after (b): trial #2 stays closed under H 63c1760 and its fingerprint; main after (b) intentionally fails
+>    trial #2's provenance gate; last main commit whose fingerprint set equals H's = the pre-(b) commit (recorded by hash).
