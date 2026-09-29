@@ -92,9 +92,7 @@ def check_inventory(st: T.Stages, prov: dict[str, Any]) -> dict[str, dict[str, A
             raise Refusal(f"{name}: 출력 집합 {sorted(rec['run']['outputs'])}이 기대와 다르다")
         recs[name] = rec
 
-    prep_set = set(json.loads((st.records / "prepare.json").read_text())["run"]["outputs"])
-    if not set(T.PREP_OUTPUTS) <= prep_set:
-        raise Refusal("prepare 출력에 준비 산출물이 없다")
+    prep_set = set(T.PREP_OUTPUTS)                           # 독립적으로 고정한 정확한 집합(Codex 2g after #2 · advisor #2)
     one("prepare", base, T.PREP_MODULE, [], st.prep, [prep_set])
     one("verify", base | {"pins_commit": prov["pins_commit"]}, T.PREP_MODULE, ["--verify"], st.prep, [prep_set])
     for n in STRATEGY_RUNS:
@@ -167,7 +165,14 @@ def check_meta(st: T.Stages, recs: dict[str, dict[str, Any]], pins: dict[str, An
 
 # ── ④ 통계 ─────────────────────────────────────────────────────────────────
 def _f(x: Any) -> float:
-    return float(Decimal(str(x)))
+    """Decimal 문자열 → float64 한 번(H9). 유한하지 않거나 해석 불가 → 거부(NaN이 ≤/≥ 비교를 조용히 거짓으로 만드는 경로 차단)."""
+    try:
+        d = Decimal(str(x))
+    except (decimal.InvalidOperation, ValueError) as e:
+        raise Refusal(f"수치 해석 불가: {x!r}") from e
+    if not d.is_finite():
+        raise Refusal(f"유한하지 않은 값: {x!r}")
+    return float(d)
 
 
 def trades_of(st: T.Stages, name: str) -> list[dict[str, Any]]:
@@ -279,8 +284,8 @@ def compute(st: T.Stages, validity: DY.Validity, bars: Sequence[Bar1m], first_da
     bh = bh_series(bars, first_day, last_day)
     label = ("비교 불가" if a_sharpe is None or bh["daily_sharpe"] is None
              else ("ACCEPT — 수동(매수보유)을 이기지는 못함" if a_sharpe < bh["daily_sharpe"] else "ACCEPT"))
-    b_days = set(vb)
-    c_trades = [t for t in ta if int(t["entry_ms"]) // DAY in b_days and t not in tb]
+    contraction = {int(x["day"]) for x in _jsonl(st.runs / "B" / "days.jsonl") if x.get("status") == "trading"}
+    c_trades = [t for t in ta if int(t["entry_ms"]) // DAY in set(vb) - contraction]          # 비수축일(V_B) A 트레이드
     report = {"A": sa, "B": sb, "validity": {"n_v_a": len(va), "n_v_b": len(vb), "reasons": validity.as_dict()["reasons"],
                                              "reasons_b": validity.as_dict()["reasons_b"]},
               "P1": {"computable": p1_comp, "failed_draws": p1_fail, "successful_draws": len(p1_null), "p95": x.p1_p95,
@@ -290,14 +295,33 @@ def compute(st: T.Stages, validity: DY.Validity, bars: Sequence[Bar1m], first_da
               "P4": {"defined": len(p4_means), "zero_trade_draws": A.P4_DRAWS - len(p4_means), "p95": x.p4_p95},
               "liquidations": {n: sum(1 for t in trades_of(st, n) if t.get("exit_reason") == "liquidation") for n in STRATEGY_RUNS},
               "AB_daily_contrast": {"mean": ab.mean, "ci": [ab.lo, ab.hi], "days": len(vb)},
-              "B_vs_noncontraction_A": {"mean_B": sb["mean_net"], "mean_C": mean_net(c_trades) if c_trades else None,
-                                        "n_C": len(c_trades)},
+              "B_vs_noncontraction_A": {"mean_B": sb["mean_net"] if tb else None, "mean_C": mean_net(c_trades) if c_trades else None,
+                                        "n_B": len(tb), "n_C": len(c_trades), "contraction_days": len(contraction),
+                                        "diff_B_minus_C": (sb["mean_net"] - mean_net(c_trades)) if tb and c_trades else None},
               "buy_and_hold": bh | {"A_daily_sharpe": a_sharpe, "is_label": label},
-              "skips_A": skip_report(_jsonl(st.runs / "A" / "crosses.jsonl")), "trades_A": trade_report(ta)}
+              "skips_A": skip_report(_jsonl(st.runs / "A" / "crosses.jsonl")) | {
+                  "invalid_days_A": len(validity.reasons), "invalid_days_B": len(validity.reasons) + len(validity.reasons_b)},
+              "trades_A": trade_report(ta) | {"trades_per_valid_day": len(ta) / len(va) if va else None}}
     return x, report
 
 
 # ── ⑤⑥ 실행 ────────────────────────────────────────────────────────────────
+def verdict_string(v: V.Verdict) -> str:
+    """판정 문자열 형식(규약 · advisor 2g after #3): 분류가 있으면 `REJECT(§7-2: <분류>)` · 없으면 라벨 그대로."""
+    return f"{v.label}(§7-2: {v.classification})" if v.classification else v.label
+
+
+def _finite(o: Any) -> Any:
+    """보고서 JSON은 엄격 — NaN·Inf → None(advisor #4)."""
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _finite(v) for k, v in o.items()}
+    if isinstance(o, list | tuple):
+        return [_finite(v) for v in o]
+    return o
+
+
 def evaluate(base: Path = T.BASE_DIR, repo: Path = ROOT, *, fetch: bool = True,
              load_prepared: Callable[..., tuple[list[Bar1m], list[Funding]]] = PT.load_prepared_pinned,
              rebuild: Callable[..., Any] = PT.verify_rebuild, window: tuple[int, int] | None = None,
@@ -319,14 +343,19 @@ def evaluate(base: Path = T.BASE_DIR, repo: Path = ROOT, *, fetch: bool = True,
         raise Refusal(str(e)) from e
     rng = window or PT.window_range()
     first, last = days or (A.IS_START_MS // DAY, A.IS_END_MS // DAY)
-    recs = check_inventory(st, prov)                        # 결과 파일 내용을 열기 전
-    rebuild(st.prep, rng)                                   # 원시 → 산출물 재빌드 1회(H2 · G8)
-    bars, fundings = load_prepared(st.prep, pins, rng)
-    validity = DY.validity(bars, fundings, first, last)
-    check_meta(st, recs, pins, prov, validity)
-    x, report = compute(st, validity, bars, first, last)
-    v = V.verdict_is(x)
-    verdict = v.label + (f" · {v.classification}" if v.classification else "")
+    try:
+        recs = check_inventory(st, prov)                    # 결과 파일 내용을 열기 전
+        rebuild(st.prep, rng)                               # 원시 → 산출물 재빌드 1회(H2 · G8)
+        bars, fundings = load_prepared(st.prep, pins, rng)
+        validity = DY.validity(bars, fundings, first, last)
+        check_meta(st, recs, pins, prov, validity)
+        x, report = compute(st, validity, bars, first, last)
+        v = V.verdict_is(x)
+    except Refusal:
+        raise
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, PV.ProvenanceError) as e:   # advisor #6: 판정 없음
+        raise Refusal(f"{type(e).__name__}: {e}") from e
+    verdict = verdict_string(v)
     report = {"verdict": verdict, "priority": v.priority, "classification": v.classification, "gates": v.gates,
               "placebo_rejects": v.placebo_rejects, "sr_star": v.sr_star, "sr_undefined": v.sr_undefined, "mde": v.mde,
               "inputs": x.__dict__, **report}
@@ -336,7 +365,8 @@ def evaluate(base: Path = T.BASE_DIR, repo: Path = ROOT, *, fetch: bool = True,
               "evaluator_head": PV.head(repo), "inputs_sha256": read}
     tmp = Path(tempfile.mkdtemp(prefix="evaluation_", dir=base))
     try:
-        (tmp / "report.json").write_text(json.dumps(report, sort_keys=True, indent=1, ensure_ascii=False, default=str) + "\n")
+        (tmp / "report.json").write_text(json.dumps(_finite(report), sort_keys=True, indent=1, ensure_ascii=False, default=str,
+                                                    allow_nan=False) + "\n")
         (tmp / "verdict.txt").write_text(verdict + "\n")
         record |= {"report_sha256": _sha(tmp / "report.json"), "verdict_sha256": _sha(tmp / "verdict.txt")}
         (tmp / "record.json").write_text(json.dumps(record, sort_keys=True, indent=1, ensure_ascii=False) + "\n")

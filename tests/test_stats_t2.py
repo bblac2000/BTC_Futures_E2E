@@ -68,3 +68,11 @@ def test_rho_regular():
 def test_sharpe_defined_rule():
     assert S.sharpe_or_none([1.0]) is None and S.sharpe_or_none([2.0, 2.0]) is None
     assert S.sharpe_or_none([1.0, 3.0]) == pytest.approx(2.0 / np.std([1.0, 3.0], ddof=1))
+
+
+def test_empty_day_list_is_undefined_without_warnings():
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert not S.valid_day_bootstrap_mean({}, [], rng(), resamples=10, level=0.9875).defined
+        assert not S.daily_diff_bootstrap({}, {}, [], rng(), resamples=10, level=0.9875).defined

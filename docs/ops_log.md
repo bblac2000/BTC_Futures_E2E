@@ -5801,3 +5801,67 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 시험: 핵심 진리표·경계 32개 · 통계 10개 · **실제 `Stages` + 실제 출력 형식 가짜 러너로 205 실행 + P1 조각·병합 전체 합성 파이프라인** 위 판정·거부 16개.
 - **TDD 이탈(공개)**: `evaluate_t2.py`는 시험보다 먼저 썼다(stats_t2·verdict_t2는 시험과 함께) → 돌연변이 검사 7개 중 6개 잡음 · 놓친 1개(일관되게 더러운 HEAD)는 시험을 격리해 잡음.
 - 발견: 초안 픽스처의 SR̂_A 0.2는 SR*(0.259)보다 작아 G-B 실패 — §3 공시("SR̂가 #1과 멀수록 SR*가 커진다")의 실제 사례. 규칙 문제가 아니라 픽스처 값 문제로 고침(0.6).
+
+## 2026-09-29 — 트라이얼 #2 단계 2g **after-pass**(advisor + Codex task-mum48p9v-aavz5n **FIX-FIRST**) → 수정
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| Codex | 1 | ✅ | `_f`가 유한하지 않거나 해석 불가한 값 → 거부 · 핵심 `verdict_is`도 유한하지 않은 입력 → 오류(0건 평균만 예외) · 시험(평가기 경로 + 핵심 6개 필드) |
+| Codex | 2 | ✅ | prepare/verify 정확한 집합 = `T.PREP_OUTPUTS` 고정 · 시험(추가 산출물) |
+| Codex | 3 | ✅ | 비수축 진단 = B `days.jsonl` 상태로 수축일 · C = V_B 비수축일 A 트레이드 · 차이 보고 · 트레이드/유효일 · 무효일 수 보고 · 시험 |
+| advisor | 1·2 | ✅ | Codex 3·2와 같음 |
+| advisor | 3 | ✅ | 판정 문자열 `REJECT(§7-2: <분류>)` · 시험 · 규약 26 |
+| advisor | 4 | ✅ | NaN → null · `allow_nan=False` · 시험 |
+| advisor | 5 | ✅ | 규약 27 |
+| advisor | 6 | ✅ | 비출처 예외도 `Refusal`(판정 없음 · 아무것도 쓰지 않음) |
+| advisor | 7 | ✅ | 시험: 우선순위 3 문자열 · 비교 불가 · 메타 불일치 4종 · P1 계산 가능 모순 · 변형 표 205개 교차 · V_A 빈 경우 우선순위 0 |
+| advisor | 8 | ✅ | 끝 순서 기록(아래 단계 계획) |
+- 빈 날 목록에서 부트스트랩이 경고를 내던 것 → 정의 안 됨으로 깨끗이 반환(시험).
+
+### advisor 원문(verbatim 요지)
+> 1. Report bug — B_vs_noncontraction_A is wrong (t not in tb always true; C = all A trades on V_B). Fix via B days.jsonl status; test n_C == n_A_on_V_B − n_B.
+> 2. prepare/verify exact output set is self-referential — pin sets=[set(T.PREP_OUTPUTS)].
+> 3. Verdict string format unpinned ("REJECT · 결론 보류형 REJECT") — decide format, test it, conventions row; same for 비교 불가 / suffix wording.
+> 4. report.json can contain NaN — nan→None + allow_nan=False.
+> 5. B&H source disclosure — prepared-bar closes (kline∩mark); convention row.
+> 6. Wrap non-provenance exceptions (KeyError/FileNotFoundError/JSONDecodeError) into Refusal so "no verdict, nothing written" holds.
+> 7. Tests: shell priority-3 classification string; 비교 불가; check_meta refusals (counts/validity/pins); p1_computable ≠ (n_A>0); E.VARIANTS == run table for all 205.
+> 8. Endgame: fixes → narrow re-check → whole-step-2 after-pass → 2i rows → push request (H = last commit touching any fingerprint file) → prepare → data_pins + registry → second push → verify → A → base → p1 → merge → p4 → evaluate once; commit each stage's ops_log entry before the next stage.
+> Items 1–2 blocking for MERGE; 3–7 fold into the same fix commit.
+
+### Codex 원문(verbatim · task-mum48p9v-aavz5n)
+> ## Findings
+> 
+> 1. **BLOCKER — a nonfinite placebo value can produce `IS PASS`.** [`_f()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:169) accepts `"NaN"` and `"Infinity"` in trade and P1 null values. [`p95()`](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:88) can then return `NaN`, while [`verdict_is()`](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:116) checks only for `None`. Comparisons with `NaN` are false, so a placebo can silently avoid rejection. I confirmed that valid passing gate inputs with `NaN` P1, P2, P3, and P4 values return `IS PASS` with all four placebo rejections false. Refuse nonfinite result values before calculating a verdict; add a regression test through the evaluator input path.
+> 
+> 2. **BLOCKER — the prepare output set is not checked independently.** [`check_inventory()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:95) takes the purported exact prepare output set from `prepare.json`, then validates that record against the same set. The `PREP_OUTPUTS` check requires only a subset. A record and directory containing an extra output therefore pass, contrary to H2’s exact output set requirement. Pin the expected set in the evaluator and test an extra recorded prepare output.
+> 
+> 3. **Binding report departures.** The required *B versus noncontraction A* diagnostic uses A trades on all `V_B` days, filtered by trade dictionary inequality with B ([`compute()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:282)). `V_B` denotes days with complete B inputs, not noncontraction days; the implementation does not use the recorded day status. The report also omits the explicit difference. Section 7-3 requires trades per day and a separate invalid-day count; [`trade_report()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:238) and the [`validity` report](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:284) provide neither. These are report requirements, not gates.
+> 
+> ## H1–H15 check
+> 
+> | Clause | Assessment and implementation |
+> |---|---|
+> | H1 | Implemented: valid-day trade bootstrap and paired daily bootstrap in [`stats_t2.py`](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:39); called with `V_A`/`V_B` in [`compute()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:255). |
+> | H2 | **Partial:** run inventory, commands, hashes, P1 range coverage, and metadata checks are at [`check_inventory()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:71) and [`check_meta()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:121). Prepare’s output set is self-derived as described above. |
+> | H3 | Implemented for this evaluator: existing output or missing receipt refuses at [`evaluate()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:306); empty verified `V_A` gets priority 0 at [`verdict_is()`](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:91). The SourceStop/registry process is outside this evaluator. |
+> | H4 | Implemented at [`lag1_rho()`](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:66). |
+> | H5 | Implemented at [`bh_series()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:195), with the undefined-Sharpe comparison at [line 280](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:280). |
+> | H6 | **Partial:** B has no gate and liquidation and skip counts are reported at [lines 284–296](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:284); the noncontraction diagnostic is incorrect. |
+> | H7 | Implemented for single-call refusal, temporary output, stdout, and output/input hashes at [lines 301–358](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:301). Raw-file hashes are carried in the receipt rather than `inputs_sha256`. |
+> | H8 | Pure IS verdict implemented at [`verdict_is()`](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:91); boundary tests exist in [`test_verdict_t2.py`](/home/cms/project/BTC_Futures_E2E/tests/test_verdict_t2.py:25). Coverage gaps are below. |
+> | H9 | G0’s effective sample size and MDE use the same formula at [`verdict_t2.py`](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:28). Decimal inputs reach float comparisons through [`_f()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:169); its missing finite check is verdict relevant. |
+> | H10 | Pure OOS and forward functions are present at [lines 125–152](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:125). OOS loading and reporting remain a later stage under the approved design. |
+> | H11 | This is the future execution sequence in [`ops_log.md`](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:5695); it cannot be established by this code diff. |
+> | H12 | Implemented: canonical merged draws and null rows are compared with parts at [`check_meta()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:145). |
+> | H13 | Required provenance by record kind is supplied at [`check_inventory()`](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:78). |
+> | H14 | Exact record and sidecar names are checked at [lines 73–77](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:73). |
+> | H15 | Strategy metadata, line counts, and valid-day membership are checked at [lines 125–144](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:125). |
+> 
+> The **G0, G1, G2, G-B, flat, survival, P1–P4 comparison boundaries, IS/OOS/forward precedence, and §7-2 MDE thresholds** otherwise match the cited preregistration rules in [`verdict_t2.py`](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:91). The main departure in verdict behavior is the nonfinite placebo path.
+> 
+> Missing targeted tests include nonfinite placebo inputs yielding a refusal, an extra recorded prepare output, a mixed contraction/noncontraction B diagnostic, trades-per-day and invalid-day reporting, and empty `V_A` at the full evaluator boundary. I could run the pure `NaN` verdict probe. Pytest could not start in this read-only environment because it could not create a temporary file; no files were changed.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0eb34-2f85-7de2-8d0e-324d702297bf
+> Resume in Codex: codex resume 01a0eb34-2f85-7de2-8d0e-324d702297bf

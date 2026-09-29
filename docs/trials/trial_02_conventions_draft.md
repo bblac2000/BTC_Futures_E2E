@@ -26,4 +26,7 @@
 23. **§7-3 결합**(2f 범위): 전략의 `first_cross`(outcome = intent)와 다음 봉 엔진 `EntrySkipped`(sl_crossed_before_fill · sizing_rejected · normalization = {below_min_qty, min_notional})를 run.py가 `on_event`로 이어 한 교차당 사유 하나 · tick·규칙 = #36 스냅샷(SHA256 4개 검증 · 대체 없음).
 24. **날 경계 가드**: 새 날 첫 봉에서 포지션·대기 진입이 있으면 중단(주입 집합 오류 방지).
 25. **데이터 핀 행 형식**: 레지스트리에 `strategies/trial02/data_pins.json`을 적은 행이 **정확히 하나** · 그 행에 원시·산출물 파일마다 `파일=SHA256` · 핀과 같은(푸시된) 커밋에 들어 있어야 한다(`t2_provenance.load_pins`).
+26. **판정 문자열 형식**: 분류가 붙으면 `REJECT(§7-2: <검정력 부족|효과 부재|결론 보류형 REJECT>)` · 그 밖은 §7 라벨 그대로 · 표준출력 = 이 문자열 하나.
+27. **매수보유 = 준비 봉의 종가**: IS 창에서 준비 봉(kline ∩ mark · C17)이 있는 UTC 날마다 23:59 봉 kline 종가, 없으면 그날 마지막 준비 봉 종가 · 봉 없는 날은 건너뛰고 다음 수익률이 잇는다 · 원시 kline만 있는 분은 쓰지 않는다(보고 전용).
+28. **판정기 수치 규칙**: 입력 Decimal → float64 한 번 · 유한하지 않은 값 → 판정 거부 · 보고서 JSON 엄격(NaN → null) · 모든 트라이얼 #2 손익 프로세스(run · p1_t2_run · evaluate_t2)는 시작 때 파이썬 기본 10진 문맥.
 16. **§11-8**: 산출물 스키마 · 격리 CLI 경로 · 커밋/푸시 증거(판정기 푸시 커밋 해시) — 2g에서 채운다.

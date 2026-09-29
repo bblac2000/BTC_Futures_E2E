@@ -110,3 +110,9 @@ def test_oos_function(kw, label):
 def test_forward_function(kw, label):
     base = dict(liq_or_killswitch=0, exec_defect=False, n_trades=5, mean_net_bps=3.0, is_bh_beats=False)
     assert V.verdict_forward(**(base | kw)).label == label
+
+
+@pytest.mark.parametrize("field", ["p1_p95", "p2_d1", "p3_inv", "p4_p95", "rho", "net_ci_lo"])
+def test_nonfinite_inputs_raise(field):
+    with pytest.raises(ValueError):
+        V.verdict_is(replace(good(), **{field: float("nan")}))

@@ -65,26 +65,32 @@ def good_scenario() -> dict:
 
 
 class World:
-    def __init__(self, base: Path, scen: dict, liq_a: int = 0, p1_fail: int = 0):
+    def __init__(self, base: Path, scen: dict, liq_a: int = 0, p1_fail: int = 0, validity: DY.Validity | None = None,
+                 extra_prep: bool = False, contraction: set[int] | None = None, force_nc: bool = False):
         self.base, self.scen, self.liq_a, self.p1_fail = base, scen, liq_a, p1_fail
+        self.validity = validity or VALIDITY
+        self.extra_prep, self.contraction, self.force_nc = extra_prep, contraction, force_nc
         self.meta_override: dict = {}
 
     def __call__(self, module, args, out, timeout_s=0, env=None):
         out.mkdir(parents=True, exist_ok=True)
         prov = {"evaluator_commit": "EV", "pins_commit": "PC", "fingerprint": "FP"}
         if module == T.PREP_MODULE:
-            for f in T.PREP_OUTPUTS:
+            for f in T.PREP_OUTPUTS + (("extra.txt",) if self.extra_prep else ()):
                 if not (out / f).exists():
                     (out / f).write_text(f"{f}\n")
         elif module == T.STRATEGY:
             name = args[1]
             ts = trades(self.scen[name], liq=self.liq_a if name == "A" else 0)
             if name == "B":
-                ts = [t for t in ts if int(t["entry_ms"]) // DAY in VALIDITY.v_b]
+                keep = self.contraction if self.contraction is not None else self.validity.v_b
+                ts = [t for t in ts if int(t["entry_ms"]) // DAY in keep]
             _w(out / "trades.jsonl", ts)
             _w(out / "crosses.jsonl", [{"final_reason": None, "direction": t["direction"]} for t in ts])
-            _w(out / "days.jsonl", [])
-            (out / "validity.json").write_text(json.dumps(VALIDITY.as_dict(), sort_keys=True) + "\n")
+            dd = [] if name != "B" else [{"event": "day", "day": d, "status": "trading" if self.contraction is None
+                                          or d in self.contraction else "not_contraction"} for d in sorted(self.validity.v_b)]
+            _w(out / "days.jsonl", dd)
+            (out / "validity.json").write_text(json.dumps(self.validity.as_dict(), sort_keys=True) + "\n")
             manifest = hashlib.sha256((self.base / "prepared" / "manifest.json").read_bytes()).hexdigest()
             meta = {"variant_name": name, "variant": E.VARIANTS[name], "pins": PINS, "pins_commit": "PC",
                     "manifest_sha256": manifest, "bo_v1_sha256": A.BO_V1_SHA256, "rules_snapshot_sha256": A.RULES_SNAPSHOT_SHA256,
@@ -95,7 +101,7 @@ class World:
             R.merge(Path(args[2]), json.loads(Path(args[4]).read_text()), out)
         else:
             lo, hi = (int(x) for x in args[args.index("--draws") + 1].split("-"))
-            if not self.scen["A"]:
+            if not self.scen["A"] or self.force_nc:
                 (out / E.NOT_COMPUTABLE).write_text('{"computable": false, "reason": "n_A=0"}\n')
                 (out / "p1_draws.json").write_text("[]")
                 _w(out / "p1_null.jsonl", [])
@@ -136,9 +142,10 @@ def build(tmp_path, scen=None, **kw) -> World:
     return w
 
 
-def run_eval(tmp_path):
-    return E.evaluate(tmp_path, tmp_path, fetch=False, load_prepared=lambda o, p, r: (BARS, FUNDS),
-                      rebuild=lambda o, r: None, window=(0, 1), days=(FIRST, LAST))
+def run_eval(tmp_path, bars=None, days=(FIRST, LAST)):
+    b = bars if bars is not None else BARS
+    return E.evaluate(tmp_path, tmp_path, fetch=False, load_prepared=lambda o, p, r: (b, FUNDS),
+                      rebuild=lambda o, r: None, window=(0, 1), days=days)
 
 
 def test_is_pass_and_single_call(tmp_path, patched):
@@ -292,3 +299,86 @@ def test_refuses_consistently_dirty_head(tmp_path, patched):
     f.write_text(json.dumps(rec))
     with pytest.raises(E.Refusal, match="더러운"):
         run_eval(tmp_path)
+
+
+def test_nonfinite_value_is_refused_not_passed(tmp_path, patched):
+    s = good_scenario()
+    s["P4_draw007"] = [float("nan")] * 3
+    build(tmp_path, s)
+    with pytest.raises(E.Refusal, match="유한"):
+        run_eval(tmp_path)
+    assert not (tmp_path / "evaluation").exists()
+
+
+def test_extra_prepare_output_is_refused(tmp_path, patched):
+    build(tmp_path, extra_prep=True)
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)
+
+
+def test_noncontraction_diagnostic_uses_b_day_status(tmp_path, patched):
+    contraction = set(range(FIRST, FIRST + 10))
+    build(tmp_path, contraction=contraction)
+    _, report, _ = run_eval(tmp_path)
+    d = report["B_vs_noncontraction_A"]
+    a_on_vb = [t for t in trades(good_scenario()["A"]) if int(t["entry_ms"]) // DAY in VALIDITY.v_b]
+    assert d["contraction_days"] == 10 and d["n_B"] + d["n_C"] == len(a_on_vb) and d["n_B"] == 20
+    assert report["skips_A"]["invalid_days_A"] == 0 and report["trades_A"]["trades_per_valid_day"] == 2.0
+
+
+def test_priority3_verdict_string_format(tmp_path, patched):
+    s = good_scenario()
+    s["A"] = alt(80, -40.0)
+    build(tmp_path, s)
+    verdict, report, _ = run_eval(tmp_path)
+    assert report["priority"] == 3 and verdict == f"REJECT(§7-2: {report['classification']})"
+    assert (tmp_path / "evaluation" / "verdict.txt").read_text() == verdict + "\n"
+    json.loads((tmp_path / "evaluation" / "report.json").read_text())                  # 엄격 JSON(NaN 없음)
+    assert "NaN" not in (tmp_path / "evaluation" / "report.json").read_text()
+
+
+def test_bh_uncomparable_label(tmp_path, patched):
+    build(tmp_path)
+    flat = [Bar1m(b.open_ms, "60000", "60000", "60000", "60000", "1", "1", 1, "0", "0", b.mark_open, b.mark_high, b.mark_low,
+                  b.mark_close, "archive") for b in BARS]
+    _, report, _ = run_eval(tmp_path, bars=flat)
+    assert report["buy_and_hold"]["is_label"] == "비교 불가"
+
+
+@pytest.mark.parametrize("override", [{"n_trades": 1}, {"pins": {"raw": {}, "prepared": {}}}, {"pins_commit": "OTHER"},
+                                      {"bo_v1_sha256": "0" * 64}])
+def test_meta_mismatch_refused(tmp_path, patched, override):
+    w = World(tmp_path, good_scenario())
+    w.meta_override = {"P3_invert": override}
+    st = T.Stages("EV", base=tmp_path, repo=tmp_path, runner=w, fetch=False)
+    st.prep.mkdir(parents=True)
+    (st.prep / "manifest.json").write_text(json.dumps({"raw": PINS["raw"], **PINS["prepared"]}))
+    for step in (st.prepare, st.verify, lambda: st.arm(["A"], 1), lambda: st.arm(list(T.BASE_NAMES), 1),
+                 lambda: st.arm(T.p4_names(), 1), lambda: st.p1(2, 1), st.p1_merge):
+        step()
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)
+
+
+def test_p1_not_computable_with_trades_is_refused(tmp_path, patched):
+    build(tmp_path, force_nc=True)
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)
+
+
+def test_empty_v_a_is_priority0(tmp_path, patched):
+    empty_days = (LAST + 100, LAST + 110)
+    v = DY.validity(BARS, FUNDS, *empty_days)
+    s = good_scenario()
+    s["A"], s["B"], s["P2_delay1"], s["P2_delay5"], s["P3_invert"] = [], [], [], [], []
+    for d in range(200):
+        s[f"P4_draw{d:03d}"] = []
+    build(tmp_path, s, validity=v)
+    verdict, report, _ = run_eval(tmp_path, days=empty_days)
+    assert verdict == "폐기" and report["priority"] == 0
+
+
+def test_evaluator_variant_table_matches_run_table():
+    from strategies.trial02.run import variant_for, variant_meta
+    for n in E.STRATEGY_RUNS:
+        assert E.VARIANTS[n] == variant_meta(variant_for(n)), n

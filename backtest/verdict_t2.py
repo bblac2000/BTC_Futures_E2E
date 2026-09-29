@@ -89,6 +89,10 @@ class Verdict:
 
 
 def verdict_is(x: ISInputs) -> Verdict:
+    bad = [k for k, v in x.__dict__.items() if isinstance(v, float) and not math.isfinite(v)
+           and not (k in ("mean_gross", "mean_net") and x.n_a == 0)]
+    if bad:
+        raise ValueError(f"유한하지 않은 판정 입력: {bad}")     # NaN은 ≤/≥를 조용히 거짓으로 만든다(Codex 2g after #1)
     if x.v_a_empty:
         return Verdict("폐기", 0)
     if x.n_a == 0:

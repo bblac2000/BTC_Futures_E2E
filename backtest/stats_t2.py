@@ -43,6 +43,8 @@ def valid_day_bootstrap_mean(by_day: Mapping[int, Sequence[float]], days: Sequen
     if extra:
         raise ValueError(f"유효일 목록 밖 날의 거래: {sorted(extra)[:5]}")
     order = list(days)
+    if not order:
+        return DayCI(float("nan"), float("nan"), float("nan"), level, resamples, resamples, 0)
     sums = np.array([float(sum(by_day.get(d, ()))) for d in order])
     cnts = np.array([float(len(by_day.get(d, ()))) for d in order])
     idx = rng.integers(0, len(order), size=(resamples, len(order)))
@@ -57,6 +59,8 @@ def valid_day_bootstrap_mean(by_day: Mapping[int, Sequence[float]], days: Sequen
 def daily_diff_bootstrap(a_day: Mapping[int, float], b_day: Mapping[int, float], days: Sequence[int], rng: np.random.Generator,
                          *, resamples: int, level: float) -> DayCI:
     order = list(days)
+    if not order:
+        return DayCI(float("nan"), float("nan"), float("nan"), level, resamples, 0, 0)
     d = np.array([float(b_day.get(x, 0.0)) - float(a_day.get(x, 0.0)) for x in order])
     idx = rng.integers(0, len(order), size=(resamples, len(order)))
     lo, hi = _q(d[idx].mean(axis=1), level)
