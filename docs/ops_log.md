@@ -6305,3 +6305,8 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 사용자 승인 → `git push origin main`(40e8c39..63c1760) · origin/main 포함 확인 · 비밀 스캔 0건.
 - 사용자: P1 폐기 위험은 사전등록대로 수용 — 실패 > 10이면 판정은 폐기, 배치 규칙 개선은 새 트라이얼의 P1 규칙으로(이 트라이얼 정정 아님).
 - 다음: prepare(H로 선행 검사).
+
+## 2026-09-29 — 트라이얼 #2 prepare 완료 · 데이터 핀(레지스트리 #39)
+- `t2_stages --stage prepare`(H = 63c1760) → rc 0 · 1분 56초 · 최대 RSS 4.5 GB · 중단 조건 0.
+- 감사(무결성 개수만): 봉 1,343,518(아카이브 1,325,698 · REST 17,820) · 결손 분 2(= 사전등록 §5의 2024-08-12 10:02·10:03 mark 결손 · 아카이브 mark 비정상 2 · REST에도 mark 없음) · kline 결손 봉 0 · kline 일 933 · 확정 펀딩 2,799.
+- `scripts/t2_make_pins.py` → `strategies/trial02/data_pins.json` + 레지스트리 #39(검사기 통과) · 두 번째 푸시(사용자 승인 순서) 뒤 verify.

@@ -1,0 +1,15 @@
+{
+ "prepared": {
+  "bars_1m.parquet": "0229e509e9fe3e6e81826854335f32409cb8d4e332aee7aa67d7c59c7efcf843",
+  "funding.json": "78271ad63b8cca5653094b020210d016007c8838247f26d9e9b704a6986a6bcf",
+  "kline_close_daily.json": "6c702e093570b6530e1ac60bbf57af10977b644c716e2969242699dda6a53a7a",
+  "source_audit.json": "f823cce95cc70a96b1d16dbf8dc549af6138d9d00d9485caefc7e3ea49e3f48a"
+ },
+ "raw": {
+  "archive_rows.jsonl": "750f8353f98074002d7457733cf13d630262a3dd87d96c6e5c649c0575a0d757",
+  "fill_ranges.json": "0ae32d8023da4a9841f3f209a97d7653cbf795aafa270f8cb4bbf7ea61f58ace",
+  "funding.jsonl": "b9de863dfdb568a560a5ddec4a9468b993542c22a0e3e8f002d158f0861bbc5a",
+  "rest_klines.jsonl": "c8e80060051bb15fb8f2fcd6ef43bdc2d4b5a53137c45959c835438d68302b51",
+  "rest_mark.jsonl": "40997163a46a317f20afcb010edd1e9a90da5b98cffd464e7aa081a27622c751"
+ }
+}
