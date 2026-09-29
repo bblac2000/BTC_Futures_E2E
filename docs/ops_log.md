@@ -5583,3 +5583,157 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb25-43f2-7572-83ba-feef60bdaad3
 > Resume in Codex: codex resume 01a0eb25-43f2-7572-83ba-feef60bdaad3
+
+## 2026-09-29 — 트라이얼 #2 단계 2g(판정기) **before-pass**(advisor + Codex task-mum3pcwd-bpfiwz **FIX-PLAN-FIRST**) → 설계 r2
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 | ✅ | H1 |
+| advisor | 2 | ✅ | H5 |
+| advisor | 3 | ✅ | H8 |
+| advisor | 4 | ✅ | H2 · H7 |
+| advisor | 5 | ✅ | H9 |
+| advisor | 6 | ✅ | H10 |
+| advisor | 7 | ✅ | H11 |
+| Codex | 1 | ✅ | H2(P1 두 출력 집합 · 병합 기대값 재계산) |
+| Codex | 2 | ✅ | H2(독립 기대 목록 · git_head · meta 대조) |
+| Codex | 3 | ✅ | H1 |
+| Codex | 4 | ✅ | H3 |
+| Codex | 5 | ✅ | H4 |
+| Codex | 기타 | ✅ | H5 · H6 · H7 · H10 |
+
+### 설계 r1
+> # Trial #2 step 2g — evaluator `backtest/evaluate_t2.py` (design for the before-pass)
+> 
+> Binding: prereg §3 (gates, evaluation order), §3-1 (definitions, degenerate rules), §4 (placebo rejection rules), §4-1 (evaluator
+> committed+pushed before any run; one evaluator call after all artifacts exist), §7 (staged precedence), §7-2 (classification),
+> §7-3 (skip report), §11-4/-5. Carried forward from 2f reviews: G3/G5/G9/G10, advisor 3(b), final_wallet never read.
+> Imports: strategies.trial02.anchor (constants only), backtest.{stats,t2_provenance,prepare_t2,days,replay}. NO strategy/harness/run
+> import (test). Process starts with decimal.setcontext(Context()).
+> 
+> E0 Inputs + provenance (refuse to evaluate — no verdict — on any failure; report "evaluation refused: <reason>"):
+>   - require_evaluator_frozen(ROOT, H) where H = receipt.evaluator_commit; fingerprint(HEAD) == receipt.fingerprint.
+>   - verify record + receipt (same checks as Stages.receipt_ok) and ONE full `verify_rebuild` (raw → prepared hashes).
+>   - Run records: A, B, P2_delay1, P2_delay5, P3_invert, P4_draw000..199 (exactly these 205 names), P1_part_* covering 0..999 + P1_merge:
+>     check_record(module, args, exact output set, provenance {evaluator_commit, pins_commit, manifest_sha256, fingerprint, variant}).
+>     meta.json variant_name == record name and meta.variant == run.variant_for(name) table (duplicated here as data, not imported).
+>   - V_A/V_B recomputed from the pinned prepared input == every run's validity.json.
+>   - Refuses if `evaluation/` already exists (one call).
+> E1 Per-trade values (strings → Decimal → float only for numpy): net_bps, gross_bps, entry_ms, exit_reason, from trades.jsonl.
+>   Statistical ledger PnL_i = N_stat·net_bps/1e4; daily stat PnL on V_A days (entry day; 0 on no-trade days); daily return = PnL/N_stat.
+> E2 Gates (A; B computed and reported the same way over V_B):
+>   G0: n ≥ 48 ∧ n/(1+4·max(ρ̂,0.15)) ≥ 30 · ρ̂ = lag-1 autocorr of net_bps in entry order; undefined (n<3 or var 0) → 0.
+>   G1/G2: mean gross/net > 0 ∧ CI_lo > 0 · CI = day-block percentile bootstrap over V_A days (empty days kept; resamples with 0 trades
+>     excluded and counted), 10,000 resamples, numpy linear quantiles at 0.625/99.375 %, streams SeedSequence((20260924,1)).spawn(8)[k]
+>     k: 0 gross_A, 1 net_A, 2 gross_B, 3 net_B, 4 A/B daily. Undefined CI → gate fails.
+>   G-B: SR̂ = mean/std(ddof=1) of per-trade net_bps, defined iff n ≥ 2 ∧ var > 0. SR* = expected_max_sr(defined subset of
+>     {SR_1A, SR_1B, SR̂_A, SR̂_B}, n_trials=4); < 2 defined → fail. Pass ⇔ PSR_A(0) > 0.5 ∧ n_A ≥ 30 ∧ SR̂_A − SR* > 0;
+>     SR̂_A or PSR_A undefined → fail. Report PSR_A(SR*) and which SR̂ were undefined.
+>   flat: Σ PnL_i > 0 (≡ mean net > 0).
+>   Survival: A liquidations (exit_reason == "liquidation") == 0.
+> E3 Placebos (orig = A mean net_bps):
+>   P1: computable ∧ failed draws ≤ 10 → p95 = numpy linear 0.95 quantile of successful draws' mean_net_bps; reject ⇔ orig ≤ p95.
+>       failed > 10 → 폐기 (harness defect, priority 4). Not computable (n_A=0) cannot reach P1 (A trade 0 → priority 1).
+>   P2: value = mean net_bps of the variant run (0 trades → 0) · reject ⇔ orig ≤ max(d1, d5).
+>   P3: reject ⇔ orig ≤ inverted (0 trades → 0).
+>   P4: defined draws = runs with ≥ 1 trade; < 190 defined → 폐기; p95 of defined draws' mean net; reject ⇔ p95 ≥ orig.
+> E4 §7 IS precedence: 0 폐기 (V_A empty) → 1 REJECT(FAIL — 트레이드 0) → 2 REJECT(생존) → 3 REJECT (G0/G1/G2/G-B/flat) + §7-2 →
+>    4 폐기 (P1 failures > 10 · P4 defined < 190) → 5 REJECT (P1..P4) + §7-2 → IS PASS.
+>    §7-2: MDE = (z_{1−0.0125} + z_{0.8})·σ(net,ddof1)/√n_eff (NormalDist) · > 20 → 검정력 부족 · < 5 ∧ net CI_hi < 10 → 효과 부재 ·
+>    else 결론 보류 · MDE undefined → 검정력 부족.
+> E5 Reports (never gates): A/B daily contrast over V_B (B_day − A_day, mean + CI stream 4), B diagnostics vs non-contraction A trades,
+>    B&H daily Sharpe (last 1m kline close per consecutive UTC IS day via load_prepared_pinned; first return = day2/day1) vs A daily
+>    Sharpe over V_A (label "ACCEPT — 수동(매수보유)을 이기지는 못함" is recorded as the IS comparison for the eventual ACCEPT), window
+>    B&H return; §7-3 skip ratios from crosses.jsonl final_reason (floor/ceiling split); holding-time distribution, exit reasons,
+>    long/short, per year; P1 exit counts; MDE; CI details. final_wallet is never read (test).
+> E6 OOS stage function (pure, pre-committed now, not callable without a separate user-approved OOS stage): OOS 0 폐기(data) → 1 trade 0 →
+>    2 survival → 3 OOS G0 → "REJECT(OOS 표본 부족)" → 4 G3 (net mean>0 ∧ CI_lo>0) → OOS PASS. Forward G-F: out of scope (new registry
+>    row at activation).
+> E7 Output: `evaluation/report.json` (sorted keys) + `evaluation/verdict.txt` + SHA256s printed; stdout = verdict string only.
+> Tests (synthetic): each gate boundary; degenerate rules; SR* subset rule; CI percentile + zero-trade resamples; seeded bootstrap
+> reproduction; every §7 precedence row incl. ties/overlaps; placebo equality boundaries (≤, ≥); P4 189/190; P2/P3 zero-trade 0;
+> provenance refusals (missing run, wrong variant meta, fingerprint mismatch, second call); no strategy import; final_wallet unread.
+
+### 설계 r2 변경
+> # 2g design r2 — changes vs r1 (advisor + Codex before-pass)
+> 
+> H1 (Codex #3 · advisor #1) New `backtest/stats_t2.py` (added to the fingerprint + evaluator-frozen sets): `valid_day_bootstrap_mean(
+>    trades_by_day, days, rng)` — blocks = exactly the given day list (empty valid days kept, invalid days absent; a trade whose entry
+>    day ∉ days → error), statistic = Σ resampled sums / Σ resampled counts, resamples with 0 trades excluded + counted, CI = numpy
+>    linear quantiles at 0.625/99.375 %. `daily_diff_bootstrap(a_day, b_day, days, rng)` — A/B = mean over V_B of (B_day − A_day),
+>    same resampled day indices. stats.block_bootstrap_mean / paired_block_bootstrap_diff are NOT used by trial #2 (test).
+> H2 (Codex #1·#2 · advisor #4) Independent expected inventory, checked BEFORE opening any result file:
+>    records = exactly {prepare, verify, A, B, P2_delay1, P2_delay5, P3_invert, P4_draw000..199, P1_part_* , P1_merge} (no extra record);
+>    strategy run n: module strategies.trial02.run, args [--variant n, --prepared <prep>], output set exactly RUN_OUTPUTS;
+>    P1 parts: args [--a-dir <runs/A>, --prepared <prep>, --draws lo-hi], ranges disjoint and covering 0..999, output set exactly
+>    P1_OUTPUTS, or P1_OUTPUTS + p1_not_computable.json (then every part and the merge must be not-computable and A must have 0 trades);
+>    merge: args fixed, `p1_merge_expect.json` recomputed from part records and equal to the file; merged draws 0..999 once, one null row
+>    per successful draw with matching ids.
+>    Each record: returncode 0, run.git_head == provenance.head (no "+dirty"), provenance {evaluator_commit H, pins_commit, manifest_sha256,
+>    fingerprint, variant} uniform; meta.json: variant_name/variant == name table, pins == data_pins, manifest_sha256 == receipt,
+>    n_trades / n_first_cross == line counts; every A trade's entry day ∈ V_A, every B trade's ∈ V_B.
+> H3 (Codex #4) Dispositions: (i) verified prepared input with V_A empty → §7 priority 0 폐기; (ii) a prepare SourceStop never reaches the
+>    evaluator — per C12 it goes to the user as a correction doc; a user-approved registry row declaring the dataset unobtainable is the
+>    only path to "폐기(데이터)"; (iii) missing/changed/incomplete artifacts → evaluation refusal (no verdict, nothing written).
+> H4 (Codex #5) ρ̂ implemented in stats_t2: lag-1 Pearson over (x[:-1], x[1:]); n < 3, either slice variance 0, or non-finite → ρ̂ := 0.
+> H5 (Codex · advisor #2) B&H: for every UTC day in the IS window that has ≥ 1 kline bar, close = the 23:59 bar's kline close, else that
+>    day's last available 1m bar close; days with no kline bar are skipped and the next return bridges the gap; returns start at the
+>    window's second listed day; window return = last listed close / first listed close − 1. A daily Sharpe or B&H Sharpe undefined →
+>    "비교 불가" and no suffix.
+> H6 (Codex) B: statistics reported, no B gate (no B G-B/activation). Liquidation counts reported for B and every placebo run.
+>    §7-3 from A crosses.jsonl: denominator = its first-cross rows, final_reason null = entered, reasons exclusive, sl_dist_out_of_range
+>    split by side.
+> H7 (Codex E7) stdout = the verdict string only; everything else in files. `evaluation/` is written only after every check and
+>    calculation succeeded (temp dir then rename). `evaluation/record.json` = H, pins commit, fingerprint, receipt, SHA256 of every input
+>    record and every file read, evaluator HEAD, report.json + verdict.txt SHA256 (the §11-8 one-call proof).
+> H8 (advisor #3) Pure core `verdict_is(GateInputs) -> Verdict` (plain numbers/bools) + I/O shell. Truth-table tests for every §7 row and
+>    every boundary (≤/≥, MDE exactly 5 and 20, P4 189/190, P1 failures 10/11, <2 defined SR̂, n_A 29/30, G0 47/48 and n_eff 30).
+> H9 (advisor #5) MDE n_eff = G0's n/(1+4·max(ρ̂,0.15)). Numeric domain: every gate quantity computed from Decimal inputs converted to
+>    float64 once (`float(Decimal)`), all comparisons in float64; P2/P3 zero-trade value = 0.0.
+> H10 (Codex OOS · advisor #6) Pre-commit pure `verdict_oos(...)` and pure `verdict_forward(liq_or_killswitch, exec_defect, n_trades,
+>    mean_net_bps, is_bh_label)` now; their loaders are later stages (OOS = user-approved, forward = activation registry row) that must keep
+>    the frozen evaluator. OOS report also includes OOS A/B and B&H values.
+> H11 (advisor #7) Endgame: 2g MERGE → whole-step-2 after-pass → 2i registry rows from the conventions draft → push request (evaluator
+>    commit = H) → prepare → data_pins.json + registry row → second push → verify → A → base → p1 → p1-merge → p4 → evaluate once. Every
+>    stage needs a clean tree: each stage's ops_log entry is committed before the next stage starts.
+
+### advisor 원문(verbatim 요지)
+> 1. stats.block_bootstrap_mean cannot be reused for G1/G2 — verdict-relevant (calendar-day blocks include invalid days; §3-1 excludes them); A/B contrast is the mean of daily differences over V_B, not stats.paired_block_bootstrap_diff's trade-weighted difference. Write fresh; keep a = (1−level)/2 quantiles.
+> 2. B&H series under-specified: 23:59 kline close else last available bar; day with no kline skipped and the next return bridges. Test.
+> 3. Split the evaluator into a pure verdict core and an I/O shell; truth-table tests for every §7 row and tie (≤/≥, MDE 5/20, P4 189/190, P1 10/11, <2 defined SR̂).
+> 4. §11-8 evidence in evaluation/record.json (H, pins commit, fingerprint, receipt hashes, every input record SHA256, own HEAD, report SHA256); assert P1 computable ⇔ n_A > 0; every A/B trade entry day ∈ V_A/V_B.
+> 5. Pins: MDE n_eff uses G0's max(ρ̂,0.15); one numeric domain for all ≤/≥ comparisons.
+> 6. Pre-commit the OOS function and also a pure forward verdict function (liq/killswitch count, mismatch/data-gap flag, trade count, sign statistic, IS Sharpe label).
+> 7. Endgame sequence in the log: 2g MERGE → whole-step-2 after-pass → 2i rows → push request → prepare → data_pins + registry → second push → verify → A → base → p1 → merge → p4 → evaluate once; every stage needs a clean tree, commit each ops_log entry before the next stage.
+> No blocker in the design itself; item 1 changes a verdict if implemented by reuse.
+
+### Codex 원문(verbatim · task-mum3pcwd-bpfiwz)
+> **VERDICT: FIX-PLAN-FIRST.** The proposed gates mostly match the preregistration, but the artifact contract and several reporting paths still allow different implementations or leave required provenance unproved. This was a read-only review; I did not inspect `var/` or market data.
+> 
+> ### Blockers and exact fixes
+> 
+> 1. **The P1 artifact contract is incomplete.** E0 calls for an “exact output set,” but [p1_t2_run.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:53) adds `p1_not_computable.json` when A has zero trades; the normal output set is only two files. Specify both exact sets, and let the zero-trade set reach §7 priority 1. For a computable P1, require draw IDs 0–999 exactly once, one null row per successful draw, matching IDs and counts, and a merged result consistent with the validated parts. Recompute `p1_merge_expect.json` from part records; it is currently a separate mutable input to the merge command ([t2_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:156)).
+> 
+> 2. **E0 does not yet prove what ran.** [check_record](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:156) verifies hashes listed by a record and requires named outputs, but does not enforce an *exact expected* output set. Define expected module, arguments, and file set independently for each of the 205 strategy runs and each P1 part and merge; reject extra or missing records, overlapping P1 ranges, and any gap in 0–999. Check each record’s `run.git_head` against its recorded head and evaluator commit, and check `meta.json` pins, manifest, gate, code identity, and trade/cross counts against validated records. Otherwise a valid hash proves only that a file matches its record, not that the file belongs to the required run.
+> 
+> 3. **The valid-day bootstrap needs an explicit implementation rule.** E2 correctly says to sample `V_A` or `V_B`, including empty *valid* days. The existing [stats.block_bootstrap_mean](/home/cms/project/BTC_Futures_E2E/backtest/stats.py:55) samples every calendar day between two timestamps, including invalid days. Require a new valid-day-block calculation for G1/G2 and the paired `V_B` daily policy difference. State that this helper, rather than the existing calendar-range helper, supplies the gate CI. Sampling invalid days can change a verdict.
+> 
+> 4. **Data failure versus evaluation refusal needs a rule.** E0 refuses every missing or failed input without a verdict, while [§7 priority 0](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:154) requires **폐기** when the required dataset cannot be obtained. Specify how a documented prepare/source failure becomes that disposition, separately from a missing, changed, or incomplete run artifact, which should remain an evaluation refusal. Keep `V_A` empty as priority 0 when a verified prepared dataset exists.
+> 
+> 5. **Lag-one correlation has an unhandled degenerate case.** [lag1_autocorr](/home/cms/project/BTC_Futures_E2E/backtest/stats.py:118) checks variance of the full series, while either lagged slice can have zero variance and `np.corrcoef` then returns NaN. Specify `ρ̂ := 0` for any undefined/nonfinite correlation, consistent with [§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:114), before calculating G0 or MDE.
+> 
+> ### Other departures and precision fixes
+> 
+> - E5 should say the buy-and-hold series uses **every UTC day in the IS window with a kline**, takes that day’s last available 1m kline close, and bridges a wholly missing day to the next available close. “Consecutive UTC IS day” can instead be read as dropping the bridged return. Undefined A or buy-and-hold Sharpe means “비교 불가” and no ACCEPT suffix ([§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110)).
+> - “B computed and reported the same way” must not create a B G-B or activation gate. Report B’s applicable statistics; A alone decides ([§3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:85)).
+> - E5 must explicitly report liquidation counts for B **and all placebo variants**, as [§3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:95) requires. Define §7-3 skip rates from **A** `crosses.jsonl`: denominator is its direction-specific first-cross rows, with `final_reason == null` counted as entered, and split `sl_dist_out_of_range` by `side` floor/ceiling ([§7-3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:179)).
+> - E7 says both “SHA256s printed” and “stdout = verdict string only.” Put hashes in `report.json` or on stderr; reserve stdout for the single verdict string. Write `evaluation/` only after all checks and calculations succeed.
+> - For the one-call rule, check the **complete expected artifact inventory before opening any result file**, following the [trial #1 evaluator precedent](/home/cms/project/BTC_Futures_E2E/backtest/evaluate.py:5). Record the evaluator call and its report/verdict hashes; `evaluation/` existence alone prevents a second write but is a weak audit trail.
+> 
+> ### OOS and tests
+> 
+> Pre-committing a **pure OOS verdict function now is right**: it fixes the OOS G0, survival, G3, and precedence rules before IS results are known. Keep its input loading and invocation behind the later user-approved OOS stage; that stage must preserve the frozen evaluator and report OOS A/B and buy-and-hold values required by [§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:111) and [§4-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:129).
+> 
+> Add synthetic tests beyond those listed for: invalid days excluded from bootstrap while empty valid days remain; lagged-slice zero variance; P1’s alternate zero-trade file set and part/merge consistency; exact command/output/metadata checks and extra-record refusal; buy-and-hold missing-day bridging and undefined-Sharpe label; B and placebo liquidation reporting; and the distinction between certified source unavailability, empty `V_A`, and provenance refusal. The proposed boundary and precedence tests are otherwise appropriate.
+> 
+> Codex session ID: 01a0eb26-6a06-7023-b5d7-8cfacbcf9eb2
+> Resume in Codex: codex resume 01a0eb26-6a06-7023-b5d7-8cfacbcf9eb2
