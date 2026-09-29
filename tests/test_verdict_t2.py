@@ -124,3 +124,11 @@ def test_oos_and_forward_reject_nonfinite():
                       net_ci_hi=2.0, sd_net=1.0)
     with pytest.raises(ValueError):
         V.verdict_forward(liq_or_killswitch=0, exec_defect=False, n_trades=3, mean_net_bps=float("nan"), is_bh_beats=False)
+
+
+def test_oos_forward_reject_nonfinite_even_with_zero_trades():
+    with pytest.raises(ValueError):
+        V.verdict_oos(data_unavailable=False, n=0, liquidations=0, rho=0.0, mean_net=float("inf"), net_ci_lo=None,
+                      net_ci_hi=None, sd_net=None)
+    with pytest.raises(ValueError):
+        V.verdict_forward(liq_or_killswitch=0, exec_defect=False, n_trades=0, mean_net_bps=float("inf"), is_bh_beats=False)

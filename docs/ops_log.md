@@ -5927,3 +5927,21 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb47-23e4-71d3-8a26-e18dec387896
 > Resume in Codex: codex resume 01a0eb47-23e4-71d3-8a26-e18dec387896
+
+## 2026-09-29 — 2g 재확인 r5(Codex task-mum57wn5-ge95fr **FIX-FIRST**) → 수정
+- 한도 안 넘침 없음 · 한도는 판정 임계가 아님(Codex 확인) · 남은 2건 → ✅ 동의: 한도를 반올림 전 Decimal로 비교 · OOS/전진은 0건에서도 평균 유한성 검사(호출자가 0.0) · 시험.
+
+### Codex 원문(verbatim · task-mum57wn5-ge95fr)
+> The r4 overflow paths are closed for values that pass the float64 bound. Even summing roughly 10⁶ values of magnitude 10⁶ reaches only about 10¹²; a conservative variance accumulation is about 10¹⁸, far below float64 overflow. The new bound is a data sanity refusal, not a gate, so I found no binding-text conflict.
+> 
+> Two checks still need fixing:
+> 
+> - [_f()](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:180) compares the *rounded float* with the limit. The Decimal input `1000000.00000000001` is outside the stated bound but is accepted as `1000000.0`. Compare the Decimal value before conversion.
+> - [OOS and forward verdicts](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:138) replace a nonfinite mean with `0.0` when the trade count is zero. Read-only probes confirmed that both functions then return a verdict for an `inf` mean, contrary to [convention 29](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions_draft.md:30). Validate the supplied mean even on the zero-trade branch.
+> 
+> The 52 focused stats and verdict tests passed; `git diff --check` passed. I accessed no `var/` or market data.
+> 
+> VERDICT: FIX-FIRST.
+> 
+> Codex session ID: 01a0eb4d-3fad-7ea1-9ae7-6059e672932d
+> Resume in Codex: codex resume 01a0eb4d-3fad-7ea1-9ae7-6059e672932d

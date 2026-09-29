@@ -395,7 +395,7 @@ def test_overflowing_value_is_refused(tmp_path, patched):
     rec = json.loads(rec_f.read_text())
     rec["run"]["outputs"]["trades.jsonl"] = hashlib.sha256((d / "trades.jsonl").read_bytes()).hexdigest()
     rec_f.write_text(json.dumps(rec))
-    with pytest.raises(E.Refusal, match="범위"):
+    with pytest.raises(E.Refusal, match="범위|한도"):
         run_eval(tmp_path)
 
 
@@ -452,3 +452,9 @@ def test_sanity_bound_refuses_absurd_bps(tmp_path, patched):
     _rewrite(tmp_path, "B", "trades.jsonl", rows)
     with pytest.raises(E.Refusal, match="건전성"):
         run_eval(tmp_path)
+
+
+def test_sanity_bound_is_checked_on_the_decimal():
+    with pytest.raises(E.Refusal):
+        E._f("1000000.00000000001")
+    assert E._f("1000000") == 1e6 and E._f("-1000000") == -1e6

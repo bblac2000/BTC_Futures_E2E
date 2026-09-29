@@ -135,7 +135,7 @@ def _finite_or_raise(**kw: float | None) -> None:
 def verdict_oos(*, data_unavailable: bool, n: int, liquidations: int, rho: float, mean_net: float, net_ci_lo: float | None,
                 net_ci_hi: float | None, sd_net: float | None) -> Verdict:
     """§7 OOS 행(사전확약 — 개봉은 사용자 승인 뒤 별도 단계)."""
-    _finite_or_raise(rho=rho, mean_net=mean_net if n else 0.0, net_ci_lo=net_ci_lo, net_ci_hi=net_ci_hi, sd_net=sd_net)
+    _finite_or_raise(rho=rho, mean_net=mean_net, net_ci_lo=net_ci_lo, net_ci_hi=net_ci_hi, sd_net=sd_net)   # 0건도 호출자가 0.0을 준다
     if data_unavailable:
         return Verdict("폐기(OOS 데이터)", 0)
     if n == 0:
@@ -152,7 +152,7 @@ def verdict_oos(*, data_unavailable: bool, n: int, liquidations: int, rho: float
 def verdict_forward(*, liq_or_killswitch: int, exec_defect: bool, n_trades: int, mean_net_bps: float,
                     is_bh_beats: bool) -> Verdict:
     """§7 전진 행(사전확약 — 입력 어댑터는 활성화 때 레지스트리 행). `is_bh_beats` = IS 창에서 A 일간 Sharpe < 매수보유(엄격)."""
-    _finite_or_raise(mean_net_bps=mean_net_bps if n_trades else 0.0)
+    _finite_or_raise(mean_net_bps=mean_net_bps)                                      # 0건도 호출자가 0.0을 준다
     if liq_or_killswitch > 0:
         return Verdict("REJECT(생존 · 전진)", 1)
     if exec_defect:

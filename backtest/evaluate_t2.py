@@ -185,11 +185,11 @@ def _f(x: Any) -> float:
         raise Refusal(f"수치 해석 불가: {x!r}") from e
     if not d.is_finite():
         raise Refusal(f"유한하지 않은 값: {x!r}")
+    if abs(d) > Decimal(int(BPS_SANITY)):                      # 반올림 전 Decimal로 비교(Codex 2g r5)
+        raise Refusal(f"bps 건전성 한도 밖 값: {x!r}")
     f = float(d)
     if not math.isfinite(f):
         raise Refusal(f"float64 범위 밖 값: {x!r}")                  # 1e400 → inf(Codex 2g r2 #1)
-    if abs(f) > BPS_SANITY:
-        raise Refusal(f"bps 건전성 한도 밖 값: {x!r}")
     return f
 
 
