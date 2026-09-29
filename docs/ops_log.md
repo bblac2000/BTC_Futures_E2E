@@ -7124,3 +7124,18 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 확인 2(워밍업): 정정 — IS 시작은 **2024-01-01**(창 B), 2023-10-02는 **워밍업 시작**이다. 2024-01-01의 분위수 표본 = 2023-10-03 … 2023-12-31(90일) · 그 첫 r30은 2023-10-02 23:30 종가가 필요 → 2023-10-02부터면 충분(2023-07-04 불필요). ATR_15m(14) 225분 · rv5/rv_peak 35분 · 판정 가능 구간 t0 − 270분도 워밍업 안. 이벤트·진입은 t0 ≥ 2024-01-01 00:00Z만(워밍업 봉은 상태만). OOS 가드: ≥ 2026-01-01 00:00Z 타임스탬프는 IS 경로 어디서나 거부.
 - 확인 3(펀딩): 00:00·08:00·16:00 **세 경계 모두** — 보유 중 지나는 확정 펀딩 기록(그 시각의 REST 확정 fundingRate)을 그 분의 판정 전에 정산(엔진 `on_funding`). 테스트는 세 시각 각각(경계 가로지름 · 경계 분 체결은 미지불 · 경계 분 시간 청산은 지불 뒤 청산).
 - 확인 4: f220e65 푸시(아래 커밋과 함께).
+
+## 2026-09-29 — 트라이얼 #3 단계 2 (a) 데이터 준비 코드(합성 픽스처만 · 실데이터 캡처 없음)
+- 새 파일: `strategies/trial03/anchor.py`(앵커 상수 · #47~#50 · tf_v1 20~39행 해시 · CI 정확 분수 1/240) · `backtest/prepare_t3.py` ·
+  `tests/test_trial03_anchor.py`(8) · `tests/test_prepare_t3.py`(24) · `tests/fixtures/trial02_sr_pinned.json`(#40 report SHA256 9223047c…).
+- 재사용: `prepare_t2`의 `analyze`·`fill_ranges`·`usable_archive`·`_pages`·`classify`·`write_bars`·`read_bars`·`_sha`·`_commit`를 **import만**
+  (`prepare_t2.py`·`data.py` 무수정 · 계획 r5 S6).
+- OOS 가드(S7): IS 경로 범위 한계 [2023-10-02, 2025-12-31 23:59:59.999Z](`OOSGuard`) · 아카이브는 타임스탬프 열만 먼저 읽고 끝 뒤 첫 행에서
+  파일을 멈춤(2026 KST 파일은 앞 9시간만 필요 · 뒤 값 미파싱) · REST endTime ≤ 끝 · OI는 날짜 파일 이름으로 선택 · create_time 범위 밖 행은
+  값 분류 전에 버림 · 적재기는 디렉터리(`var/t3/`만) · 고정값 · 범위 · 모든 타임스탬프 단언 · OOS 진입점은 "트라이얼 #3 OOS 개봉" 사용자 결정 행 없으면 거부 ·
+  CLI 캡처는 판정기 커밋 H가 origin/main 조상이고 H에 `backtest/evaluate_t3.py`가 있을 때만(rc 6).
+- **사용자 확인 필요(구현 선택 · 결정 전 규약 행에 [PROPOSED])**: OI 행의 `sum_open_interest`가 ok(유한 Decimal)가 아니면 **없는 행**으로 센다
+  (중단 아님 → 그 시각의 비교는 `oi_missing` 또는 나이 10분 안의 이전 유효 행). 근거: §5 "해석 불가 → 중단"은 create_time과 5분 경계 문맥이고,
+  §1 "어느 행이든 없으면 oi_missing"이 값 결손을 다룬다. 엄격한 읽기(값 결손도 중단)면 S0의 비유한 130슬롯(0.045%) 때문에 준비 자체가 중단될 수 있다.
+  중복 판정 기준 = 같은 create_time의 `sum_open_interest` 문자열(다른 열은 비교하지 않음).
+- 검사: ruff · pyright 0 · pytest 1216 passed.

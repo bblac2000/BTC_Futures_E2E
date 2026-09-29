@@ -1,0 +1,7 @@
+{
+ "_meta": {"source": "var/backtest/t2/IS/evaluation/report.json (trial #2 IS evaluation, registry #40)",
+           "report_sha256": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+           "keys": "A.sr, B.sr", "series": "per-trade net_bps", "copied": "2026-09-29"},
+ "sr_A": -0.007474349306781282,
+ "sr_B": -0.0033941087843268273
+}
