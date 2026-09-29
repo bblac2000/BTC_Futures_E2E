@@ -1,6 +1,6 @@
 {
  "L": {
-  "digest": "f69d8a8727b6a361602d495cece2d645eea937de2a9e62c78245c3a132996420",
+  "digest": "db179c4a4acb04be09a44351061928888c9bb5912745f6af55e79d3ccc9576d3",
   "entry": {
    "exit.time_exit": 1,
    "filled": 1
@@ -45,7 +45,7 @@
   }
  },
  "S": {
-  "digest": "72e0201d43b0359969541981427e446f07d5b6cc1edb6d0047479a35e6a1c9eb",
+  "digest": "8667ce705c3934de38d7f11a7e52e2e2dae0a82448f863254df79bc00450705e",
   "entry": {
    "exit.time_exit": 1,
    "filled": 1
@@ -91,6 +91,7 @@
  },
  "_meta": {
   "created": "2026-09-30",
+  "regenerated": "2026-09-30 (f): filled/exit event records gained engine ledger fields (entry_ref, entry_commission, exit_price, exit_fills, realized_pnl, exit_commission, funding_paid, wallet_after, ts_ms) \u2014 no behaviour change; trade/intent/funnel values unchanged",
   "what": "trial #3 (d) synthetic end-to-end golden (tests/fixtures/t3_scenario.py Scenario(arm)) \u2014 regenerate only with a registry note"
  }
 }

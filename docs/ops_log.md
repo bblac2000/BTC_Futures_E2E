@@ -8345,3 +8345,241 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef37-4027-7bb3-b034-3ad34cad4018
 > Resume in Codex: codex resume 01a0ef37-4027-7bb3-b034-3ad34cad4018
+
+## 2026-09-30 — 트라이얼 #3 (f) 판정기 **before-pass**(advisor + Codex task-munbd29z-9jaw3l FIX-PLAN-FIRST → r2 task-munbhled-4xt5ad FIX-PLAN-FIRST → r3 task-munbkkz8-ih5jfd **PROCEED**)
+- 사용자 (e) 승인 + 항목 47 보고 추가(청산 분 경계 트레이드의 펀딩 합 USDT·E_ref bps · 암마다).
+- 사용자 문구와 앵커 문언(보고에 인용): (a) 판정 문자열 = 87행 형식 그대로, "청산 k / 체결 n"은 보고에 · (b) INCONCLUSIVE 없음 — §7-2 세 분류 · (c) ACCEPT는 전진 단계에서만(IS는 IS PASS에서 끝) · (d) 접미어는 143행 문구 · (e) "IS PASS · 생존 통과".
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 진입일 ∈ V를 실행 시점에 | ✅ | V1 harness.assert_entries_in_v |
+| advisor | 2 청산 항등식·정밀도 | ✅ | V2/V2′ |
+| advisor | 3 G-B 두 암 먼저 | ✅ | V5 |
+| advisor | 4 (g) 계약 동결 | ✅ | V4 |
+| advisor | 5 문자열 규칙 | ✅ | V6 |
+| advisor | 6 MDE n_eff·V 8기록 | ✅ | V7 |
+| advisor | 7 기록(골든 재생성) | ✅ | ops_log · 골든 메타 |
+| advisor | 8 테스트 | ✅ | V9 |
+| advisor | 9 Q3 | ✅ | V2′ |
+| Codex | 1 청산 지갑 항등식(BLOCKER) | ✅ | V2(엔진 값 · 전체 식) |
+| Codex | 2 청산 거리 권한(BLOCKER) | ◐ | 이미 사용자 결정 (A)(2026-09-30)으로 해소 — 기록 인용(V3) · Codex r2 CLOSED |
+| Codex | 3 입력 계약 | ✅ | V4 |
+| Codex | 4 gross·net 정확 검증 | ✅ | V2 |
+| Codex | 5 자료 없음 생존 문구 | ✅ | V6 |
+| Codex r2 | 정밀도(28 vs 34자리)(BLOCKER) | ✅ | r3 V2′ — 지갑 34자리 · 수익률은 trade_return 28자리 재계산 · Codex r3가 골든에서 재현 |
+- 구현 중 기록: 전략 filled/exit 기록에 엔진 원장 필드 추가(entry_ref · entry_commission · exit_price · exit_fills · realized_pnl · exit_commission · funding_paid · wallet_after · ts_ms) → `golden_trial03_e2e.json` 다이제스트만 재생성(트레이드·의도·깔때기 값 불변 · P1 골든 불변).
+
+### 계획 r1 원문
+> # Trial #3 step (f) — evaluator (backtest/evaluate_t3.py + verdict_t3.py): BEFORE-PASS plan (no code yet)
+> 
+> ## Anchored lines (verbatim, r3)
+> - line 13: - 두 암은 **각각 독립 가설이자 독립 장부**다(진입 조건이 반대라 같은 이벤트가 두 암에 동시에 들어가지 않는다 · 단 두 장부의 포지션은 **시간상 겹칠 수 있고** 서로 막지 않는다 · 트라이얼 #1·#2의 "판정 A + 보고 B"와 다르다). 트라이얼 결과 = 두 암의 판정 쌍.
+> - line 63: > 두 암(L·S)이 각각 판정 대상이다. 장부(트레이드·PnL)·G0/G1/G2/flat/생존/P1~P3·OOS 진행·전진은 암마다 독립이다(IS를 통과한 암은 다른 암과 무관하게 자기 OOS로 — 사용자 승인). **유일한 예외는 G-B**: N 규칙상 SR*가 두 암의 실현 SR̂를 모두 포함하므로 한 암의 G-B 결과는 다른 암의 실현 Sharpe에 의존한다(아래 G-B 행 · 공시·수용).
+> - line 64: > 평가 순서(트라이얼 #2와 같은 운용): **IS 단계**(G0 → G1 → G2 → G-B → flat → 생존 → P1 → P2 → P3) → **OOS 단계**(G3 · OOS G0 · OOS 생존) → **전진 단계**(G-F). OOS는 IS 전부 통과한 암만, 한 번만.
+> - line 87: - **판정 문자열(한 줄 · 헌법 v1.3)**: 암마다 `<ACCEPT|REJECT|폐기>(§7-2: <분류>) · 생존 <통과|실패>` · 트라이얼 문자열 = `L: … | S: …`.
+> - §7 table lines 124–143:
+>   | 단계 결과 | 판정 문자열 |
+>   |---|---|
+>   | IS(0): 필수 데이터셋을 구할 수 없음 · 또는 그 암의 V가 비었음 | **폐기** |
+>   | IS(1): 트레이드 0건 | **REJECT(FAIL — 트레이드 0)** |
+>   | IS(2): 청산 ≥ 1 | **REJECT(생존)** |
+>   | IS(3): G0 · G1 · G2 · G-B · flat 중 실패 | **REJECT(§7-2: 분류)** |
+>   | IS(4): P1 실패 추출 > 10 | **폐기**(플라시보 하네스 결함) |
+>   | IS(5): P1 · P2 · P3 기각 | **REJECT(§7-2: 분류)** |
+>   | IS 전부 통과 | **IS PASS** — OOS 개봉은 사용자 결정 |
+>   | OOS(0): OOS 데이터 준비 불가 · OOS V 빈 경우 | **폐기(OOS 데이터)** |
+>   | OOS(1): 트레이드 0건 | **REJECT(FAIL — OOS 트레이드 0)** |
+>   | OOS(2): 청산 ≥ 1 | **REJECT(생존)** |
+>   | OOS(3): OOS G0 미달 | **REJECT(OOS 표본 부족)** |
+>   | OOS(4): G3 실패 | **REJECT(§7-2: 분류 · OOS 값)** |
+>   | OOS PASS | **OOS PASS** — 전진 활성화는 사용자 결정 |
+>   | 전진(1): 청산 ≥ 1 또는 킬스위치 ≥ 1 | **REJECT(생존 · 전진)** |
+>   | 전진(2): 규칙-실행 불일치 · 데이터 결손 > 0 | **폐기(전진 실행 결함)** |
+>   | 전진(3): 트레이드 0건 | **REJECT(FAIL — 전진 트레이드 0)** |
+>   | 전진(4): 부호 ≤ 0 | **REJECT(전진 부호)** |
+>   | 전진 전부 통과 | **ACCEPT** · IS 창에서 암 일간 Sharpe < 매수보유 일간 Sharpe면 `ACCEPT — 수동(매수보유)을 이기지는 못함` |
+> - line 146 (§7-2): - **검정력 부족**: MDE(α 0.008333 · 검정력 0.8 · 관측 σ · G0 n_eff) > 2θ = 20 bps · **효과 부재**: MDE < 5 bps ∧ net CI 상한 < θ · 그 사이 **결론 보류형 REJECT**.
+> 
+> ## Reading of the anchored text (user req. 1)
+> - Arms are judged separately (line 63); the ONLY trial-level statement is line 13 "트라이얼 결과 = 두 암의 판정 쌍" and line 87 "트라이얼 문자열 =
+>   `L: … | S: …`" — a pair, no combined verdict. The one cross-arm dependency is G-B's SR* (line 63/71).
+> - Verdict priority per arm = §7 table order (IS(0) 폐기 → IS(1) trades 0 → IS(2) liquidation ≥ 1 → IS(3) G0/G1/G2/G-B/flat → IS(4) P1
+>   failures > 10 → IS(5) P1/P2/P3 → IS PASS). §7-2 classification only for IS(3)/IS(5) REJECTs.
+> - Flags for the user (anchored wording wins, as before): (a) user req. 3's example "survival: 0 liquidations / N trades" — r3 line 87 fixes
+>   the string as `<ACCEPT|REJECT|폐기>(§7-2: <분류>) · 생존 <통과|실패>`; proposal: keep the string exactly, put "청산 k / 체결 n" in the report
+>   line beside it. (b) user req. 7 "INCONCLUSIVE" is not an r3 class — the §7-2 REJECT sub-classes are 검정력 부족 / 효과 부재 / 결론 보류형
+>   REJECT; tests reach each. (c) ACCEPT exists only at the forward stage (§7 전진 rows) — the IS evaluator ends at IS PASS / REJECT / 폐기;
+>   the OOS and forward verdict functions are pre-committed and tested with synthetic inputs (as trial #2). (d) the suffix text is r3's
+>   "ACCEPT — 수동(매수보유)을 이기지는 못함" (line 143), only on ACCEPT (forward function). (e) IS PASS string: "IS PASS · 생존 통과".
+> 
+> ## Plan
+> F1 verdict_t3.py (pure, float64, like verdict_t2): per-arm ISInputs → Verdict; constants from the trial-3 anchor (N_TRIALS 6, ALPHA 0.05/6,
+>    LEVEL 1 − ALPHA, pinned SR̂ ×4); G0 n ≥ 48 ∧ n/(1 + 4·max(ρ̂, 0.15)) ≥ 30; G1/G2 mean > 0 ∧ CI lo > 0 (CI undefined → fail); G-B
+>    PSR(0) > 0.5 ∧ n ≥ 30 ∧ SR̂ − SR* > 0 with SR* = expected_max_sr(defined {SR̂_1A, SR̂_1B, SR̂_2A, SR̂_2B, SR̂_L, SR̂_S}, n_trials 6),
+>    < 2 defined → fail; flat mean net > 0; survival liquidations = 0; placebos: P1 orig ≤ p95 → reject, P2 orig ≤ max(+1, +5), P3 orig ≤
+>    inverted; P1 failures > 10 or not computable → 폐기(IS(4)) only after IS(0–3); MDE (z_{1−α} + z_{0.8})·σ/√n_eff; classify as §7-2
+>    (θ 10). Non-finite input → ValueError (refusal). verdict_oos / verdict_forward pre-committed (§7 rows). Strings per line 87.
+> F2 evaluate_t3.py: compute per arm from run outputs: net/gross bootstrap on V days with streams SeedSequence((20260929,1)).spawn(8)[k]
+>    (IS k: gross_L 0, net_L 1, gross_S 2, net_S 3), 10,000 resamples, level 1 − 0.05/6 (quantiles 1/240, 1 − 1/240); ρ̂ lag-1 of net in
+>    entry order; SR̂ ddof 1; PSR(0); P1 p95 = numpy linear 0.95 quantile of successful draws' mean net; P2/P3 means (0 trades → 0).
+> F3 Inputs/layout (the (g) stage runner will produce exactly this; evaluator checks the inventory): per arm × {base, P2_delay1, P2_delay5,
+>    P3_invert}: trades_t3.jsonl, events.jsonl, summary.json (funnel, sub, entry, window_bars, q_valid days, V); per arm P1_merged
+>    (merge() output); prepared: bars, funding, kline daily (pinned loaders). Full provenance (fingerprint, pins, verify receipt) wiring in (g).
+> F4 V recomputation (item 31): evaluator recomputes complete days (harness.complete_days) and per-day quantile validity from defined-r30
+>    COUNTS (bar presence/positivity only — no r30 values) over d−90..d−1 ≥ 128,304; must equal each run's recorded V; any trade with entry day
+>    ∉ V → refuse.
+> F5 Cost grid + exact ledger identity (item 42): the strategy's filled/exit records gain entry_commission, entry fill & reference mark,
+>    exit fill (VWAP of fills), exit_commission, funding_paid (trial-3 code only; e2e golden regenerated with a note). Evaluator asserts per
+>    trade wallet_after − wallet_before == −comm_in − comm_out − funding + (exit_fill − entry_fill)·qty·sign (Decimal, exact; liquidation:
+>    == −loss per engine) and computes scalable_cost_bps = (comm_in + comm_out + slip_in + slip_out)/(qty × entry_fill)×1e4 (liquidation:
+>    entry leg only), net_k = net + (1 − k)·cost, k ∈ {0.5, 1.0, 1.5}; ×1.0 == recorded net asserted. Report-only.
+> F6 B&H (report): kline daily closes over WINDOW days, daily Sharpe, window return; arm daily Sharpe from the N_stat ledger (0 on V days
+>    without entries); is_bh_beats feeds only verdict_forward.
+> F7 Report: event funnel + sub-reasons, entry funnel, oi_missing{unusable} separately, X9 (time_exit with exit_ref beyond SL), boundary-exit
+>    count + summed funding paid/received (USDT and bps of E_ref) per arm (user addition to item 47), per-year net, hold-time quantiles,
+>    exit reasons, cost grid, B&H, P1 exits (time_exit/liquidation), degenerate resample counts.
+> F8 Numerics (item 43): Decimal-string → float via finite check; np.errstate(over/invalid/divide = raise); undefined never passes.
+> F9 Run-once (user req. 7): evaluate(base) refuses if base/evaluation exists; refuses unless the evaluator commit (receipt) is an ancestor
+>    of origin/main and HEAD, evaluator files unchanged since it, working tree clean (as trial #2 G1); writes evaluation/ atomically (tmp +
+>    rename) with report.json, verdict.txt, record.json (hashes of every input read). Fingerprint/pins/receipt checks = (g).
+> F10 Tests: verdict core reaching every §7 IS row and every §7-2 class for L and S; G-B cross-arm dependence; OOS/forward functions incl.
+>    ACCEPT with/without suffix; end-to-end compute on synthetic scenario runs (both arms, all variants, P1 fixture parts) → report; cost-grid
+>    identity incl. a liquidation trade; V mismatch → refusal; trade outside V → refusal; run-once and not-on-origin refusals; report hash
+>    determinism (twice + two processes).
+> F11 No shared-code changes expected; if any → trial #2 regression.
+> Q1 verdict-string handling (flag a); Q2 anything else the evaluator must pre-commit before any P&L; Q3 is the cost-grid identity (F5)
+>    exact enough given engine rounding?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (f) before-pass. The plan's reading of §0/§3/§7 is right — per-arm verdicts, the pair is the only trial-level statement, G-B is the one coupling — and flags (a)–(e) are the correct way to handle the user's wording. Findings, blocking first.
+> 
+> **1. MAJOR — line 83's refusal can fire on real data; move the check to run time.** §3-1: "모든 체결의 진입일은 V 안이다 … 아니면 판정기 거부." Admissibility guarantees the entry day is *complete*, not that its quantile is *valid* — an event at 23:50 on day d fills on d+1, and d+1's 90-day sample is a different set. Rare, but if it happens the one-shot evaluator refuses after every run has finished. Add the check to `harness.run_arm` (entry day ∈ V, else `RunInvariantError`) so it fails during the IS runs, before any result is opened; keep the evaluator's check as the second line. Test both. Say in the report what an evaluator refusal means under the run-once rule (nothing written; retry is not a second evaluation).
+> 
+> **2. MAJOR — pin the liquidation identity and the precision it's checked at.** F5's `Δwallet == −comm_in − comm_out − funding + price P&L` holds only for fill exits. Liquidation has no exit fill: engine.py:607 gives `Δwallet == −(qty·entry_fill/L + fee_basis·liquidationFee)` from E_ref (funding already left the wallet at settlement, so it does not appear again). Assert that form for `exit_reason == liquidation`; `scalable_cost` = entry leg only. And compute every identity inside a 34-digit `localcontext` — the engine's exec context — or the trailing digits won't match (your #4 distance test needed exactly this). Also assert `wallet_before == E_ref` for every trade (L5).
+> 
+> **3. MAJOR — G-B needs both arms before either verdict; pin the undefined case.** Compute L and S stats first, then `SR* = expected_max_sr(defined ∪ {4 pinned}, n_trials = 6)` — if one arm has < 2 trades or zero variance its SR̂ is dropped, the other arm's SR* uses 5 values, `n_trials` stays 6 (line 71 "정의된 SR̂(최대 여섯)"). An arm at IS(1) still contributes "undefined" to the other's G-B. Test: L with 0 trades, S with 50 → S's G-B uses 4 pinned + SR̂_S.
+> 
+> **4. MAJOR — freeze the (g) interface now, or (g) will drift.** Write the inventory the evaluator refuses without, as constants in `evaluate_t3.py`: per arm × {base, P2_delay1, P2_delay5, P3_invert} → `trades_t3.jsonl`, `events.jsonl`, `summary.json` (fields: funnel, sub, entry, window_bars, q_valid, v_days, n_trades, variant, arm, params SHA); per arm `P1_merged/` → `p1_draws.json`, `p1_null.jsonl`, `p1_summary.json` (n_source, computable, failed, evaluable). (g) builds to this list; the evaluator's `check_inventory` is a frozen tuple, not discovery. P1 contradiction refusal as trial #2: `computable != (n_base > 0)`.
+> 
+> **5. Verdict-string rules — write them all, not just the happy path.** Line 87 format applied mechanically: label + `(§7-2: <분류>)` only when a classification exists (IS(3)/IS(5)); `REJECT(FAIL — 트레이드 0)`, `REJECT(생존)`, `폐기…` and `IS PASS` carry none; then ` · 생존 <통과|실패>` on every string, 통과 whenever `liquidations == 0` (including zero trades, including 폐기). Trial string `L: … | S: …`. Put "청산 k / 체결 n" in `report.json` next to the string, per flag (a).
+> 
+> **6. MINOR — two consistency items.** (i) MDE uses the same `n_eff` with the 0.15 floor as G0 — state it. (ii) The V comparison runs against all eight run records (both arms × four variants), not just base — trial #2's `check_meta` did this.
+> 
+> **7. Records.** F5's new strategy fields change `golden_trial03_e2e.json` — regenerate with an ops_log line saying why (pre-P&L, fields added, no behaviour change) and assert the P1 golden is unchanged (source fields untouched). The evaluator CLI exposes only the IS stage; OOS/forward verdict functions are pre-committed but unreachable without the registry-row gate already in `prepare_t3.oos_range` — say so in section G.
+> 
+> **8. Tests the plan should add:** verdict core reaching every §7 row *for each arm* with the other arm at each of {0 trades, defined SR̂}; end-to-end on the synthetic scenario (1 trade per arm → G0 fails → `REJECT(§7-2: 검정력 부족)`) as a report golden, plus report-hash determinism across two processes; cost-grid identity on the (d) liquidation fixture; entry-day-∉-V refusal at the harness and at the evaluator; run-once refusal; not-on-origin refusal via a temp repo.
+> 
+> **9. Q3 — yes, if item 2's precision rule is followed.** The (b) test proved the fill-exit decomposition exactly at 34 digits; the liquidation form is the engine's own formula; nothing is approximate.
+> 
+> **Sequence:** Codex lands → log both verbatim with positions → plan r2 with items 1–5 → narrow re-check → PROCEED → build in order: `verdict_t3.py` + tests → strategy record fields + golden regen → `evaluate_t3.compute` + report → wrapper (run-once, commit check, frozen inventory) → shared-diff check (expected empty) → after-pass → section G diff → push → memory → report → stop before (g). Lead the report with flags (a)–(c) quoted from lines 87/143/146, then item 1.
+
+### Codex 원문(verbatim · task-munbd29z-9jaw3l)
+> ## Findings
+> 
+> 1. **BLOCKER — F5’s liquidation wallet identity is wrong.** The engine resets the wallet to E_ref at entry, deducts entry commission and funding, then deducts the liquidation loss. Thus `wallet_after − wallet_before = −entry_commission − funding_paid − loss`, not `−loss`. The latter is only the close event’s debit. Fix F5 to capture `EntryFilled` and `PositionClosed` values and assert that full identity with `Decimal`. For ordinary exits, assert `Δwallet = signed_qty × (exit_fill − entry_fill) − entry_commission − exit_commission − funding_paid`. Recompute recorded `net_bps` from `Δwallet / (qty × entry_fill) × 10⁴`. [engine_replay.py](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:105), [engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:607), [returns.py](/home/cms/project/BTC_Futures_E2E/backtest/returns.py:27).
+> 
+> 2. **BLOCKER — an existing liquidation rule contradicts r3 and needs an explicit resolution before P&L.** R3 says the liquidation distance has no fee term; convention item 38 specifies an entry taker term, and the engine supplies that term to `liquidation_estimate`. F5 must not silently treat those as the same rule. Record which authority governs the already anchored trial and its effect on the evaluator’s liquidation checks before freezing the evaluator. Do not edit the anchored r3 text in place. [preregistration §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:33), [conventions item 38](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:53), [engine.py](/home/cms/project/BTC_Futures_E2E/paper/engine.py:411).
+> 
+> 3. **MAJOR — F3/F9 leave part of the evaluator’s input contract to (g).** Before the evaluator is committed and pushed, specify the exact per-arm run and P1-part inventory, schemas, hashes, receipt fields, and which missing conditions mean §7 IS(0) `폐기` versus a **refusal** for a missing or malformed run artifact. Verify P1’s `n_source` against that arm’s base trades and its merged rows against the parts. This preserves the anchored “all outputs ready, evaluator once” sequence. [preregistration §4-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:99), [p1_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3.py:183), [evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:71).
+> 
+> 4. **MAJOR — F5 should verify both statistics that enter G1/G2.** Wallet identity verifies net P&L, but F2 currently accepts recorded `gross_bps`. Add an exact `Decimal` check of gross from entry mark, exit reference mark, and direction, using the registered return definition; check the recorded net value the same way before conversion to float64. Derive slippage from actual reference and fill prices, including adverse tick rounding. For liquidation, scalable cost has the entry leg only; liquidation fee remains in net and is never scaled. [preregistration §3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:80), [conventions item 42](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:59), [returns.py](/home/cms/project/BTC_Futures_E2E/backtest/returns.py:27).
+> 
+> 5. **MINOR — define survival text for data-unavailable cases.** F1 should precommit how `생존 <통과|실패>` is printed when IS(0) or OOS(0) prevents observing trades, while retaining the exact §7 verdict label. Otherwise different implementations can print different one-line verdicts for the same input. [preregistration §3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:87), [preregistration §7](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:123).
+> 
+> ## Q1–Q3
+> 
+> **Q1.** Yes: use the r3 per-arm verdict string and `L: … | S: …`. Put `청산 k / 체결 n` beside it in the report, not inside the fixed string. `IS PASS` and `OOS PASS` are stage results; `ACCEPT` and its exact buy-and-hold suffix arise only after forward evaluation. There is no `INCONCLUSIVE` class; use the three §7-2 REJECT classifications.
+> 
+> **Q2.** Precommit the exact input/provenance contract in finding 3, the gross/net and cost checks in finding 4, and the data-unavailable survival rendering in finding 5. Keep both base-arm Sharpe inputs available for either arm’s G-B calculation, even if the other arm fails an earlier gate.
+> 
+> **Q3.** No. Engine rounding is compatible with exact `Decimal` checks when the checks use recorded fills and the same calculation context. The proposed liquidation equation omits entry commission and funding from the full wallet change. Fix that equation and compare the ×1.0 grid value to recorded `net_bps` through the exact return formula.
+> 
+> **VERDICT: FIX-PLAN-FIRST.** Read-only review; no evaluator, backtest, or tests were run.
+> 
+> Codex session ID: 01a0ef85-5711-7b92-af80-4c597e62c0e3
+> Resume in Codex: codex resume 01a0ef85-5711-7b92-af80-4c597e62c0e3
+
+### 계획 r2 원문
+> # Trial #3 (f) plan r2 — resolutions (advisor 1–9 + Codex task-munbd29z-9jaw3l 1–5, Q1–Q3)
+> 
+> V1 ENTRY DAY ∈ V AT RUN TIME (advisor 1): harness.run_arm asserts every filled trade's entry day ∈ that run's V (complete ∧ quantile-valid)
+>    → RunInvariantError during the IS runs (before any result is opened); the evaluator re-checks (refusal). Test both. Evaluator refusal
+>    under run-once = nothing written; a retry is not a second evaluation.
+> V2 LEDGER IDENTITIES (Codex 1+4, advisor 2) — Decimal inside a 34-digit localcontext, per trade, from the strategy's filled/exit records
+>    (new trial-3 fields: entry_commission (EntryFilled.entry_commission), entry reference mark (fill bar mark_open), entry fill, exit fill
+>    (qty-weighted VWAP of PositionClosed.fills), exit_commission_usdt, funding_paid_usdt, leverage, liquidation fee rate from #48):
+>    · wallet_before == E_ref (L5);
+>    · fill exits (sl/time_exit): Δwallet == sign·qty·(exit_fill − entry_fill) − comm_in − comm_out − funding;
+>    · liquidation: Δwallet == −(qty·entry_fill/L + qty·liq_price_est·liquidationFee) (engine _liquidate with liq_fee_on_liq_price; equals
+>      −comm_in − funding − loss_event) — liq_price_est recorded at exit;
+>    · gross_bps == sign·(exit_ref − entry_mark)/entry_mark·1e4 (returns.py definition; exit_ref = SL fill basis / exit-bar open / est. liq);
+>    · net_bps == Δwallet/(qty·entry_fill)·1e4 (recomputed, compared exactly to the recorded string before float conversion);
+>    · slippage legs from reference vs fill incl. adverse tick: slip_in = sign·(entry_fill − entry_ref)·qty, slip_out = sign·(exit_ref − exit_fill)·qty;
+>    · scalable_cost_bps = (comm_in + comm_out + slip_in + slip_out)/(qty·entry_fill)·1e4 (liquidation: comm_in + slip_in only);
+>      net_k = net + (1 − k)·cost; ×1.0 == recorded net exactly. Any mismatch → refusal.
+>    The golden_trial03_e2e.json is regenerated (fields added, no behaviour change) with an ops_log note; P1 golden asserted unchanged.
+> V3 LIQUIDATION-DISTANCE AUTHORITY (Codex 2): already resolved — user decision 2026-09-30 (A), ops_log + conventions item 38: registry #4
+>    (with the entry taker term) governs; r3 §1 line 33 cites "#2·#4·#5" and its "거리에 수수료 항 없음" is #2's liquidationFee exclusion;
+>    r3 §1-1's example distances (2.895%, 7.915%) are #4 values; r3 text untouched. Evaluator does not recompute liquidation distances; it
+>    uses engine-recorded liq_price_est only in the V2 identity. Stated again in section G.
+> V4 FROZEN INPUT CONTRACT (Codex 3, advisor 4): constants in evaluate_t3.py:
+>    RUNS = {arm × variant} for arm ∈ {L, S}, variant ∈ {base, P2_delay1, P2_delay5, P3_invert} → files (trades_t3.jsonl, events.jsonl,
+>    summary.json{arm, variant, funnel, sub, entry, window_bars, q_valid, v_days, n_trades, tf_v1_sha256, rules_sha256}); P1 per arm:
+>    P1_merged/{p1_draws.json, p1_null.jsonl, p1_summary.json{arm, n_source, computable, failed, evaluable, parts[{lo, hi, sha256}]}} +
+>    the parts; prepared inputs via prepare_t3.load_prepared_pinned (+ kline daily). Missing/extra/malformed artifact or schema mismatch →
+>    REFUSAL (no verdict). §7 IS(0) 폐기 only when the prepared dataset is unavailable (prepare stop) or that arm's V is empty. Cross-checks:
+>    P1 n_source == that arm's base trade count; computable == (n_base > 0); merged rows re-derived from parts (merge()) == merged files;
+>    V equal across all eight run records and to the evaluator's recomputation. Provenance (fingerprint, pins, verify receipt) completed in
+>    (g) under this frozen list.
+> V5 G-B BOTH ARMS FIRST (advisor 3, Codex Q2): compute both arms' stats before any verdict; SR* = expected_max_sr(4 pinned ∪ defined
+>    {SR̂_L, SR̂_S}, n_trials 6); an arm at IS(1) (or zero variance) contributes "undefined"; test L 0 trades / S defined.
+> V6 STRINGS (advisor 5, Codex 5): per arm `<label>[(§7-2: <분류>)] · 생존 <통과|실패>` — classification only for IS(3)/IS(5) REJECT and OOS(4);
+>    생존 = 통과 iff observed liquidations == 0 (incl. zero trades and IS(0)/OOS(0) 폐기, where nothing was observed — pinned), 실패 otherwise;
+>    IS PASS → "IS PASS · 생존 통과"; trial string "L: … | S: …"; report.json carries "청산 k / 체결 n" beside it. No INCONCLUSIVE class.
+> V7 CONSISTENCY (advisor 6): MDE uses G0's n_eff (ρ floor 0.15); V compared over all eight run records.
+> V8 SCOPE: CLI exposes the IS stage only; verdict_oos / verdict_forward pre-committed, unreachable without the registry-row gate
+>    (prepare_t3.oos_range).
+> V9 TESTS (advisor 8): verdict core — every §7 IS row for each arm with the other arm at {0 trades, defined SR̂}; §7-2 classes; OOS/forward
+>    incl. ACCEPT ± suffix; end-to-end synthetic (1 trade per arm → G0 fail → REJECT(§7-2: 검정력 부족)) as a report golden + two-process
+>    hash determinism; identities on normal, SL and liquidation fixtures; entry-day ∉ V at harness and evaluator; run-once refusal;
+>    not-on-origin refusal via a temp git repo; inventory refusal (missing / extra file, bad schema, P1 n_source mismatch).
+
+### Codex 원문(verbatim · task-munbhled-4xt5ad)
+> ## Narrow re-check
+> 
+> | Prior finding | Status | Assessment |
+> |---|---|---|
+> | 1. Ledger identities | **PARTIAL** | The plan now specifies the event fields and wallet equations, but its exact bps checks use the wrong Decimal precision. |
+> | 2. Liquidation-distance authority | **CLOSED** | The recorded user decision selects registry #4’s formula, including the entry taker term. [Ops log](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:8107) and [conventions item 38](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:53) agree. This decision should not be reopened. |
+> | 3. Frozen input contract | **CLOSED at plan level** | r2 fixes the eight runs, P1 inputs, schema checks, V cross-check, and refusal on incomplete inventory. Provenance implementation remains assigned to (g). |
+> | 4. Cost and return identity | **PARTIAL** | The cost legs are specified, but the proposed exact comparison to recorded returns has the same precision defect as #1. |
+> | 5. Verdict strings | **CLOSED at plan level** | r2 specifies the per-arm labels, classification cases, survival suffix, and combined string. |
+> 
+> **Blocking new gap:** [trade_return](/home/cms/project/BTC_Futures_E2E/backtest/returns.py:27) calculates recorded `gross_bps` and `net_bps` in the process’s 28 digit context, while r2 requires exact comparison with values recomputed in a 34 digit context. Both arms of the committed [Trial #3 golden](/home/cms/project/BTC_Futures_E2E/tests/fixtures/golden_trial03_e2e.json) fail that comparison. For example, L records net `-21.74572081250031703947691023`; the 34 digit calculation gives `-21.74572081250031703947691022625628`. Pin 34 digits for engine wallet identities and the recorded 28 digit operation order for exact return-string checks; test both against the golden.
+> 
+> This was a read-only plan review; no evaluator was run.
+> 
+> **VERDICT: FIX-PLAN-FIRST**
+> 
+> Codex session ID: 01a0ef88-90c8-7142-ae18-e7a41206aff1
+> Resume in Codex: codex resume 01a0ef88-90c8-7142-ae18-e7a41206aff1
+
+### 계획 r3 원문
+> # Trial #3 (f) plan r3 = r2 with V2 precision pinned (Codex task-munbhled-4xt5ad blocking gap)
+> V2' PRECISION: (i) wallet/ledger identities (Δwallet equations, slippage legs, scalable cost, net_k) are computed in a 34-digit
+>     localcontext — the engine's exec context — and compared exactly with the engine-recorded Decimals (wallet_after, fills, commissions,
+>     funding, liq_price_est); (ii) the RETURN strings are re-derived by calling backtest.returns.trade_return itself with the recorded
+>     inputs (direction, entry_mark, exit_ref, qty, entry_fill, wallet_before, wallet_after) under the process default context set at CLI
+>     start (decimal.setcontext(decimal.Context()) — 28 digits, the replay's own context and operation order) and compared as exact strings to
+>     recorded gross_bps/net_bps; (iii) the ×1.0 cost-grid value equals the recorded net string exactly (net_k computed from the recorded
+>     Decimal, (1 − 1)·cost = 0). Tests: both checks pass on the committed golden trades for L and S; a one-digit perturbation fails each.
+> Everything else as r2.
+
+### Codex 원문(verbatim · task-munbkkz8-ih5jfd)
+> The r3 precision rule checks out. `paper/engine.py` runs its wallet operations in the 34-digit execution context; `backtest.returns.trade_return` runs in the caller’s default 28-digit context. Replaying the committed L and S scenarios reproduced both golden return strings exactly. The 34-digit wallet equations matched both recorded `wallet_after` values, the ×1.0 cost value preserved each recorded net string, and a one-digit wallet perturbation failed the comparisons.
+> 
+> The compact golden fixture omits some ledger inputs, so the planned fill, commission, funding, and liquidation comparisons must use replay events.
+> 
+> VERDICT: PROCEED
+> 
+> Codex session ID: 01a0ef8a-b173-7c63-b96b-ec364ea1a0e5
+> Resume in Codex: codex resume 01a0ef8a-b173-7c63-b96b-ec364ea1a0e5

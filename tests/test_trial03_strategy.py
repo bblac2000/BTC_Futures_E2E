@@ -459,3 +459,11 @@ def test_static_no_other_trial_imports_and_no_rolling_price_channel():
         low = src.lower()
         assert ".rolling(" not in src and "donchian" not in low and "channel" not in low, p
         assert "highest" not in low and "lowest" not in low, p
+
+
+def test_entry_day_outside_v_fails_the_run():
+    from strategies.trial03.harness import RunInvariantError, assert_entries_in_v
+    t = {"entry_ms": S.DAY0 + S.DAY + 5 * M}
+    assert_entries_in_v([t], {(S.DAY0 + S.DAY) // S.DAY})
+    with pytest.raises(RunInvariantError):
+        assert_entries_in_v([t], {(S.DAY0 + 2 * S.DAY) // S.DAY})

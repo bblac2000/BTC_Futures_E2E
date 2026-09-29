@@ -167,7 +167,15 @@ def _run_arm(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequen
     if sum(v for k, v in s.entry.items() if k.startswith("exit.")) != s.entry["filled"] or len(r.trades) != s.entry["filled"]:
         raise RunInvariantError("청산·트레이드 수 ≠ 체결")
     trades = [t | {"t3": i} for t, i in zip(r.trades, s.filled_intents, strict=True)]
+    assert_entries_in_v(trades, set(v_days(s, complete_days(bars))))
     return T3Run(arm, variant, r, s, trades)
+
+
+def assert_entries_in_v(trades: Sequence[dict[str, Any]], v: set[int]) -> None:
+    """§3-1 83행 "모든 체결의 진입일은 V 안이다"를 실행 시점에 먼저 검사(판정기 거부가 IS 실행 뒤에야 나지 않게 · (f) 계획 V1)."""
+    bad = [int(t["entry_ms"]) for t in trades if int(t["entry_ms"]) // DAY not in v]
+    if bad:
+        raise RunInvariantError(f"진입일이 V 밖인 체결 {len(bad)}건(첫 {bad[0]})")
 
 
 def v_days(s: Trial03, days: set[int]) -> list[int]:

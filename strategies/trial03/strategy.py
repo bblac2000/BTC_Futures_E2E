@@ -269,8 +269,10 @@ class Trial03:
                     raise RunInvariantError(f"체결 봉 {bar.open_ms} ≠ 기대 {None if self.ev is None else self.ev['fill_open']}")
                 self.entry["filled"] += 1
                 self.filled_intents.append(self.intents[-1])
+                comm = e.entry_commission if e.entry_commission is not None else sum((f.commission for f in e.fills), Decimal(0))
                 self.events.append({"kind": "filled", "arm": self.arm, "t": t, "fill_open": bar.open_ms,
-                                    "leverage": e.leverage, "qty": str(e.post_fill.qty), "fill": str(e.post_fill.entry_price)})
+                                    "leverage": e.leverage, "qty": str(e.post_fill.qty), "fill": str(e.post_fill.entry_price),
+                                    "entry_ref": str(bar.d("mark_open")), "entry_commission": str(comm)})
                 self._to("IN_POSITION", t)
             elif isinstance(e, EntrySkipped):
                 if self.state != "ENTRY_PENDING":
@@ -289,7 +291,12 @@ class Trial03:
                 if e.reason not in (ExitReason.SL, ExitReason.LIQUIDATION, ExitReason.TIME_EXIT):
                     raise RunInvariantError(f"등록되지 않은 청산 사유 {e.reason}")
                 self.entry[f"exit.{e.reason}"] += 1
-                self.events.append({"kind": "exit", "arm": self.arm, "t": t, "reason": str(e.reason)})
+                self.events.append({"kind": "exit", "arm": self.arm, "t": t, "reason": str(e.reason), "ts_ms": e.ts_ms,
+                                    "exit_price": None if e.exit_price is None else str(e.exit_price),
+                                    "exit_fills": [[str(f.price), str(f.qty), str(f.commission), None if f.ref_mark is None
+                                                    else str(f.ref_mark)] for f in e.fills],
+                                    "realized_pnl": str(e.realized_pnl_usdt), "exit_commission": str(e.exit_commission_usdt),
+                                    "funding_paid": str(e.funding_paid_usdt), "wallet_after": str(e.wallet_after)})
                 self.ev = None
                 self._to("COOLDOWN", t)
 
