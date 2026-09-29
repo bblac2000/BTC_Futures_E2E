@@ -5571,3 +5571,15 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb23-3e16-7992-9ec3-29f4f6a589a1
 > Resume in Codex: codex resume 01a0eb23-3e16-7992-9ec3-29f4f6a589a1
+
+## 2026-09-29 — 2f 재확인 r6(Codex task-mum3nqtb-3yr6i3) **MERGE** — 2f 완료
+
+### Codex 원문(verbatim)
+> The r5 issue is closed: the parser rejects a pinned `name=64-hex` token with an extra suffix, and the new test covers that case. The fix is recorded at the end of [ops_log.md](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md). I found no new provenance hole in the requested diff; `git diff --check` passed.
+> 
+> This was a read-only review. I did not run pytest or access `var/` or market data. On the requested r6 scope, TRIAL #2 2f is ready to merge.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0eb25-43f2-7572-83ba-feef60bdaad3
+> Resume in Codex: codex resume 01a0eb25-43f2-7572-83ba-feef60bdaad3
