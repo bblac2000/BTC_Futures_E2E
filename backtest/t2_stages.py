@@ -89,6 +89,9 @@ class Stages:
 
     def run_one(self, name: str, module: str, args: list[str], out: Path, prov: dict[str, Any]) -> dict[str, Any]:
         t0 = time.time()
+        if "fingerprint" in prov and PV.fingerprint(self.repo) != prov["fingerprint"]:
+            #  K4: 긴 단계 도중 코드가 바뀌면 다음 하위 프로세스를 띄우지 않는다(기록된 지문과 실제 코드의 불일치 방지)
+            raise PV.ProvenanceError(f"{name}: 실행 코드 지문이 단계 시작 뒤 바뀌었다")
         rec = self.runner(module, args, out, timeout_s=24 * 3600)
         self.records.mkdir(parents=True, exist_ok=True)
         body = {"run": asdict(rec), "provenance": prov | {"head": PV.head(self.repo)}, "wall_s": round(time.time() - t0, 1)}

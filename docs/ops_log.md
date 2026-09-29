@@ -6182,3 +6182,17 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb5a-43ae-7483-8cb1-70b9e2faac56
 > Resume in Codex: codex resume 01a0eb5a-43ae-7483-8cb1-70b9e2faac56
+
+## 2026-09-29 — K 설계 r2 재확인(Codex task-mum5uwi2-to1ohr) **PROCEED** — K1'·K2·K3'·K4·K5·K6 구현
+
+### Codex 원문(verbatim)
+> **K3′ resolves the blocker.** Removing the value based bps refusal avoids rejecting a result that funding could produce. The claim about how large a real funding rate can be is unverified, but the design no longer depends on that claim: an actual nonfinite float64 computation must cause an arithmetic refusal, with no verdict or evaluation files. Implementation must apply that rule throughout the calculation path, including places that currently turn a nonfinite result into `None` or zero, and retain the preregistered treatment of genuinely undefined statistics. See [evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:180) and [stats_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:76).
+> 
+> **K1′ answers the schema questions.** It specifies every missing kline field, gives `trades` an integer sentinel, defines `source` as mark provenance, and pins the required archive fields. Its three proposed cases cover the important independent series behavior, including a kline only 23:59 minute contributing to buy and hold while the day remains invalid for trading. This matches the [mark based validity rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30) and [kline close rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110).
+> 
+> With K2 and K4–K6 unchanged, **the full delta is ready to implement**. This is a design verdict; the current code and conventions still contain the old behavior. I made no changes, ran no tests, and accessed neither `var/` nor market data.
+> 
+> VERDICT: PROCEED
+> 
+> Codex session ID: 01a0eb5d-9e7e-7d22-b03c-65ffc233d778
+> Resume in Codex: codex resume 01a0eb5d-9e7e-7d22-b03c-65ffc233d778

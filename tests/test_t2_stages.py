@@ -193,3 +193,18 @@ def test_orchestrator_imports_no_strategy():
     src = (ROOT / "backtest" / "t2_stages.py").read_text(encoding="utf-8")
     mods = [n.module for n in ast.walk(ast.parse(src)) if isinstance(n, ast.ImportFrom)]
     assert not any(m and m.startswith("strategies") for m in mods)
+
+
+def test_code_change_mid_stage_is_refused(stages, monkeypatch):
+    """K4: 긴 단계 도중 코드가 바뀌면(지문 변경) 다음 하위 프로세스 전에 멈춘다."""
+    ready(stages)
+    stages.arm(["A"], 1)
+    calls = {"n": 0}
+
+    def fp(repo):
+        calls["n"] += 1
+        return "FP" if calls["n"] <= 2 else "FP_CHANGED"             # 선행 검사 · 첫 실행 뒤 바뀜
+    monkeypatch.setattr(PV, "fingerprint", fp)
+    with pytest.raises(PV.ProvenanceError):
+        stages.arm(list(T.BASE_NAMES), 1)
+    assert len([c for c in stages.runner.calls if c[0] == T.STRATEGY]) < 1 + len(T.BASE_NAMES)
