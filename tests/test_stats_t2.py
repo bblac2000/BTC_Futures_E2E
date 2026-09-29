@@ -76,3 +76,8 @@ def test_empty_day_list_is_undefined_without_warnings():
         warnings.simplefilter("error")
         assert not S.valid_day_bootstrap_mean({}, [], rng(), resamples=10, level=0.9875).defined
         assert not S.daily_diff_bootstrap({}, {}, [], rng(), resamples=10, level=0.9875).defined
+
+
+def test_p95_rejects_nonfinite():
+    with pytest.raises(ValueError):
+        S.p95([-10.0] * 199 + [float("inf")])

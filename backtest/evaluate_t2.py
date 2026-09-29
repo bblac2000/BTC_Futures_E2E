@@ -192,8 +192,16 @@ def trades_of(st: T.Stages, name: str) -> list[dict[str, Any]]:
     return sorted(_jsonl(st.runs / name / "trades.jsonl"), key=lambda t: (int(t["entry_ms"]), int(t["trade_id"])))
 
 
+def _fin(v: float, what: str) -> float:
+    if not math.isfinite(v):
+        raise Refusal(f"집계값이 유한하지 않다({what}): {v}")      # 유한한 값들의 합이 넘치는 경로(Codex 2g r3)
+    return v
+
+
 def mean_net(trades: Sequence[dict[str, Any]]) -> float:
-    return float(np.mean([_f(t["net_bps"]) for t in trades])) if trades else 0.0     # 0건 → 0 bps(§3-1 P2·P3)
+    if not trades:
+        return 0.0                                            # 0건 → 0 bps(§3-1 P2·P3)
+    return _fin(float(np.mean([_f(t["net_bps"]) for t in trades])), "mean_net")
 
 
 def daily_stat_pnl(trades: Sequence[dict[str, Any]]) -> dict[int, float]:
@@ -288,8 +296,8 @@ def compute(st: T.Stages, validity: DY.Validity, bars: Sequence[Bar1m], first_da
                    mean_net=sa["mean_net"], net_ci_lo=sa["net_ci"][0] if sa["net_ci"] else None,
                    net_ci_hi=sa["net_ci"][1] if sa["net_ci"] else None, sd_net=sa["sd_net"], sr_a=sa["sr"], sr_b=sb["sr"],
                    psr0_a=sa["psr0"], p1_computable=p1_comp, p1_failures=p1_fail,
-                   p1_p95=S2.p95(p1_null) if p1_null else None, p2_d1=p2["P2_delay1"], p2_d5=p2["P2_delay5"], p3_inv=p3,
-                   p4_defined=len(p4_means), p4_p95=S2.p95(p4_means) if p4_means else None)
+                   p1_p95=_fin(S2.p95(p1_null), "P1 p95") if p1_null else None, p2_d1=p2["P2_delay1"], p2_d5=p2["P2_delay5"], p3_inv=p3,
+                   p4_defined=len(p4_means), p4_p95=_fin(S2.p95(p4_means), "P4 p95") if p4_means else None)
     a_day, b_day = daily_stat_pnl(ta), daily_stat_pnl(tb)
     ab = S2.daily_diff_bootstrap({d: a_day.get(d, 0.0) for d in vb}, {d: b_day.get(d, 0.0) for d in vb}, vb,
                                  _rng(A.BOOTSTRAP_STREAMS["ab_daily"]), resamples=A.BOOTSTRAP_RESAMPLES, level=A.LEVEL)

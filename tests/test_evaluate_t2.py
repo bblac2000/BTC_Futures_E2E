@@ -432,3 +432,14 @@ def test_malformed_receipt_is_a_refusal(tmp_path, patched):
     (tmp_path / "_records" / "verify_receipt.json").write_text("{not json")
     with pytest.raises(E.Refusal):
         run_eval(tmp_path)
+
+
+def test_overflowing_mean_of_finite_values_is_refused(tmp_path, patched):
+    build(tmp_path)
+    d = tmp_path / "runs" / "P4_draw033"
+    rows = [json.loads(x) for x in (d / "trades.jsonl").read_text().splitlines()]
+    for r in rows[:3]:
+        r["net_bps"] = "1e308"                                    # 각각 유한 · 평균은 inf
+    _rewrite(tmp_path, "P4_draw033", "trades.jsonl", rows)
+    with pytest.raises(E.Refusal):
+        run_eval(tmp_path)

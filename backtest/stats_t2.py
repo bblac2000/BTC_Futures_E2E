@@ -90,5 +90,9 @@ def sharpe_or_none(x: Sequence[float]) -> float | None:
 
 
 def p95(values: Sequence[float]) -> float:
-    """§3-1: P1·P4 p95 = numpy 선형 분위수 0.95(트라이얼 #1 p1_core.p95와 같은 식)."""
-    return float(np.quantile(np.asarray(values, dtype=float), 0.95))
+    """§3-1: P1·P4 p95 = numpy 선형 분위수 0.95(트라이얼 #1 p1_core.p95와 같은 식). 유한하지 않은 원소 → ValueError
+    (inf 하나는 분위수를 움직이지 않아 조용히 섞인다 — Codex 2g r3)."""
+    a = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(a)):
+        raise ValueError("p95 입력에 유한하지 않은 값")
+    return float(np.quantile(a, 0.95))

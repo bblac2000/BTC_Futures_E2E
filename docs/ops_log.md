@@ -5891,3 +5891,20 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb3c-5a49-7780-8d6a-8793891a19b7
 > Resume in Codex: codex resume 01a0eb3c-5a49-7780-8d6a-8793891a19b7
+
+## 2026-09-29 — 2g 재확인 r3(Codex task-mum4rirf-a09b4w **FIX-FIRST**) → 수정
+- r2 항목 CLOSED · 새 차단: 유한한 1e308 세 개의 평균 = inf → p95가 흡수 → ✅ 동의 → 변형 평균·P1/P4 p95 결과의 유한성 검사(거부) · `stats_t2.p95` 입력에 유한하지 않은 값 → 오류 · 시험 2개.
+
+### Codex 원문(verbatim · task-mum4rirf-a09b4w)
+> The three r2 items are **closed**: `_f()` rejects `1e400` after float conversion, B day statuses are checked against `V_B` and B trade days, and malformed receipts now become a `Refusal`.
+> 
+> I found one new verdict blocker. In [evaluate_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:195), three individually finite `1e308` P4 trade values make `np.mean` return `inf`. With 199 other draw means at −10, [p95()](/home/cms/project/BTC_Futures_E2E/backtest/stats_t2.py:92) still returns −10, so the [verdict input check](/home/cms/project/BTC_Futures_E2E/backtest/verdict_t2.py:91) does not catch the invalid draw and an otherwise passing run can reach `IS PASS`. I reproduced the mean and percentile behavior with a read-only numeric probe. Validate each aggregate before the percentile and add an evaluator regression test.
+> 
+> `git diff --check` passed. I did not run the file-writing test suite or access `var/` or market data.
+> 
+> **2g is not ready to merge.**
+> 
+> VERDICT: FIX-FIRST
+> 
+> Codex session ID: 01a0eb41-954a-7722-864f-a081edf86244
+> Resume in Codex: codex resume 01a0eb41-954a-7722-864f-a081edf86244
