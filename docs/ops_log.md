@@ -7311,3 +7311,26 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 >    (advisor 8) — pinned in the conventions row; fill events asserted to carry raw.slippage_rate == "0.0006".
 > B7 Q3: registry note + ops_log after (b): trial #2 stays closed under H 63c1760 and its fingerprint; main after (b) intentionally fails
 >    trial #2's provenance gate; last main commit whose fingerprint set equals H's = the pre-(b) commit (recorded by hash).
+
+## 2026-09-29 — 트라이얼 #3 (b) 계획 r2 Codex 좁은 재확인(task-mumjjokg-d1ptbn) **PROCEED**
+- 입장: ✅ 전부 동의 · 워크트리 기준선은 본 저장소의 무시된 `var/backtest/t2/IS`를 `--t2-base`로 가리킨다 · `--skip-runs`는 회귀 증거가 아니다(진단 경로 점검 — 기록된 실행에서 report SHA256 9223047c… 재현 확인만).
+
+### Codex 원문(verbatim)
+> | Prior finding | r2 status | Re-check |
+> |---|---|---|
+> | 1. Incomplete Trial #2 coverage | **CLOSED** | B2 specifies all 205 variants, all 1,000 P1 draws, the merge, and an exact output-file inventory comparison. The [draft checker](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py) implements those comparisons. |
+> | 2. Evaluator bypass presented as a rerun | **CLOSED** | B3 calls the report recomputation a diagnostic and leaves the closed evaluation untouched. |
+> | 3. Invalid liquidation invariant | **CLOSED** | T3 compares identical restored positions and allows full replays to differ through entry sizing. |
+> | 4. Trial #3 P1 wiring | **CLOSED at plan level** | B6 requires 6 bps at placement and execution, with an integration test in step (e). That implementation remains future work. |
+> | 5. Imprecise 22 bps assertion | **CLOSED** | T1 uses exact adverse fills and wallet arithmetic; 22 bps is described as nominal. |
+> 
+> **Q1–Q3:** The gate-free calls are suitable for a regression diagnostic; the default-preserving signatures cover the identified Trial #1, Trial #2, and bot callers; B7 correctly calls for a registry note and ops log evidence.
+> 
+> **B2+B3 do not yet prove Trial #2 is unaffected.** They define a sufficient check for *byte identity of the recorded Trial #2 IS outputs* if the full baseline and after runs pass. I found no recorded results, and ran nothing. The draft checker is currently untracked and has a `--skip-runs` mode, so that mode must not be used as regression evidence. The baseline worktree also needs access to the ignored `var/backtest/t2/IS` data; a checkout alone will not contain it.
+> 
+> B3’s reason for omitting an authoritative gated rerun is sound for this question: running H’s old code would not test the changed code, while the changed code intentionally fails H’s fingerprint. The one-shot rule prevents writing another evaluation in the closed location; it does not make a separate rerun at H impossible.
+> 
+> **VERDICT: PROCEED**
+> 
+> Codex session ID: 01a0ecbc-7185-75e2-9328-c2d6d4565f04
+> Resume in Codex: codex resume 01a0ecbc-7185-75e2-9328-c2d6d4565f04
