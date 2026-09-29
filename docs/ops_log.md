@@ -6142,3 +6142,43 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > **8. Endgame, so the checkpoint report is right.** After Codex → log both verbatim with positions → fixes (1–7) → narrow re-check → **whole-step-2 after-pass** (advisor + Codex: done vs planned, objections, registry items — the user's original standing-rule ask) → 2i rows from the conventions draft (+ items 3 and 5 above) → push request. Name H explicitly: the last commit that touches any fingerprint file; docs-only commits after it are fine, any code change means a new H. Then: `prepare` → `data_pins.json` + registry row → second push → `verify` → A → base → p1 → merge → p4 → one `evaluate`. Each stage's ops_log entry committed before the next stage (clean-tree preflight).
 >
 > Items 1–2 are the only ones I'd call blocking for MERGE (one wrong recorded number, one self-referential check); 3–7 fold into the same fix commit.
+
+## 2026-09-29 — K 설계 재확인(Codex task-mum5q6uj-kchvxu **FIX-PLAN-FIRST**) → 설계 r2
+- K1·K2 원칙 수용 · K3 차단(펀딩 항은 rate·mark/entry라 cap·max/min까지 · cap 역사 검증 없음) → ✅ 동의 → **값 기준 거부 폐기**(K3') · 산술 무결성 가드만 · K1 스키마 고정(K1').
+
+### 설계 r2
+> # Delta r2 (Codex K design check: K3 blocker, K1 schema questions)
+> 
+> K3' (replaces K3) NO value-based refusal. The |bps| ≤ 10⁶ check is removed. Remaining guards are arithmetic-integrity only: every
+>     input is a finite Decimal (else refusal — non-finite values are not numbers), and a refusal happens only if a float64 computation
+>     actually produces a non-finite result (bootstrap sums/means, Sharpe variance, run means, p95). Argument that this never alters a
+>     registered result for a realisable input: price-driven terms are bounded by the #36 PRICE_FILTER ratio max/min ≈ 8,135
+>     (≤ ~8.2×10⁷ bps); fees/liquidation are fractions of notional; each funding settlement adds rate·mark/entry ≤ |rate|·8,135 — float64
+>     overflow in any statistic needs |values| ≳ 10¹⁵⁰/√n, i.e. |rate| ≳ 10¹⁴⁰ per settlement, which no funding record is. Such a state
+>     is reported as an arithmetic failure (no verdict, nothing written), never as a pass or a gate outcome. Convention 29 = this text.
+> K1' schema pins:
+>     - Archive kline fields required ok: Open, High, Low, Close, Volume, quote_volume, taker_buy_base, taker_buy_quote (Decimal ok) and
+>       trades (integer ≥ 0). Archive mark fields: mark_open/high/low/close ok.
+>     - Replay bar for a minute with mark but no kline: open/high/low/close/volume/quote_volume/taker_buy_base/taker_buy_quote = "",
+>       trades = -1 (sentinel). `source` = the MARK source ("archive" | "rest"). The kline origin is recorded only in
+>       `kline_close_daily.json` rows ({day, minute, close, source}) and in audit counts (bars_kline_archive/rest/missing).
+>     - No trial #2 consumer reads bar kline fields: strategy, engine (mark_bar), days.py, P1 (placebo_exec uses mark_open/mark_* and
+>       bar dict by open_ms) — enforced by a test that runs the trial #2 replay + P1 on bars whose kline fields are all empty.
+>     - Tests: mark-only minute (bar present, kline empty, day valid); kline-only final minute 23:59 (no bar for that minute → day
+>       invalid by §1; kline_close_daily uses the 23:59 kline close); archive mark ok + kline bad → REST kline used, mark stays archive.
+
+### Codex 원문(verbatim · task-mum5q6uj-kchvxu)
+> ## Design re-check
+> 
+> **K3 remains a blocker.** The proposed bound treats each funding settlement as at most `cap` of entry notional. The engine instead charges `quantity × funding mark × rate`, while `net_bps` divides by entry notional ([engine](/home/cms/project/BTC_Futures_E2E/paper/engine.py:402), [returns](/home/cms/project/BTC_Futures_E2E/backtest/returns.py:27)). Each settlement can therefore contribute up to `cap × max_price / entry_price`, not `cap`. With the #36 snapshot values, the proposed bound is about **81.36 million bps**; a long position with two favorable funding settlements at the allowed maximum price can exceed it, even after the modeled slippage and fees. Also, the captured funding cap is not currently validated against historical funding records ([preparation](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:240)). Thus `|value| > B` has not been shown to be an impossible output, and refusal could change the registered result. Revise the proof and bound, or remove this refusal; do not promote the current formula to convention 29.
+> 
+> **K1–K2 resolve the preregistration mismatch in principle.** Mark based valid days and an independent kline close series match [§1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30) and [§3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110). The reviewed Trial #2 replay, strategy, and P1 paths use mark fields. Before implementation, specify the bar schema for a missing kline: `trades` is currently an integer, so “empty strings” does not define every field ([Bar1m](/home/cms/project/BTC_Futures_E2E/backtest/data.py:40)). Also define whether `source` identifies the mark source when mark and kline origins differ, and pin exactly which archive kline fields must be valid. Test a mark only minute and a kline only final minute.
+> 
+> **K4–K5 are a sufficient 2i plan**, provided the finalized file contains the stated exact output sets and CLI paths, rows #37–#38 incorporate and evidence those bytes, and only the pins row contains the literal pins path. The current parser counts every registry table row containing that path ([load_pins](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:116)); the proposed real registry test addresses that trap. These are still planned changes, not completed implementation.
+> 
+> This was a read-only design review; I did not inspect `var/` or market data or run tests.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0eb5a-43ae-7483-8cb1-70b9e2faac56
+> Resume in Codex: codex resume 01a0eb5a-43ae-7483-8cb1-70b9e2faac56
