@@ -6752,3 +6752,31 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ec6d-96fd-7d00-a207-63c204be27fd
 > Resume in Codex: codex resume 01a0ec6d-96fd-7d00-a207-63c204be27fd
+
+## 2026-09-29 — 트라이얼 #3 after-pass 마무리 advisor 노트(초안 불변 · 레지스트리 행 없음)
+| # | 입장 | 조치 |
+|---|---|---|
+| 1 초안 재수정 금지 | ✅ | r3 SHA256 28798f49… 그대로 |
+| 2 초안 원문 전달 | ✅ | 보고에 파일 전문 |
+| 3 메모리 갱신 | ✅ | trial03-status 메모리 작성 · trial02 줄 정정 |
+| 4 푸시는 보고만 | ✅ | 9커밋 목록 · 비밀 스캔 미실행 명시 · 요청 시 푸시 |
+| 5 호스트 확인 | ✅ | 읽기 전용 확인: hostname ip-172-31-38-160 · btcfut-bot(user) active · digest 09-29 00:40:12 시작 → 00:40:13 Finished(텔레그램 수신 자체는 미확인) |
+
+### advisor 원문(verbatim)
+> You're at the report stage; Codex MERGE is logged (cce86f1, #46). The draft cycle is complete. Before you write the reply, five things your checks didn't cover:
+> 
+> **1. Don't touch the draft file again.** #45 and #46 both pin r3's SHA256 (28798f49…). Any edit — even fixing the status line to say "MERGE" — invalidates both rows. The MERGE status lives in #46 and ops_log, which is where it belongs.
+> 
+> **2. The deliverable is the draft text itself, not a description of it.** The user asked for it "verbatim as with #1/#2." `cat` the full 212 lines into the reply. Don't paraphrase §12 from the summary — the decision list must come from the file as committed so the user sees exactly what they'd be approving. Frame §12 as: these 15 are yours; window A/B defaults to B; anchor requires your date confirmation; nothing proceeds before both.
+> 
+> **3. Memory is now wrong.** `trial02-status.md` and its MEMORY.md line say "trial #3 = T-FLUSH, no work yet" and "re-base on constitution v1.2." Both are stale: constitution is v1.3 (e8c3091), and #3 is at draft r3 / Codex MERGE / awaiting §12 + date. Update that file (or write a `trial03-status.md` and fix the pointer) before the report — next session will otherwise resume from a false premise.
+> 
+> **4. Push state must be stated, not acted on.** 9 commits ahead (23a5648…cce86f1). Item #1's push (e8c3091, 72be305) was explicit; item #2 said "deliver," not "push." Under the standing constraint, list the 9 hashes and ask; don't push. Note the secret scan hasn't been run on these yet.
+> 
+> **5. Host item: don't report a negative you didn't observe.** "Report the digest only if it fails" means you checked. If this segment didn't actually verify delivery (read-only log/journal), say "not checked this session" rather than implying it was fine. Silent success is exactly the failure class CLAUDE.md warns about.
+> 
+> **Skill item facts to include:** tree as printed (1 folder, SKILL.md + 5 references, no Zone.Identifier), header `v1.3 (2026-09-29)` confirmed (grep count 1), commit e8c3091 pushed with 72be305. Note the wrapper folder described in the request didn't exist — say that plainly rather than reporting a move that didn't happen.
+> 
+> **Logging this pass:** the standing rule is verbatim for every advisor text. Log this one under the after-pass as the closing advisor note with your positions; no registry row (draft unchanged).
+> 
+> No blockers on the substance — Codex closed all 14 items across three passes and the draft is ready for the user's decisions. The items above are report-accuracy, not design.
