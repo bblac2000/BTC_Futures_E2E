@@ -5558,3 +5558,16 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb20-eaed-7bd0-9d05-d7f7bbed7fcd
 > Resume in Codex: codex resume 01a0eb20-eaed-7bd0-9d05-d7f7bbed7fcd
+
+## 2026-09-29 — 2f 재확인 r5(Codex task-mum3kwid-tapkj1 **FIX-FIRST**) → 수정
+- #5 PARTIAL(해시 뒤 잘못된 접미 통과) → ✅ 동의 → 필드 구분자(공백 · | · · · , · 백틱)로 토큰화 · 토큰 전체가 `이름=64hex`여야 · 핀 파일 이름으로 시작하는 잘못된 토큰 → 거부 · 테스트.
+
+### Codex 원문(verbatim · task-mum3kwid-tapkj1)
+> **#5 remains PARTIAL.** The new parser rejects `old_funding.json=<correct hash>`, closing the r4 example. But [load_pins](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:123) still accepts `funding.json=<64 correct hex characters>x` as a valid pair: its ending check excludes only another hex character. A read-only check with a complete synthetic pin row confirmed that the parsed map still equals `data_pins.json`.
+> 
+> Require a field delimiter or end of field after the hash, and add a malformed-suffix test. I found no separate new provenance hole in the requested diff. `git diff --check` passed; I did not run pytest or access `var/` or market data.
+> 
+> **TRIAL #2 2f is not ready to merge. VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0eb23-3e16-7992-9ec3-29f4f6a589a1
+> Resume in Codex: codex resume 01a0eb23-3e16-7992-9ec3-29f4f6a589a1

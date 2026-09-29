@@ -221,3 +221,15 @@ def test_conflicting_duplicate_pin_entry_refused(repo):
     push(repo)
     with pytest.raises(PV.ProvenanceError):
         PV.load_pins(repo)
+
+
+def test_malformed_hash_suffix_refused(repo):
+    pins_file(repo)
+    lines = (repo / PV.REGISTRY_REL).read_text().splitlines()
+    lines[1] = lines[1].replace("funding.json=" + "f" * 64, "funding.json=" + "f" * 64 + "x")
+    (repo / PV.REGISTRY_REL).write_text("\n".join(lines) + "\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)

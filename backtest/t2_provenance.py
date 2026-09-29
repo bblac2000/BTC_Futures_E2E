@@ -120,7 +120,14 @@ def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool
         raise ProvenanceError(f"핀 커밋의 레지스트리에 `{PINS_REL}` 행이 정확히 하나가 아니다({len(rows)})")
     import re
     parsed: dict[str, str] = {}
-    for name, h in re.findall(r"(?<![\w./-])([\w./-]+)=([0-9a-f]{64})(?![0-9a-f])", rows[0]):
+    names = set(pins["raw"]) | set(pins["prepared"])
+    for tok in re.split(r"[\s|·,`]+", rows[0]):             # 필드 구분자로 자른 토큰 하나 = `이름=64자리 hex` 전체
+        m = re.fullmatch(r"([\w./-]+)=([0-9a-f]{64})", tok)
+        if m is None:
+            if any(tok.startswith(n + "=") for n in names):
+                raise ProvenanceError(f"데이터 핀 행의 토큰 형식이 잘못됐다: {tok[:80]}")
+            continue
+        name, h = m.groups()
         if parsed.setdefault(name, h) != h:
             raise ProvenanceError(f"데이터 핀 행에 {name}의 해시가 둘 이상")
     if parsed != {**pins["raw"], **pins["prepared"]}:
