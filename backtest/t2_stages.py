@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -90,8 +89,7 @@ class Stages:
 
     def run_one(self, name: str, module: str, args: list[str], out: Path, prov: dict[str, Any]) -> dict[str, Any]:
         t0 = time.time()
-        env = dict(os.environ) | {"T2_NO_FETCH": "1"}       # 자식은 fetch 생략 — 부모 선행 검사가 fetch를 성공시킨 뒤다
-        rec = self.runner(module, args, out, timeout_s=24 * 3600, env=env)
+        rec = self.runner(module, args, out, timeout_s=24 * 3600)
         self.records.mkdir(parents=True, exist_ok=True)
         body = {"run": asdict(rec), "provenance": prov | {"head": PV.head(self.repo)}, "wall_s": round(time.time() - t0, 1)}
         self._record_path(name).write_text(json.dumps(body, sort_keys=True, indent=1, ensure_ascii=False) + "\n")
@@ -172,7 +170,7 @@ class Stages:
             self.done(name, job, prov | {"variant": name})
             expect[name.removeprefix("P1_")] = rec["run"]["outputs"]
         ef = self.records / "p1_merge_expect.json"
-        merge_args = ["--merge", "--parts-root", str(self.runs / "P1"), "--expect", str(ef)]
+        merge_args = ["--merge", "--parts-root", str(self.runs / "P1"), "--expect", str(ef), "--prepared", str(self.prep)]
         mjob = (P1_MODULE, merge_args, self.runs / "P1_merged", P1_OUTPUTS)
         if self.done("P1_merge", mjob, prov | {"variant": "P1_merge"}):
             if json.loads(ef.read_text()) != expect:
@@ -188,8 +186,7 @@ def gate_cli(prepared: Path, *, repo: Path = ROOT) -> dict[str, Any]:
     rf = base / "_records" / "verify_receipt.json"
     if not rf.exists():
         raise PV.ProvenanceError("verify 영수증이 없다 — 실행 전 verify 단계가 필요")
-    s = Stages(json.loads(rf.read_text())["evaluator_commit"], base=base, repo=repo,
-               fetch=os.environ.get("T2_NO_FETCH") != "1")
+    s = Stages(json.loads(rf.read_text())["evaluator_commit"], base=base, repo=repo, fetch=True)   # 직접 실행은 항상 fetch
     return s.receipt_ok(s.preflight())
 
 

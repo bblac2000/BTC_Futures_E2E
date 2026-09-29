@@ -164,9 +164,13 @@ def test_p1_parts_cover_all_draws_merge_is_verified_and_not_rerun(stages):
         stages.p1_merge()
 
 
-def test_children_skip_fetch(stages):
-    stages.prepare()
-    assert stages.runner.env["T2_NO_FETCH"] == "1"
+def test_unrecorded_extra_output_file_is_refused(stages):
+    """출력 디렉터리 파일 집합 = 기록 — 조건부 파일(p1_not_computable.json 등)을 기록에서 빼는 변조를 잡는다."""
+    ready(stages)
+    stages.arm(["A"], 1)
+    (stages.runs / "A" / "p1_not_computable.json").write_text("{}\n")
+    with pytest.raises(PV.ProvenanceError):
+        stages.arm(["A"], 1)
 
 
 def test_cli_gate_requires_receipt_and_verify_record(stages, monkeypatch):

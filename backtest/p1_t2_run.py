@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -112,9 +111,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--expect")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
+    from backtest.t2_stages import gate_cli
     if a.merge:
-        if not (a.parts_root and a.expect):
-            ap.error("--merge에는 --parts-root · --expect")
+        if not (a.parts_root and a.expect and a.prepared):
+            ap.error("--merge에는 --parts-root · --expect · --prepared")
+        gate_cli(Path(a.prepared))                              # 병합 직접 실행도 같은 문(Codex 2f r2 #5)
         print(json.dumps(merge(Path(a.parts_root), json.loads(Path(a.expect).read_text()), Path(a.out))))
         return 0
     if not (a.a_dir and a.prepared and a.draws):
@@ -122,9 +123,8 @@ def main(argv: list[str] | None = None) -> int:
     lo, hi = (int(x) for x in a.draws.split("-"))
     if not 0 <= lo <= hi < A.P1_DRAWS:
         ap.error(f"--draws 범위는 0..{A.P1_DRAWS - 1}")
-    from backtest.t2_stages import gate_cli
     gate_cli(Path(a.prepared))                                  # 직접 실행도 같은 문(Codex 2f after #5)
-    pins, _ = PV.load_pins(ROOT, fetch=os.environ.get("T2_NO_FETCH") != "1")
+    pins, _ = PV.load_pins(ROOT)
     print(json.dumps(run_range(Path(a.a_dir), Path(a.prepared), pins, lo, hi, Path(a.out))))
     return 0
 

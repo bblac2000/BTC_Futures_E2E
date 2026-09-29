@@ -86,6 +86,17 @@ def test_pins_must_be_tracked_clean_and_pushed(repo):
         PV.load_pins(repo)                                        # 커밋 안 된 변경
 
 
+def test_registry_row_must_be_in_the_pins_commit(repo):
+    pins_file(repo, registry=False)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins")
+    push(repo)
+    pins_file(repo, registry=True)                                # 작업 트리 레지스트리에만 있음 → 거부
+    git(repo, "checkout", "--", PV.PINS_REL)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)
+
+
 def test_receipt_binds_manifest_and_pins_commit(tmp_path):
     prep = tmp_path / "prep"
     prep.mkdir()

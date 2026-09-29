@@ -112,7 +112,9 @@ def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool
     c = pins_commit(repo)
     require_pushed(repo, c, remote_ref=remote_ref, fetch=fetch)
     pins = json.loads((repo / PINS_REL).read_text())
-    reg = (repo / REGISTRY_REL).read_text(encoding="utf-8") if (repo / REGISTRY_REL).exists() else ""
+    #  핀과 같은(푸시된) 커밋 시점의 레지스트리에 해시가 있어야 한다 — 작업 트리 문자열 검색이 아니다(Codex 2f r2 #5)
+    r = subprocess.run(["git", "-C", str(repo), "show", f"{c}:{REGISTRY_REL}"], capture_output=True, text=True)
+    reg = r.stdout if r.returncode == 0 else ""
     missing = [h for h in list(pins["raw"].values()) + list(pins["prepared"].values()) if h not in reg]
     if missing:
         raise ProvenanceError(f"레지스트리에 핀 해시가 없다: {missing[:3]}")
@@ -154,6 +156,10 @@ def check_record(rec: dict[str, Any], *, out_dir: Path, expect: dict[str, Any], 
     lacking = [f for f in required if f not in outs]
     if lacking:
         raise ProvenanceError(f"실행 기록에 필수 출력이 없다: {lacking}")
+    present = {p.name for p in out_dir.iterdir() if p.is_file()} if out_dir.exists() else set()
+    if present != set(outs):
+        raise ProvenanceError(f"출력 디렉터리 파일 집합이 기록과 다르다: 기록 밖 {sorted(present - set(outs))[:3]} · "
+                              f"없음 {sorted(set(outs) - present)[:3]}")
     for name, sha in outs.items():
         f = out_dir / name
         if not f.exists() or sha_file(f) != sha:

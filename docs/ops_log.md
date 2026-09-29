@@ -5497,3 +5497,36 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0d3d0-0a96-7461-bf9a-d4abf22d644e
 > Resume in Codex: codex resume 01a0d3d0-0a96-7461-bf9a-d4abf22d644e
+
+## 2026-09-29 — 2f 재확인 r2(Codex task-mufmxg4e-ugtsag **FIX-FIRST**) → 수정
+| # | Codex | 입장 | 반영 |
+|---|---|---|---|
+| 1 | PARTIAL — 조건부 p1_not_computable.json | ✅ | `check_record`: 출력 디렉터리의 파일 집합 = 기록된 출력 집합(기록 밖 파일·누락 모두 거부) · 테스트 |
+| 2·3 | CLOSED | — | — |
+| 4 | 직접 CLI의 T2_NO_FETCH | ✅ | 환경 변수 우회 삭제 — 직접 실행·자식 모두 항상 fetch(P4 200회 fetch 비용 수용 · advisor #4 방식 철회) |
+| 5 | PARTIAL — 레지스트리 문자열 · 병합 직접 실행 | ✅ | 핀 해시는 **핀 커밋 시점**의 레지스트리(`git show <핀 커밋>:docs/trial_registry.md`)에 있어야 · 병합 CLI도 `--prepared` + `gate_cli` · 테스트 |
+| 골든 | CLOSED | — | — |
+
+### Codex 원문(verbatim · task-mufmxg4e-ugtsag)
+> (세션 경계로 스크래치패드가 지워져 대화 기록에서 옮김 — 내용 원문 그대로)
+> ## Narrow re-check
+>
+> **FIX-FIRST remains.** The fixes close much of the earlier review, but two verdict-relevant provenance gaps remain.
+>
+> | Point | Status | Finding |
+> |---|---|---|
+> | Blocker 1: command and output checks | **PARTIAL** | Module, arguments, required filenames, hashes, and exit status are checked. But `P1_OUTPUTS` omits the conditional `p1_not_computable.json`. Removing that file from a record’s hash list lets [check_record](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:142) accept a changed or unrecorded verdict input. Require the conditional file when `n_A=0`, or compare the complete output set. |
+> | Blocker 2: verify receipt | **CLOSED** | [receipt_ok](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:63) now checks the successful verify record and current prepared-file hashes. |
+> | Blocker 3: resume guards | **CLOSED** | Prepare, verify, and P1 merge check existing records before rerunning. |
+> | Blocker 4: failed fetch | **CLOSED for orchestrated stages** | Fetch failure now raises. Direct CLIs still accept ambient `T2_NO_FETCH=1`, which can make their push check rely on a stale local remote reference. |
+> | Blocker 5: pins and direct CLI | **PARTIAL** | Metadata and strategy/P1 range gates were added. [load_pins](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:107) checks only that pin hash strings occur *somewhere* in the registry text; it does not prove the trial #2 row is committed and pushed with the pins. The [direct P1 merge branch](/home/cms/project/BTC_Futures_E2E/backtest/p1_t2_run.py:115) still returns before `gate_cli`. |
+> | Advisor 1: fingerprint at evaluator commit | **CLOSED** | The preflight compares the evaluator commit’s execution-code fingerprint with the current one. |
+> | Advisor 2: prepare guard | **CLOSED** | A recorded prepare is validated before being skipped. |
+> | Golden identity | **CLOSED for current fixtures** | All three golden outputs matched their fixture bytes in read-only direct checks. The tests compare decoded strings; the current fixtures have LF endings. |
+>
+> Pytest could not start: this read-only environment has **no usable temporary directory**. I did not access `var/` or market data.
+>
+> **VERDICT: FIX-FIRST.**
+>
+> Codex session ID: 01a0d3d8-a34b-7152-9195-691eee8f95c2
+> Resume in Codex: codex resume 01a0d3d8-a34b-7152-9195-691eee8f95c2

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -72,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     from backtest.t2_stages import gate_cli
     gate = gate_cli(Path(a.prepared))                          # 판정기 푸시 · 핀 · verify 기록·영수증 · 지문
-    pins, pc = PV.load_pins(ROOT, fetch=os.environ.get("T2_NO_FETCH") != "1")
+    pins, pc = PV.load_pins(ROOT)
     meta = execute(a.variant, Path(a.prepared), Path(a.out), pins, pc, gate=gate, head=PV.head(ROOT))
     print(json.dumps({k: meta[k] for k in ("variant_name", "n_trades", "n_first_cross", "n_v_a", "n_v_b")}, sort_keys=True))
     return 0
