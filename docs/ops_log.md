@@ -6274,3 +6274,29 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb78-90dd-7c90-a2b5-bebfac2c9583
 > Resume in Codex: codex resume 01a0eb78-90dd-7c90-a2b5-bebfac2c9583
+
+## 2026-09-29 — 푸시 체크포인트 전 advisor 최종 pass + 실제 저장소 모의 점검
+- 실제 저장소: `fingerprint_at(HEAD) == fingerprint` True · `t2_stages --stage prepare`(푸시 전 H) → "origin/main에 없다(푸시 전)"로 거부 · `var/backtest/t2/` 생성 없음 · `evaluate_t2` → 종료 2 "verify 영수증이 없다" · 규약 파일 SHA256 = #37 값(7448d76a…).
+- **실행 날 수칙**(advisor #2): ① 단계가 도는 동안 저장소를 건드리지 않는다(커밋되지 않은 편집 → 자식 git_head `+dirty` → 판정기 거부 · 단계 중 커밋 → meta/head 불일치) — 커밋은 단계 사이에만 · ② 실패한 자식은 설계상 이어 하기를 막는다(returncode ≠ 0 → done 오류): 이름·rc·stderr를 ops_log에 적고 `_records/<이름>.json`과 `runs/<이름>/`을 지운 뒤 단계 재실행(준비 SourceStop은 사용자 정정 결정 뒤) · ③ 메모리 15 GB 중 10 GB 사용 중 — A 단계를 먼저 혼자 돌려 자식 RSS를 재고 base/p1/p4의 `--jobs`를 정한다 · verify·판정기는 /tmp에서 재빌드(여유 605 GB).
+
+### advisor 원문(verbatim)
+> You're at the hand-off: code and docs are MERGE, #37 is in, tree is clean. Three things before the push request, then stop.
+>
+> **1. Dry-run the provenance path against the real repo — it has only ever run in temp repos.** Cheap, no push needed, and a failure here would stall run-day after the push:
+> - `PV.fingerprint_at(ROOT, PV.head(ROOT)) == PV.fingerprint(ROOT)` must be True on the clean tree (real `uv.lock`, `pyproject.toml`, ~60 files).
+> - `python -m backtest.t2_stages --evaluator-commit $(git rev-parse HEAD) --stage prepare` should die at "푸시 전" and write nothing under `var/backtest/t2/` — proves imports/argparse/fetch work in this environment. `python -m backtest.evaluate_t2` should exit 2 with "verify 영수증이 없다".
+> - `sha256sum docs/trials/trial_02_conventions.md` still equals #37's `7448d76a…` (the pins-script commit came after the row).
+>
+> **2. Run-day hazards nobody has written down — put them in the report and in ops_log now, not when they bite:**
+> - *Hands off the repo while a stage runs.* An uncommitted ops_log edit → next child's `git_head` gets `+dirty` → evaluator refuses that run; a mid-stage docs commit → `meta.git_head ≠ record head` → same. Commit only between stages.
+> - *A failed child blocks resume by design.* `done()` raises on `returncode ≠ 0`, so one transient `git fetch` failure among 200 P4 children (each does ~3 fetches) needs manual recovery: log name + rc + stderr in ops_log, delete `_records/<name>.json` and `runs/<name>/`, rerun the stage. Same for a `SourceStop` at prepare (rc 3 record) after the user's correction decision.
+> - *Memory.* 10 of 15 GB in use now; every child loads ~1.3M `Bar1m`, `prepare` holds the raw rows twice. Run stage A alone first, measure child RSS, then choose `--jobs` for base/p1/p4. `verify` and the evaluator each rebuild in `/tmp` (605 GB free — fine).
+>
+> **3. Push-request contents (single-level bullets, ≤100 chars, per the user's style):**
+> - H = the pushed HEAD (last fingerprint-set change is 8340502; docs commits after it are fine). Commit count since 355968a; exact command you'll run on approval.
+> - Secret scan: re-run after this pass is logged (last docs commit adds Codex verbatim text) — one line.
+> - Two pushes: this one; then `data_pins.json` + row #39 after `prepare`. Row #38 (push evidence) is committed before `prepare`.
+> - P1 saturation disclosure, plainly: h up to 1438 ≈ one trade per V_A day → >10 failed draws → 폐기 at priority 4 regardless of gates. Pre-registered; changing it needs a correction doc *before* the run. Their call before pushing.
+> - Time: trial #1 P4 ≈ 300 s/run → ~5–6 h at 3 jobs; P1 = hours (long holds, canonical engine); A ≈ 3 min. Stage-by-stage, hands-off.
+>
+> **4. Log this pass verbatim** (full text, not 요지), commit, then write the report and stop. Do not run `prepare` or anything under `var/backtest/t2/` — the push is theirs.
