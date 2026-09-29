@@ -6323,3 +6323,7 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 ## 2026-09-29 — 트라이얼 #2 base 완료
 - `--stage base --jobs 2` → B · P2_delay1 · P2_delay5 · P3_invert 모두 rc 0 · 50초 · 최대 RSS 2.4 GB.
 - 다음: P1(8조각 · --jobs 2).
+
+## 2026-09-29 — 트라이얼 #2 P1 조각 완료
+- `--stage p1 --parts 8 --jobs 2` → 8조각 모두 rc 0 · 13분 · 최대 RSS 2.4 GB(자식 2.1 GB씩 · 가용 ~2 GB 유지).
+- 다음: p1-merge → p4(--jobs 2).
