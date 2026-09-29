@@ -6720,3 +6720,22 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ec67-3750-7b33-b0e0-ae8c82fe4e68
 > Resume in Codex: codex resume 01a0ec67-3750-7b33-b0e0-ae8c82fe4e68
+
+## 2026-09-29 — 트라이얼 #3 초안 r2 **좁은 재확인**(Codex task-mumge7kl-yvryzb **FIX-FIRST**) → 초안 r3
+| # | 지적 | 입장 | 반영 |
+|---|---|---|---|
+| 1 | §3 "한 암의 결과는 다른 암 판정에 안 쓰인다" ↔ G-B 상호 의존 모순 | ✅ | §3 머리말: 장부·G0/G1/G2/flat/생존/P1~P3·OOS·전진은 독립, **G-B만 예외**(공시·수용) |
+| 2 | §0 "중첩되지 않는다"가 시간상 포지션 비중첩으로 읽힘 | ✅ | 같은 이벤트가 두 암에 동시에 안 들어감 · 두 장부 포지션은 시간상 겹칠 수 있고 서로 막지 않음 |
+- 이전 4건 + advisor 8건 전부 CLOSED(Codex). 초안 r3 SHA256 `9b8d2cdf3e40fde82914dea46cd633666584e2fbac7032996c03f7496b224d4b`.
+
+### Codex 원문(verbatim · task-mumge7kl-yvryzb)
+> The four findings from task-mumg7yv8-tctfuz are **CLOSED**: r2 fixes the ATR boundary, permits the required pre-window history, adds the decision-time B2 gate before fill-time resizing, and distinguishes a failed forward OI poll from a successful poll with no fresh row. The eight advisor items are also **CLOSED** in the draft or registry #44. I found no remaining PARTIAL item among them.
+> 
+> **New verdict-relevant ambiguity:** [§3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:63) says one arm’s result is never used in the other arm’s verdict, while the [G-B rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:71) explicitly uses each arm’s realised Sharpe in the other’s SR*. Amend §3 to distinguish independent books and OOS progression from the shared G-B calculation. [§0](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:13) should also avoid implying that opposite signals prevent positions from overlapping across time.
+> 
+> The draft is **not yet ready** to present as settled for the user’s §12 decisions and date confirmation. This was a read-only review; I opened no market returns and computed nothing from OI values. The anchor remains the user’s decision.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0ec6b-a8dc-7423-a788-1172b99ae524
+> Resume in Codex: codex resume 01a0ec6b-a8dc-7423-a788-1172b99ae524
