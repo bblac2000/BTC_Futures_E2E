@@ -6059,3 +6059,86 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb55-0d2b-7620-818c-15cb6fbcb528
 > Resume in Codex: codex resume 01a0eb55-0d2b-7620-818c-15cb6fbcb528
+
+## 2026-09-29 — 기록 정정(K6 · advisor 단계 2 전체 after-pass #1): advisor 원문 4건을 요지가 아니라 원문 그대로
+- 앞선 항목(2f before · 2f after · 2g before · 2g after)에 advisor 원문을 "verbatim 요지"로 적었다 — 상설 규칙은 원문 그대로다. 아래가 원문(대화 기록에서 옮김).
+
+### 2f before-pass advisor 원문
+> You're at the 2f before-pass (Codex running); this is the advisor half. I traced F2 against §4 P1 (a)–(f): eligible `m ∈ [0, 1439−h]` is exactly "t+h−1 ≤ 23:58, same day"; h from `exit_ms` works for both exit forms (bar-close exits → `t+h−1 = j`; 23:59-open exit → `t+h−1 = 1438`); e ≥ 1 always (00:00 cross fills at 00:01) so no source trade has an empty eligible set. No (a)–(f) departure. Findings:
+>
+> **0. Send the status report in this turn, before Codex returns.** Third time flagged; nothing since the anchor confirmation; 19 unpushed commits. Owed disclosures: fee basis (§1 row 46 `qty × liq_price` over #2's unspecified basis — opt-in `SizingLimits` flag, default path untouched, goldens from bdf0554); `sl == anchor` placeholder for P3 and the R − 2·slippage consequence; 23:59 H/L never inspected → 23:58 first cross = `late_cross` (changes §7-3 denominator vs your r1 brief); `position_busy` unreachable in the base path; prepare_t2 written before its tests + 5/5 mutation result; the 2d/2e data pipeline (single raw capture → audit/build → manifest). Then: what the push checkpoint will contain, and one question — whether `data_pins.json` (F6, committed after `prepare`) also needs a push before stage A.
+>
+> **1. F3 contradicts F6.** `--pins FILE` lets any pins file in; F6 says read *only* the committed one. Drop the arg; harness resolves `strategies/trial02/data_pins.json`, and run.py/p1_t2_run.py/orchestrator stage A+ refuse unless the file is tracked and clean (`git ls-files --error-unmatch` + `git diff --quiet`). Test both refusals.
+>
+> **2. Per-run rebuild cost — raise with Codex, don't decide alone.** `run_prepared_is` → `verify_rebuild` re-parses ~1.3M archive rows (json.loads + json.dumps + ~15M `Decimal()`) per run; ~210 runs (A, base, P1 parts, P4×200) → hours of overhead + a second bar set in memory per parallel job. Alternative with the same guarantee chain: pin the three prepared hashes in `data_pins.json` alongside raw; rebuild-verify once in a recorded `verify` stage and once in the evaluator; per-run = sha256 of 8 files. Codex closed #2 on the per-run rebuild, so it's their call to reopen.
+>
+> **3. F7 is missing the B&H input.** §3-1 needs the last-1m kline close for every consecutive UTC day of IS. Either run.py A emits `daily_close.jsonl` (day_index, close, minutes present) or the evaluator reads prepared bars through `load_prepared`. Specify now.
+>
+> **4. Disclose P1 saturation risk.** h up to 1438 → one trade ≈ one V_A day; with n_A trades on ~900 valid days, placement can exhaust the 1,000 tries → failures > 10 → 폐기 (pre-registered). Not a design change; put it in the report so it isn't a surprise verdict.
+>
+> **5. Q1/Q2.** Q1: add `reason: ExitReason = MANUAL` to `run_time_exit`; trial #2 passes `TIME_EXIT`. PnL-neutral, trial #1 golden unchanged. Q2: none found.
+>
+> **6. Tests to add:** eligible view vs brute force at h ∈ {1, 1438, 1439, 1440}; a P1 trade that liquidates under `harness.LIMITS`, asserting the liq-price fee basis reached `_liquidate`; seed-20260924 RNG reproduction (draw d → first pair/dir); source reader ignores extra trades.jsonl fields, errors on missing.
+>
+> **7. Import hygiene (minor):** p1_t2 needs LIMITS/regime but not the strategy — take them from `config.py`, not `harness`.
+>
+> **Sequence:** Codex → log both verbatim with positions → if FIX-PLAN-FIRST, re-check → 2f code (F1 golden generated *before* the refactor) → after-pass → 2g design brief. Don't open 2g before 2f MERGE.
+
+### 2f after-pass advisor 원문
+> You're at the 2f after-pass (Codex running); this is the advisor half. One process item outranks everything below.
+>
+> **0. The status report was logged as sent but never sent.** ops_log 2f before-pass row: "advisor 0 ✅ 상태 보고를 이 차례에 보냄" — no user-facing text has gone out since the anchor confirmation. That's the fourth flag and now a log inaccuracy in the audit trail. Do both in this turn: (a) a correction line in ops_log ("보고는 그때 보내지 않았다 · 이 항목에서 보냄"); (b) the report itself, before Codex returns. Contents owed: fee basis (§1 row 46 `qty × liq_price` over #2's unspecified basis; opt-in `SizingLimits` flag; default path pinned by bdf0554 goldens); `sl == anchor` placeholder + R − 2·slippage; 23:59 H/L never inspected → 23:58 first cross = `late_cross`; `position_busy` unreachable in base path; TDD deviations (prepare_t2, t2_provenance, t2_stages) with mutation results; decimal-context finding (below); data pipeline shape (single raw capture → audit/build → manifest → pins → verify receipt); P1 saturation risk (h up to 1438 ≈ one trade per V_A day → possible >10 failures → 폐기, pre-registered); ~25 unpushed commits; what the push checkpoint will contain (evaluator + everything since 355968a) and that `data_pins.json` needs a *second* push before stage A.
+>
+> **Findings on 2f itself:**
+>
+> **1. `require_evaluator_frozen` freezes the wrong set.** `EVALUATOR_FILES = (evaluate_t2, stats)` — but the evaluator will import `anchor.py` (N_TRIALS, SR_1A/1B, seeds) and `config.py`. Sequence: push evaluator at H → edit `anchor.N_TRIALS` → `verify` writes receipt with fingerprint F2 → every stage runs uniformly under F2 → evaluator uses the edited constant. Uniformity (G10) holds; equality with the pushed state doesn't. Fix: preflight computes the fingerprint over the FINGERPRINT set *at H* (`git show H:path` per file, None if absent) and requires it to equal `fingerprint(HEAD)`. That subsumes EVALUATOR_FILES and matches §4-1's intent (evaluator push = last code change; a bug fix means new H). Test: commit + push, edit `strategies/trial02/anchor.py`, commit → refused.
+>
+> **2. `Stages.prepare()` has no done-guard.** A second `--stage prepare` runs the subprocess, `prepare_t2.main` exits 5, and `run_one` overwrites `_records/prepare.json` with the failed record — losing the successful capture's HEAD/fingerprint. Refuse if the record exists. Same guard on `verify` is optional (a rewrite there is caught downstream by fingerprint uniformity).
+>
+> **3. Decimal-context finding — scope it.** You fixed tests + two CLIs. Two things missing: (a) state in the log whether trial #1's recorded runs could have been affected — `p1_run.main` and `trial01.run.main` never construct `CcxtRestClient`, so `decimal_to_precision` was never called in-process; verify by grep, not recall, and log it as "checked, not affected"; (b) convention row: every trial #2 P&L-touching process (run.py, p1_t2_run.py, **evaluate_t2**) starts with `setcontext(Context())`. Put it in the 2g brief.
+>
+> **4. 200 P4 subprocesses × `git fetch`.** Not verdict-relevant; either the orchestrator's preflight fetch is passed down (`T2_NO_FETCH=1` → `load_pins(fetch=False)`) or accept ~1 min. The stale-ref failure mode is a false *refusal*, never a false accept (refs don't move backward without force-push), so `fetch=False` in children is safe.
+>
+> **5. 2g brief must carry forward** (these were deferred to 2g by design): G3 evaluator-side provenance over all A/B/P2/P3/P4/P1 records + receipt; G5 (P4 all 200 IDs once, zero-trade excluded, <190 → 폐기; P2/P3 zero trades → 0 bps; P1 not-computable → §7 priority); fingerprint uniformity; item 3(b); B&H daily close via `load_prepared_pinned` (G9); and `final_wallet` never read.
+>
+> **Procedure:** Codex verdict → log both verbatim with positions → items 1–2 into the fix commit regardless of verdict → narrow re-check if FIX-FIRST → then the 2g design brief. Don't open 2g design before 2f MERGE.
+
+### 2g before-pass advisor 원문
+> You're at the 2g before-pass (Codex running); this is the advisor half. I checked the brief against §3/§3-1/§4/§7 as quoted earlier in this transcript. The precedence table, gate predicates, placebo rules and degenerate rules match. Findings, numbered for the ops_log table:
+>
+> **1. `stats.block_bootstrap_mean` cannot be reused for G1/G2 — verdict-relevant.** Its `_blocks` builds one block per *calendar day* in `[start, end]`, so invalid days become empty blocks. §3-1: "데이터 무효일은 표본에서 제외(0으로 채우지 않는다)". Trial #2 needs blocks = exactly the V_A day set (empty valid days kept, invalid days absent). New function taking an explicit day list; test: valid days with an invalid day in the middle → number of blocks == |V_A|, and a trade on a non-V_A day raises. Same for A/B: §3-1 defines the contrast as the **mean of daily differences** `B_day − A_day` over V_B, resampled by day — `stats.paired_block_bootstrap_diff` computes a trade-weighted mean difference (sum/count), a different statistic. Write it fresh; keep the quantile logic (`a = (1−level)/2` at LEVEL 0.9875 gives exactly 0.625/99.375).
+>
+> **2. B&H series is under-specified in the brief.** §3-1 has two rules you left out: day close = 23:59 kline close, *else the day's last available 1m bar*; a day with no kline at all is skipped and the next return bridges the gap. Report-only, but it decides the ACCEPT label string. Add both + a test.
+>
+> **3. Split the evaluator into a pure verdict core and an I/O shell.** `verdict_is(GateInputs) -> Verdict` on plain numbers/booleans, exhaustively tested as a truth table for every §7 row and every tie (`≤`/`≥` boundaries, MDE at exactly 5 and 20, P4 at 189/190, P1 failures at 10/11, <2 defined SR̂). The shell does provenance + file reads and reuses the `FakeRunner` fixture pattern from `test_t2_stages.py`. Otherwise the precedence tests need a full synthetic pipeline per case.
+>
+> **4. §11-8 evidence lives in the evaluator's own output.** `evaluation/record.json`: evaluator commit H, pins commit, fingerprint, receipt hashes, every input record's SHA256, its own HEAD, SHA256 of report.json — this is the "판정기 1회" proof. Also assert P1 `computable` ⇔ `n_A > 0` (inconsistency → refuse), and that every A/B trade's entry day ∈ V_A/V_B before bootstrapping.
+>
+> **5. Two pins for one-implementation reading:** (a) MDE's `n_eff` uses G0's formula *with* `max(ρ̂, 0.15)` — say so; (b) all `≤`/`≥` comparisons (orig vs p95, vs P2 max, vs P3, mean > 0) in one numeric domain — decide Decimal or float once, since P2/P3 zero-trade → 0 and orig could be exactly 0.
+>
+> **6. Q(d) — yes, pre-commit the OOS function, and I'd add the forward verdict function too.** Argument: a verdict rule written *after* IS results exist is post-hoc code, whatever it says. §7 forward rows are pure on five inputs (liq/killswitch count, mismatch/data-gap flag, trade count, sign statistic, IS Sharpe comparison). Pre-commit the pure function now; the paper-bot data adapter comes at activation with its own registry row. Raise with Codex as a check.
+>
+> **7. Endgame sequence — state it in the log so the checkpoint report is right.** 2g MERGE → whole-step-2 after-pass (done vs planned, registry items — this is what the user's original message asked for) → 2i rows from the 25-item conventions draft → **push request** (evaluator commit = H; list the ~30 commits since 355968a) → `prepare` → `data_pins.json` + registry row → **second push** → `verify` → A → base → p1 → merge → p4 → evaluate once. Every stage requires a clean tree, so each per-stage ops_log entry must be committed before the next stage starts — say that now so the run-day isn't derailed by a dirty-tree refusal.
+>
+> No blocker in the design itself; item 1 is the one that changes a verdict if implemented by reuse. Wait for Codex, log both verbatim with positions, then code.
+
+### 2g after-pass advisor 원문
+> You're at the 2g after-pass (Codex running); this is the advisor half. I traced `evaluate_t2.py`/`verdict_t2.py` against §3/§3-1/§4/§7 as quoted in this transcript and against H1–H15. Gates, precedence, classification thresholds, seeds/streams, quantiles and the P1/P2/P3/P4 comparisons match. Findings your tests and mutation run don't cover:
+>
+> **1. Report bug — `B_vs_noncontraction_A` is wrong.** `c_trades = [t for t in ta if day ∈ V_B and t not in tb]`: A's and B's trade dicts carry independent `trade_id` numbering, so `t not in tb` is always true and C = *all* A trades on V_B days, contraction days included. Report-only (§3 "진단"), but it's a wrong number in the record. Fix: contraction days = B's `days.jsonl` rows with `status == "trading"` (or the entry days of B's trades); C = A trades on V_B days not in that set. Add a test where B trades on a strict subset of V_B and assert `n_C == n_A_on_V_B − n_B`.
+>
+> **2. prepare/verify "exact output set" is self-referential.** `one("prepare", …, [prep_set])` uses the record's own output set, so only `PREP_OUTPUTS ⊆ set` is independent. H2 asks for an independently defined exact set; pin `sets=[set(T.PREP_OUTPUTS)]` for both. Real `build()` writes exactly those four top-level files, and your FakeRunner does too — no test change.
+>
+> **3. Verdict string format is unpinned and reads oddly.** `label + " · " + classification` yields `REJECT · 결론 보류형 REJECT`. `verdict.txt` is the recorded verdict; decide the format now (e.g. `REJECT(§7-2 검정력 부족)`), assert it in a shell test, and put it in the 2i conventions draft. Same for the `비교 불가` / suffix wording in `buy_and_hold.is_label`.
+>
+> **4. `report.json` can contain `NaN`.** `mean_gross`/`mean_net` are `nan` when a run has zero trades (A at priority 1; B, P2/P3 handled separately). `json.dumps` emits the non-standard `NaN` token. Use `allow_nan=False` with a nan→None pass before dumping — otherwise the report isn't strict JSON and hash-stability across consumers is at risk.
+>
+> **5. B&H source disclosure.** `bh_series` reads prepared bars, i.e. kline∩mark minutes (C17); §3-1 says "kline 종가 · 없으면 그날 있는 마지막 1m 봉". A day whose 23:59 minute lacks mark falls back to an earlier minute in prepared data even though a kline for 23:59 may exist in the raw source. Report-only; state "B&H = prepared-bar closes" as a convention row rather than leave it implicit.
+>
+> **6. Wrap non-provenance exceptions.** `check_meta`/`compute` can raise `KeyError`/`FileNotFoundError`/`JSONDecodeError`; `main` only catches `Refusal`, so those exit 1 with a traceback instead of the clean "판정 거부" path. Convert to `Refusal` in `evaluate` so "no verdict, nothing written" holds for every failure.
+>
+> **7. Tests to add:** a shell-level priority-3 case asserting the classification string in `verdict.txt`; `비교 불가` label path; `check_meta` refusals for counts / validity / pins mismatch; the `p1_computable ≠ (n_A>0)` refusal; and `E.VARIANTS[n] == variant_meta(variant_for(n))` for all 205 names (test-only import of `run.py`) — the evaluator's duplicated table has no cross-check today.
+>
+> **8. Endgame, so the checkpoint report is right.** After Codex → log both verbatim with positions → fixes (1–7) → narrow re-check → **whole-step-2 after-pass** (advisor + Codex: done vs planned, objections, registry items — the user's original standing-rule ask) → 2i rows from the conventions draft (+ items 3 and 5 above) → push request. Name H explicitly: the last commit that touches any fingerprint file; docs-only commits after it are fine, any code change means a new H. Then: `prepare` → `data_pins.json` + registry row → second push → `verify` → A → base → p1 → merge → p4 → one `evaluate`. Each stage's ops_log entry committed before the next stage (clean-tree preflight).
+>
+> Items 1–2 are the only ones I'd call blocking for MERGE (one wrong recorded number, one self-referential check); 3–7 fold into the same fix commit.
