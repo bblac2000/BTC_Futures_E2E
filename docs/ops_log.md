@@ -5957,3 +5957,105 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb52-502a-7a41-8eaa-fb3cf6a90c52
 > Resume in Codex: codex resume 01a0eb52-502a-7a41-8eaa-fb3cf6a90c52
+
+## 2026-09-29 — 트라이얼 #2 **단계 2 전체 after-pass**(advisor + Codex task-mum5iv8a-59ghc1 **FIX-FIRST**) → 설계 변경 K1~K6
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| Codex | 차단 1 (매수보유 kline) | ✅ | K1·K2 |
+| Codex | 차단 2 (유효성은 mark 기준) | ✅ | K1 — mark-only 분 중단 규칙 폐기(C12/C19 해당 부분 대체) · 이전 설계 리뷰가 만든 규칙이지만 사전등록 §1은 mark 기준이 맞다 |
+| Codex | 2i 행 | ✅ | K5 |
+| Codex | 수치 한도 | ✅ | K3 — #36 가격 필터에서 도출한 한도(규칙이 허용하지 않는 값 = 데이터 결함) |
+| advisor | 1 | ✅ | K6 |
+| advisor | 2 | ✅ | K4 |
+| advisor | 3·4 | ✅ | K5 |
+| advisor | 5·6 | ✅ | 푸시 요청 보고에 반영(비밀 스캔 · P1 포화 공시 · 두 번 푸시 · 실행 시간 추정 · 메모리/TMPDIR) |
+
+### 요약 제출물
+> # Trial #2 step 2 — done vs planned (for the whole-step-2 after-pass)
+> 
+> Planned (plan r2, ops_log 2026-09-24): 2a anchor · 2b/2c engine+replay · 2d validity · 2e strategy · 2f placebos+CLI+orchestrator ·
+> 2g evaluator · 2h rules snapshot · 2i convention rows · evaluator pushed before any run.
+> Done (all synthetic; no real-data P&L; no OOS data; 1,168 tests):
+> - 2h rules snapshot (#36, correction 01) · 2a anchor module (bdf0554).
+> - 2b/2c shared layer, all default-off, pinned by goldens from pre-2b tree (LIVE + replay), 3 Codex rounds.
+> - 2d/2e data pipeline (single raw capture → pure audit/build → manifest; stop rules) + day validity + strategy; design 6 rounds, code 4.
+> - 2f P1 core split (trial #1 golden byte-identical), trial #2 P1, run CLI, P1 CLI, orchestrator with push preflight, fingerprint,
+>   verify receipt, verified resume, exact output sets, registry pin row parsing; design 4 rounds, code 6.
+> - 2g evaluator: valid-day bootstrap, pure verdict core (+ pre-committed OOS/forward), provenance-checked shell, one-call atomic output,
+>   finiteness + sanity bound; design 3 rounds, code 6.
+> Deviations disclosed: TDD order for prepare_t2, t2_provenance, t2_stages, evaluate_t2 (mutation checks); decimal-context test leak found
+> and fixed (trial #1 records unaffected); liquidation fee basis = §1 row 46 (qty × liq price) over #2's unspecified basis (opt-in).
+> Not done yet (by design): 2i registry rows; evaluator push (user checkpoint); prepare/verify/runs/evaluate (after push).
+> Registry items proposed for 2i (from docs/trials/trial_02_conventions_draft.md, 29 items): one append-only row #37 "trial #2
+> implementation conventions (before any real-data run)" listing items 1–29 by short name with the draft file's SHA256 pinned, plus the
+> §11-8 evidence (output schema = run outputs RUN_OUTPUTS/P1_OUTPUTS/PREP_OUTPUTS/evaluation files; isolated CLI paths; the evaluator
+> commit H to be filled at push).
+> Open question for reviewers: is pinning the draft's SHA256 in the row (instead of copying 29 items into the row) sufficient, given the
+> draft is a committed file that must then never change?
+
+### 설계 변경 K1~K6
+> # Whole-step-2 after-pass fixes — design delta K1–K6 (supersedes parts of C15/C17/C19 and H5/convention 27/29)
+> 
+> K1 (Codex blocking #1·#2) Mark and kline become INDEPENDENT per-minute series in prepare_t2 (prereg §1 completeness is mark-based;
+>    §3-1 B&H is kline-based):
+>    - mark(minute): archive row with 4 ok mark fields → archive; else REST markPriceKlines row (malformed → STOP; absent → minute missing).
+>    - kline(minute): archive row with ok OHLC+volume fields → archive; else REST klines row (malformed → STOP; absent → no kline).
+>    - Fill ranges = minutes lacking an ok archive mark OR an ok archive kline; both REST series are fetched there.
+>    - Replay bars (`bars_1m.parquet`) = every minute with a mark; kline fields come from that minute's kline if present, else empty
+>      strings (no trial #2 path reads bar kline fields: strategy/engine/P1 use mark only — test asserts). A mark-only minute is no
+>      longer a STOP (supersedes C12/C19 mark-only rule). Mixing sources across the two series is allowed: they are never combined.
+>    - New pinned prepared output `kline_close_daily.json`: for every UTC day with ≥ 1 kline minute, {day, close of the 23:59 kline if
+>      present else of the day's last kline minute, minute} — from the kline series only. PREPARED set / pins gain this 4th file.
+>    - Duplicate/conflict/off-grid/funding rules unchanged.
+> K2 (Codex #1) Evaluator B&H reads `kline_close_daily.json` (pinned; IS days only; bridging of missing days as §3-1); bars no longer
+>    used for B&H. Convention 27 rewritten accordingly.
+> K3 (Codex numeric rule) The per-value bound is DERIVED from the registered runtime rules (#36 PRICE_FILTER): every trade has
+>    entry, exit ∈ [min_price, max_price] ⇒ gross gain ≤ (max/min − 1)·10⁴ bps (long), short gain ≤ 10⁴; losses are capped by
+>    liquidation (≤ margin + fee < 10⁴ bps) plus at most two funding settlements per day (each |rate| ≤ adjustedFundingRateCap from the
+>    same snapshot). Bound B = 10⁴·(max/min + 1 + 2·cap) computed at run time from the snapshot (no literal); P1 draw means are averages of
+>    bounded values. |value| > B is impossible under the registered rules ⇒ refusal = data defect, not a verdict change. Within B no
+>    aggregate over ≤ 10⁶ values overflows float64. Convention 29 rewritten with this derivation.
+> K4 (advisor #2) `Stages.run_one` recomputes the fingerprint before each subprocess and refuses on change (long stages).
+> K5 (advisor #3·#4 · Codex 2i spec) Conventions file finalized as `docs/trials/trial_02_conventions.md` ("확정 · 실데이터 실행 전"),
+>    adding: variant whitelist (G4) · P1 not-computable (G5) · P1 TIME_EXIT + exit counts (G6) · provenance chain (G1/G3/G10–G13/H2/H13–H15)
+>    · strategy arithmetic context (prec 34) · dispositions (H3) · item 16 filled (§11-8: exact output sets PREP/RUN/P1/sidecars/evaluation,
+>    CLI entry points). Registry row #37 incorporates items 1–N by reference + file SHA256 + commit, and must NOT contain the literal
+>    pins path (load_pins requires exactly one such row). Push evidence (H, remote/ref, verified contains) → row #38 after the push,
+>    before prepare. The pins row (#39) and data_pins.json are generated by a script from manifest.json, and load_pins is tested against
+>    the real registry in a temp clone before the second push.
+> K6 (advisor #1) One correction entry in ops_log with the four advisor passes previously logged as "요지" copied verbatim.
+
+### advisor 원문(verbatim)
+> You're at the whole-step-2 after-pass (Codex running); this is the advisor half. Done-vs-planned checks out: 2a–2h built, 2i pending by design, one plan change (trial #1 parquet → `prepare_t2`) approved in design r4. Findings, numbered for the log:
+> 
+> **1. Audit-trail gap — fix before the push request.** The standing rule says both passes verbatim. Four advisor passes were logged as "verbatim 요지" (2f before, 2f after, 2g before, 2g after); the others are full text. You have the full texts in this conversation — append one correction entry with the four verbatim copies, and log *this* pass verbatim, not condensed.
+> 
+> **2. Provenance window during a stage.** Fingerprint is computed once at preflight; a 200-run P4 stage runs for hours. If code changes mid-stage, later subprocesses run different code under the same recorded fingerprint. Strategy runs are caught indirectly (`meta.git_head` vs record head), P1 parts are not. Cheap close: recompute `PV.fingerprint` in `run_one` before each subprocess and raise on mismatch with the preflight value. One test with a monkeypatched fingerprint that changes after the first call.
+> 
+> **3. Registry row trap — this would break `load_pins`.** It requires *exactly one* row containing the literal `strategies/trial02/data_pins.json`. Conventions item 25 contains that path; if row #37 reproduces it, the count becomes 2 → every stage after `prepare` refuses. Row #37 must not contain that path. The pins row itself needs exactly 8 `name=64hex` tokens (5 raw: archive_rows.jsonl, fill_ranges.json, rest_klines.jsonl, rest_mark.jsonl, funding.jsonl; 3 prepared) and nothing else that parses as `name=64hex` — no `manifest.json=…`. Generate both the row and `data_pins.json` from `manifest.json` with a script, and test `load_pins` against the real registry in a temp clone before the second push.
+> 
+> **4. The open question: pinning the draft's SHA alone is not sufficient.** The file says "초안 — 바뀔 수 있다". Finalize it (rename to `trial_02_conventions.md`, header "확정 · 실데이터 실행 전"), enumerate item short names in row #37, pin the SHA256, and state it's immutable (change ⇒ new row). Before finalizing, add what's implemented but unlisted: variant whitelist (G4); P1 not-computable when n_A = 0 (G5); P1 exit reason TIME_EXIT + exit counts (G6); the provenance chain (evaluator push preflight, fingerprint, verify receipt, exact output sets, verified resume — G1/G3/G10–G13) as the §11-8 evidence; strategy arithmetic context (prec 34) for bands/sl_dist/median; H3 dispositions (SourceStop → correction doc; V_A empty → 폐기; artifact mismatch → refusal). Fill item 16 (§11-8 schema/CLI paths; H recorded after push).
+> 
+> **5. Push-request report contents.** H = HEAD at push time; docs-only commits after H are fine, any fingerprint-file change means a new H. Count commits since 355968a. Secret scan of the whole unpushed range first (public repo). State plainly: P1 saturation (h up to 1438 ≈ one trade per V_A day) can end the trial at priority 4 폐기 regardless of gates — pre-registered, not changeable without a correction doc; that's the user's call before pushing. Two pushes: this one, then pins + registry row after `prepare`. Estimate run time from trial #1's `_records/*.json` wall_s (not P&L) rather than guessing.
+> 
+> **6. Operational, not verdict-relevant:** `prepare` holds ~1.3M raw rows in memory and `verify_rebuild` copies raw to `/tmp` twice (verify stage, evaluator) — check RAM/TMPDIR space on the WSL box; runs are local, not VPS.
+> 
+> **Sequence:** Codex verdict → log both verbatim (+ item 1 correction) → items 2–4 in one commit → narrow re-check if Codex is FIX-FIRST → row #37 → secret scan → push request, then stop.
+
+### Codex 원문(verbatim · task-mum5iv8a-59ghc1)
+> ## Whole Step 2 review
+> 
+> **Done versus planned.** The read-only source review supports the reported completion of 2a–2h, including the synthetic evaluator and staged provenance checks. I found no real-data run or OOS work in scope. **2i registry rows and the evaluator push remain planned**, as the stated sequence requires. The preparation pipeline and provenance checks grew beyond plan r2 through the logged design reviews; that expansion is disclosed. The new 10⁶ bps refusal limit is the substantive addition that needs a rule check. I did not rerun the reported 1,168 tests or inspect `var/` or market data.
+> 
+> **Blocking objection.** The anchored rule uses each day’s last available **kline** close for buy and hold, including days outside the strategy’s valid-day set ([preregistration §3-1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:110)). Convention 27 instead uses closes from the prepared kline∩mark series ([draft](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions_draft.md:30)); that is the series passed to [the evaluator](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:310). If a day’s last kline minute lacks a mark bar, its buy-and-hold return and Sharpe can change, as can the eventual `ACCEPT` suffix. This was explicitly identified as a binding kline rule in the earlier Step 2 review ([ops log](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:4502)). Fix the reader to use the registered kline series, or document an anchored-rule correction **before** IS.
+> 
+> **Related validity objection.** The preregistered `V_A/V_B` completeness test is based on mark bars and funding ([§1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:30)). Preparation currently requires usable kline fields to retain an archive minute and stops on a REST mark-only minute ([prepare_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:125), [REST path](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:275)). Thus a kline gap can prevent evaluation even where the registered mark-day test could pass. Resolve the separation of mark validity and kline reporting before capture; retaining the stricter eligibility or stop rule would need a correction, not a convention label.
+> 
+> **2i rows.** Record items 1–29 as binding implementation conventions before any real-data execution, with the source path, **SHA256 `92ffaf5fca88c376e87207a96a258ace7ea338a0255b9f535c8ce0a104eb59f8`**, and a Git commit identifying those bytes. A hash in place of 29 copied paragraphs is sufficient **if the row expressly incorporates those numbered items by reference** and future changes use append-only rows. A bare hash and short-name list is insufficient: item 16 is still a placeholder ([draft](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions_draft.md:33)), while [§11-8](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_preregistration.md:212) requires the actual output schemas, isolated CLI paths, and commit/push evidence. Include the exact prepare, run, P1, record-sidecar, and evaluation file sets; CLI entry points; evaluator commit `H`; remote/ref and verified push evidence. If the push occurs after the convention row is committed, put its observed evidence in a **second append-only row before prepare**. Record actual data-pin file hashes later, after prepare and before verify/runs.
+> 
+> **Other draft rule check.** Item 29 makes a finite value above 10⁶ bps a *refusal*, potentially replacing a registered verdict ([draft](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_02_conventions_draft.md:32), [evaluator](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t2.py:188)). Calling it a sanity limit does not establish that every valid output is below it. Provide a bound from the registered model or treat the limit as a rule correction. I found no comparable conflict in the fee basis, P2 queue, P3 fill mirror, or 23:59 conventions.
+> 
+> **VERDICT: FIX-FIRST.** Resolve the kline/mark rule mismatch and the numeric refusal rule, then complete 2i and the required push checkpoint before the IS stage.
+> 
+> Codex session ID: 01a0eb55-0d2b-7620-818c-15cb6fbcb528
+> Resume in Codex: codex resume 01a0eb55-0d2b-7620-818c-15cb6fbcb528
