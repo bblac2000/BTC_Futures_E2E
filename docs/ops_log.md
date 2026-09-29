@@ -6300,3 +6300,8 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > - Time: trial #1 P4 ≈ 300 s/run → ~5–6 h at 3 jobs; P1 = hours (long holds, canonical engine); A ≈ 3 min. Stage-by-stage, hands-off.
 >
 > **4. Log this pass verbatim** (full text, not 요지), commit, then write the report and stop. Do not run `prepare` or anything under `var/backtest/t2/` — the push is theirs.
+
+## 2026-09-29 — 판정기 푸시(H = 63c1760) · 레지스트리 #38
+- 사용자 승인 → `git push origin main`(40e8c39..63c1760) · origin/main 포함 확인 · 비밀 스캔 0건.
+- 사용자: P1 폐기 위험은 사전등록대로 수용 — 실패 > 10이면 판정은 폐기, 배치 규칙 개선은 새 트라이얼의 P1 규칙으로(이 트라이얼 정정 아님).
+- 다음: prepare(H로 선행 검사).
