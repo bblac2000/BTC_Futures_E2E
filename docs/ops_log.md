@@ -8269,3 +8269,56 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef0d-3647-7cb0-a17d-6b4cc79ff97a
 > Resume in Codex: codex resume 01a0ef0d-3647-7cb0-a17d-6b4cc79ff97a
+
+## 2026-09-30 — 트라이얼 #3 (e) P1 **after-pass**(advisor + Codex task-mun81owl-d8flpb **FIX-FIRST**) → 테스트 보강
+- 공유 변경: placebo_exec.run_time_exit 사유 덮어쓰기 수정(1d5f941) → 트라이얼 #2 전체 회귀(1d5f941): identical · 불일치 0 / 1,043파일 · report 9223047c… · 재실행 트리 = (b) 기준선 바이트 동일 · 30:41 · 3.67 GB · 증거 docs/trials/trial_03_step_e_regression/ · 트라이얼 #1 P1 골든 통과.
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 청산 쪽 펀딩 비대칭(기본은 종료 봉 분 지불 · P1은 [t, t+h)) | ✅ | 공시(둘 다 앵커) · 규약 47 문구 · 테스트(08:00 청산 순간 정각·+5 ms 미지불 · 07:00 돌연변이) · (f) 보고 개수(항목 44) |
+| advisor | 2 47 문구 범위 | ✅ | 진입 쪽만 기본과 같다고 정정 |
+| advisor | 3 보고 틀 | ✅ | 보고에 |
+| advisor | 4 순서 | ✅ | — |
+| Codex | 1 중복 분 적격 도우미 테스트 누락 | ✅ | build_segments에 중복 분 → 그 날 제외 테스트 추가(실행 경계 거부 테스트 유지) |
+| Codex | 2 '한 번' 증명 안 됨 | ✅ | Engine.on_funding 호출을 세어 보유 중 경계 하나만 정확히 한 번 |
+- 검사: 전체 통과(아래 커밋) · ruff · pyright 0.
+
+### 요약 원문
+> # Trial #3 (e) AFTER-PASS — built vs plan r2
+> Commits: 1d5f941 (backtest/p1_t3.py; placebo_exec fix; tests/test_p1_t3.py 25; tests/fixtures/{t3_p1_fixture.py, golden_p1_trial03.json};
+> static-check updates), then regression evidence + conventions 45–50. Shared diff since dc23273: backtest/placebo_exec.py only (R2).
+> R1 entry-minute funding: null_point passes run_time_exit only records whose bucket ≠ entry_ms (tests: exact t and t+5 ms not charged;
+> crossed boundary charged). R2: run_time_exit uses `outcome` for the returned reason, passes `reason` to close_now, asserts engine reason
+> (TIME_EXIT/caller reason or LIQUIDATION); test spies close_now. Full trial #2 regression on 1d5f941: identical, 0 mismatches / 1,043 files,
+> report 9223047c…, tree identical to the (b) baseline; trial #1 P1 golden passes. R3: run_range(arm, trades_t3, bars, fundings, lo, hi) has no
+> rules/cfg args (load_rules + CFGS[arm] + WINDOW_START…IS_END); run_range_with_fixture_rules tests/-only (runtime guard + repo-wide AST scan).
+> R4 validate_inputs first; complete_days reused. R5 window edges tested. R6 merge invariants tested (missing draw, null mismatch, n, exits,
+> arm mismatch, zero source, >10 failures). R8 brute-force eligibility equality (4 h × 3 cases), midnight crossing with/without the 00:00
+> record, tuple-seed identity, 6 bps mutation (≈−22 vs ≈−14), golden for a two-trade source (both arms), determinism in two subprocesses.
+> Suite 1364 passed; ruff; pyright 0.
+> Questions: objections; conventions 45–50 text (docs/trials/trial_03_conventions.md) accurate?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (e) after-pass. The build matches plan r2; the regression proof is the strongest available (full 205 + P1 + merge, tree byte-identical to the (b) baseline, trial #1 golden intact); the Codex blocker is closed on the caller side with no shared change. One blind spot your checks and Codex's questions didn't cover, then records.
+> 
+> **1. MAJOR — item 47 fixes the entry side of the funding asymmetry but misses the exit side, and the two don't cancel.** Base time exit: bar t_f+240 settles a funding whose bucket is that minute *before* the exit at its open (your (c) test `test_time_exit_in_boundary_minute_pays_first` proves it). P1: `run_time_exit` sets `exit_ms = entry + h·60,000 − 1`, so a record at bucket `t + h·60,000` — the same instant as the base exit — is **not** charged; r3 §4 (b)'s occupancy `[t, t+h)` and eligibility `[t, t+h−1]` also exclude that minute. Concretely: when a hold's exit lands on a 00/08/16 minute (~1/480 of trades), base pays and P1 doesn't. SL/liquidation exits are consistent (h = k+1, both charge bucket t+k). Both sides are anchored (§1 line 31 vs §4 (b)), so this is disclosure, not a change:
+> - Add to item 47: "exit side: base pays a funding at the exit-bar minute; P1's occupancy ends at `t+h·60,000 − 1`, so a record at bucket `t+h` is not charged; time_exit / open-gap liquidation only."
+> - Test: a placed slot with h = 240 whose exit instant is 08:00, record at 08:00 exact and at 08:00 + 5 ms → `mean_net_bps` equals the no-funding case (mutation: move the record to 07:00 → differs).
+> - (f) report-only count: base trades whose `exit_ms` bucket is a boundary (both arms), so the size of the asymmetry is visible.
+> 
+> **2. MINOR — item 47's phrase "기본 재생과 같은 결과" is now too broad.** After item 1, say "entry side identical to base; exit side differs as disclosed."
+> 
+> **3. Report shape.** Lead with the Codex blocker (entry-minute funding would have been charged for offset records; fixed at the caller, r3 §1 quoted). Then the shared fix: what it was (label only, P&L and returned reason unaffected), why fixed anyway, regression identical with the numbers (1,043 / 0 / `9223047c…` / tree = (b) baseline / trial #1 golden). Then item 1 as the one thing they don't know yet. Then the test-rule change: the slippage static check now admits `TF_V1.slippage` in `backtest/*_t3.py`. Then the conventions diff — use `git diff 4f1f88b HEAD -- docs/trials/trial_03_conventions.md` so it covers everything since the draft they reviewed (items 1/15/34/38 edits and 45–50), and say the row is still not appended.
+> 
+> **4. Sequence:** Codex lands → log advisor + Codex verbatim with positions → item 1 (test + item 47 text) + any Codex fixes → full suite → commit → push → `memory/trial03-status.md` to "(e) done, waiting before (f); conventions 45–50 pending user review" → report → stop before (f). If Codex asks about `next_funding_ms` in the restored position after the filter, the answer is that replay-mode settlement is driven by explicit `on_funding` calls, not that field — verify by grep before asserting it.
+
+### Codex 원문(verbatim · task-mun81owl-d8flpb)
+> 1. **MINOR — the duplicate-minute eligibility case from plan r2 R8 is missing.** [test_p1_t3.py](/home/cms/project/BTC_Futures_E2E/tests/test_p1_t3.py:86) removes a minute to test helper exclusion, then tests duplicate rejection only at the run boundary. Add a separate `build_segments` test with a duplicated minute and assert that the affected day is excluded; keep the run-boundary rejection test.
+> 
+> 2. **MINOR — the crossed-boundary funding test does not prove “charged once.”** [test_p1_t3.py](/home/cms/project/BTC_Futures_E2E/tests/test_p1_t3.py:115) asserts only that the return falls. Assert one `on_funding` call for the crossed record, or compare the return with the exact single-charge result.
+> 
+> I found no implementation objection. Conventions [45–50](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:64) accurately describe the code and anchored P1 rule. The shared diff contains only the planned `placebo_exec` reason fix, and the committed regression hash list matches its baseline. In this read-only workspace, 24 P1 tests passed; the remaining test could not set up because `tmp_path` requires a writable temporary directory.
+> 
+> **VERDICT: FIX-FIRST** — close the two explicit plan r2 test gaps before merging.
+> 
+> Codex session ID: 01a0ef30-5b4d-72e1-bf17-ff083b861051
+> Resume in Codex: codex resume 01a0ef30-5b4d-72e1-bf17-ff083b861051

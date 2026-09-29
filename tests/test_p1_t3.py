@@ -207,3 +207,37 @@ def test_fixture_path_refuses_callers_outside_tests(tmp_path):
     sc = S.Scenario()
     with pytest.raises(P.P1Error):
         mod.go("L", [], sc.bars(), sc.fundings(), 0, 0, rules=S.RULES, window=S.WINDOW)
+
+
+def test_exit_side_boundary_not_charged_in_p1_disclosed_asymmetry():
+    """규약 47(공시): 기본 time_exit는 종료 봉 분의 펀딩을 먼저 낸다((c) 테스트) · P1 점유는 [t, t+h)라 버킷 t+h의 기록은 내지 않는다(§4 (b))."""
+    b = W0 + 8 * 3_600_000
+    t = b - 240 * M                                                      # 04:00 체결 → 청산 순간 = 08:00
+    base = _one(t, [])
+    assert _one(t, [Funding(b, "0.01", "60000")]) == base
+    assert _one(t, [Funding(b + 5, "0.01", "60000")]) == base
+    assert _one(t, [Funding(b - 60 * M, "0.01", "60000")]) != base      # 보유 중 07:00이면 지불(돌연변이 검사)
+
+
+def test_duplicate_minute_makes_the_day_ineligible_at_the_helper():
+    sc = S.Scenario()
+    bars, fund = sc.bars(), sc.fundings()
+    i = next(k for k, b in enumerate(bars) if b.open_ms == W0 + 5 * M)
+    dup = bars[: i + 1] + [bars[i]] + bars[i + 1:]                         # 날 1에 중복 분(1,441행)
+    segs = P.build_segments(dup, fund, S.WINDOW)
+    assert segs and all(a >= W0 + DAY for a, _ in segs)                  # 날 1 전체가 빠진다
+
+
+def test_crossed_boundary_is_settled_exactly_once(monkeypatch):
+    from paper.engine import Engine
+    calls: list[int] = []
+    orig = Engine.on_funding
+
+    def spy(self, *, ts_ms, rate, mark):
+        calls.append(ts_ms)
+        return orig(self, ts_ms=ts_ms, rate=rate, mark=mark)
+
+    monkeypatch.setattr(Engine, "on_funding", spy)
+    b = W0 + 8 * 3_600_000
+    _one(b - 60 * M, [Funding(b + 5, "0.01", "60000"), Funding(b + DAY, "0.01", "60000")])
+    assert calls == [b + 5]                                               # 보유 중 경계 하나 · 한 번만
