@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import io
+import json
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -176,11 +177,36 @@ def test_oi_time_defects_stop(tmp_path, row, kind):
     assert [x["kind"] for x in stops] == [kind]
 
 
+DAY0 = END + 1 - 86_400_000                         # 2025-12-31 00:00Z — 하루 288슬롯(0.5% 상한 = 1.44슬롯)
+
+
 @pytest.mark.parametrize("v", ["", "NaN", "abc"])
 def test_oi_unusable_value_is_absent_not_a_stop(tmp_path, v):
     d = _oi_dir(tmp_path, {"2025-12-31": oi_zip("2025-12-31", [oi_row(START, v), oi_row(START + 5 * MIN)])})
-    s, audit, stops = P.analyze_oi(d, START, END)
+    s, audit, stops = P.analyze_oi(d, DAY0, END)
     assert s == [[START + 5 * MIN, "80000.5"]] and not stops and audit["value_not_ok"] == 1
+    assert audit["unusable_slots"] == [START] and audit["unusable_per_day"] == {"2025-12-31": 1}
+    assert audit["unusable_total"] == 1 and audit["unusable_is_slots"] == 1 and audit["is_grid_slots"] == 288
+
+
+def test_oi_unusable_slot_with_an_ok_duplicate_is_usable(tmp_path):
+    d = _oi_dir(tmp_path, {"2025-12-31": oi_zip("2025-12-31", [oi_row(START, ""), oi_row(START)])})
+    s, audit, stops = P.analyze_oi(d, DAY0, END)
+    assert s == [[START, "80000.5"]] and not stops and audit["unusable_slots"] == []
+
+
+def test_oi_unusable_over_half_percent_of_is_grid_stops(tmp_path):
+    d = _oi_dir(tmp_path, {"2025-12-31": oi_zip("2025-12-31", [oi_row(START, ""), oi_row(START + 5 * MIN, "")])})
+    _, audit, stops = P.analyze_oi(d, DAY0, END)                # 2/288 = 0.69% > 0.5%
+    assert [x["kind"] for x in stops] == ["oi_unusable_over_cap"] and audit["unusable_is_slots"] == 2
+    assert P.OI_UNUSABLE_CAP == 0.005
+
+
+def test_oi_unusable_in_warmup_is_logged_not_capped(tmp_path):
+    w = A.IS_START_MS - 86_400_000                               # 2023-12-31(워밍업)
+    d = _oi_dir(tmp_path, {"2023-12-31": oi_zip("2023-12-31", [oi_row(w + i * 5 * MIN, "") for i in range(5)])})
+    _, audit, stops = P.analyze_oi(d, w, A.IS_START_MS - 1)
+    assert not stops and audit["unusable_total"] == 5 and audit["unusable_is_slots"] == 0 and audit["is_grid_slots"] == 0
 
 
 def test_oi_checksum_mismatch_and_missing_columns_stop(tmp_path):
@@ -209,9 +235,11 @@ def test_build_verify_and_load_roundtrip(tmp_path):
                       "oi_5m.json", "code_commit", "window"}
     assert "oi/BTCUSDT-metrics-2025-12-31.zip" in m["raw"]
     pins = {"raw": m["raw"], "prepared": {k: m[k] for k in P.PREPARED}}
-    bars, fundings, oi = P.load_prepared_pinned(out, pins, (START, END), root=tmp_path)
+    bars, fundings, oi, unusable = P.load_prepared_pinned(out, pins, (START, END), root=tmp_path)
+    assert unusable == []
     assert len(bars) == 10 and fundings == []
     assert oi == [[START, "80000.5"], [START + 5 * MIN, "80000.5"]]
+    assert json.loads((out / "oi_unusable.json").read_text()) == []
     assert P.verify_rebuild(out, (START, END)) == m
 
 

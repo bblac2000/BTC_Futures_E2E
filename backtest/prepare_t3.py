@@ -12,7 +12,9 @@
 - OI(§5 · binance.vision `futures/um/daily/metrics/BTCUSDT` 5분 행 `sum_open_interest`): zip + CHECKSUM을 원시로 보관·해시 ·
   CHECKSUM 불일치 → 중단 · 필요한 날 파일 없음 → 중단 · create_time 해석 불가 → 중단 · 5분 경계 아님 → 중단 ·
   같은 create_time(파일과 무관)의 `sum_open_interest` 문자열이 다르면 중단, 같으면 합침 ·
-  값이 ok(유한 Decimal)가 아닌 행은 **없는 행**으로 센다(중단 아님 · 구현 선택 행에 고정 · 계획 r5 사용자 보고).
+  값이 ok(유한 Decimal)가 아닌 행은 **없는 행**(관측 결손)으로 센다 — 중단 아님(사용자 결정 2026-09-29 · 구현 선택 행) ·
+  그런 슬롯(유효 값이 하나도 없는 create_time)은 날별·전체 개수와 목록(`oi_unusable.json`)으로 남긴다(결과 보고의 oi_missing 사유 구분) ·
+  **IS 창의 5분 격자 중 사용 불가 슬롯 > 0.5%면 데이터 품질 중단**(`oi_unusable_over_cap` · 워밍업 슬롯은 기록만).
 - OOS 진입점(`oos_range`)은 정의만 한다 — 레지스트리에 "트라이얼 #3 OOS 개봉" + 사용자 결정 행이 있어야 범위를 돌려준다.
 """
 from __future__ import annotations
@@ -43,7 +45,8 @@ MIN = BD.MINUTE_MS
 OI_STEP = 300_000
 OI_URL = "https://data.binance.vision/data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-{day}.zip"
 PRICE_RAW = T2.RAW_FILES
-PREPARED = ("bars_1m.parquet", "funding.json", "source_audit.json", "kline_close_daily.json", "oi_5m.json")
+PREPARED = ("bars_1m.parquet", "funding.json", "source_audit.json", "kline_close_daily.json", "oi_5m.json", "oi_unusable.json")
+OI_UNUSABLE_CAP = 0.005                                   # 사용 불가 OI 슬롯 / IS 창 5분 격자 > 0.5% → 중단(사용자 결정 2026-09-29)
 SourceStop = T2.SourceStop
 OIFetch = Callable[[str], tuple[bytes, str]]              # 날짜(YYYY-MM-DD) → (zip 바이트, CHECKSUM 텍스트)
 
@@ -146,6 +149,7 @@ def analyze_oi(oi_dir: Path, start_ms: int, end_ms: int) -> tuple[list[list[Any]
     """OI 5분 계열 [[create_time_ms, sum_open_interest 문자열], …](오름차순) · 감사 · 중단 발견."""
     stops: list[dict[str, Any]] = []
     by: dict[int, set[str]] = defaultdict(set)
+    bad_slots: set[int] = set()
     rows_in = dups = outside = not_ok = 0
     seen: dict[int, int] = defaultdict(int)
     for day in oi_days(start_ms, end_ms):
@@ -189,6 +193,7 @@ def analyze_oi(oi_dir: Path, start_ms: int, end_ms: int) -> tuple[list[list[Any]
             v = r[iv] if iv < len(r) else ""
             if T2.classify(v) != "ok":
                 not_ok += 1                                # 없는 행으로 센다(중단 아님)
+                bad_slots.add(t)
                 continue
             seen[t] += 1
             by[t].add(v)
@@ -198,8 +203,19 @@ def analyze_oi(oi_dir: Path, start_ms: int, end_ms: int) -> tuple[list[list[Any]
         elif seen[t] > 1:
             dups += seen[t] - 1
     series = [[t, next(iter(by[t]))] for t in sorted(by) if len(by[t]) == 1]
+    unusable = sorted(bad_slots - by.keys())               # 유효 값이 있는 중복이 있으면 사용 가능
+    per_day: dict[str, int] = defaultdict(int)
+    for t in unusable:
+        per_day[_day(t)] += 1
+    lo, hi = max(start_ms, A.IS_START_MS), min(end_ms, A.IS_END_MS)
+    is_grid = 0 if hi < lo else (hi - (lo + (-lo) % OI_STEP)) // OI_STEP + 1
+    is_bad = sum(A.IS_START_MS <= t <= A.IS_END_MS for t in unusable)
+    if is_grid and is_bad > OI_UNUSABLE_CAP * is_grid:
+        stops.append({"kind": "oi_unusable_over_cap", "unusable": is_bad, "grid": is_grid, "stop": True})
     audit = {"start_ms": start_ms, "end_ms": end_ms, "days": len(oi_days(start_ms, end_ms)), "rows_in_range": rows_in,
              "rows_outside_range": outside, "value_not_ok": not_ok, "exact_duplicates": dups, "series_rows": len(series),
+             "unusable_slots": unusable, "unusable_per_day": dict(sorted(per_day.items())), "unusable_total": len(unusable),
+             "unusable_is_slots": is_bad, "is_grid_slots": is_grid, "unusable_cap": OI_UNUSABLE_CAP,
              "stops": stops}
     return series, audit, stops
 
@@ -248,6 +264,7 @@ def build(out: Path, expect_range: tuple[int, int]) -> dict[str, Any]:
     (out / "funding.json").write_text(json.dumps([f.__dict__ for f in fundings], sort_keys=True))
     (out / "kline_close_daily.json").write_text(json.dumps(kline_daily, sort_keys=True))
     (out / "oi_5m.json").write_text(json.dumps(oi))
+    (out / "oi_unusable.json").write_text(json.dumps(audit["oi"]["unusable_slots"]))
     manifest = {"raw": {n: T2._sha(raw / n) for n in raw_files(raw)}, **{n: T2._sha(out / n) for n in PREPARED},
                 "code_commit": T2._commit(), "window": "IS+warmup(2023-10-02) · window B"}
     (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=1))
@@ -286,7 +303,7 @@ def check_out_dir(out: Path, root: Path = ROOT) -> None:
 
 
 def load_prepared_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], *, root: Path = ROOT
-                         ) -> tuple[list[BD.Bar1m], list[BD.Funding], list[list[Any]]]:
+                         ) -> tuple[list[BD.Bar1m], list[BD.Funding], list[list[Any]], list[int]]:
     """실행 경로(해시만 · 다시 빌드하지 않음): 디렉터리 · 매니페스트 · 고정값(data_pins) · 범위 · 타임스탬프를 모두 단언."""
     check_out_dir(out, root)
     start, end = expect_range
@@ -300,10 +317,12 @@ def load_prepared_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[in
     bars = T2.read_bars(out / "bars_1m.parquet")
     fundings = [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
     oi = json.loads((out / "oi_5m.json").read_text())
+    unusable = json.loads((out / "oi_unusable.json").read_text())
+    assert_in_range(unusable, start, end)
     assert_in_range([b.open_ms for b in bars], start, end)
     assert_in_range([f.funding_ms for f in fundings], start, end)
     assert_in_range([t for t, _ in oi], start, end)
-    return bars, fundings, oi
+    return bars, fundings, oi, unusable
 
 
 # ── OOS 진입점(정의만 · 사용자 결정 전 거부) ─────────────────────────────────
