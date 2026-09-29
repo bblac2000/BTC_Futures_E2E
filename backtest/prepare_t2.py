@@ -28,7 +28,7 @@ import hashlib
 import json
 import subprocess
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -101,6 +101,12 @@ def read_archive_rows(archive: Path, start_ms: int, end_ms: int) -> list[dict[st
 
 
 def usable_archive(rows: list[dict[str, Any]]) -> tuple[dict[int, dict[str, str]], list[dict[str, Any]]]:
+    """(K1') 반환 첫째 = mark·kline이 **둘 다** ok인 분(보충 범위 계산용 · 하위 호환). 분리된 계열은 `archive_series`."""
+    m, k, findings = archive_series(rows)
+    return {t: m[t] for t in m.keys() & k.keys()}, findings
+
+
+def archive_series(rows: list[dict[str, Any]]) -> tuple[dict[int, dict[str, str]], dict[int, dict[str, str]], list[dict[str, Any]]]:
     """정렬 분 → 완전한 아카이브 행. 반환 두 번째 = 발견 목록(보고/중단)."""
     by: dict[int, list[dict[str, str]]] = defaultdict(list)
     findings: list[dict[str, Any]] = []
@@ -113,7 +119,8 @@ def usable_archive(rows: list[dict[str, Any]]) -> tuple[dict[int, dict[str, str]
             findings.append({"kind": "archive_misaligned_ts", "ts_ms": t, "stop": False})
             continue
         by[t].append(x["row"])
-    usable: dict[int, dict[str, str]] = {}
+    arch_mark: dict[int, dict[str, str]] = {}
+    arch_kline: dict[int, dict[str, str]] = {}
     for t, rs in by.items():
         uniq = {json.dumps(r, sort_keys=True) for r in rs}
         if len(uniq) > 1:
@@ -124,13 +131,15 @@ def usable_archive(rows: list[dict[str, Any]]) -> tuple[dict[int, dict[str, str]
         r = rs[0]
         mark_ok = all(classify(r.get(k)) == "ok" for k in ARCH_MARK)
         kline_ok = all(classify(r.get(k)) == "ok" for k in ARCH_KLINE) and _int_ok(r.get("trades", ""))
-        if mark_ok and kline_ok:
-            usable[t] = r
-        elif mark_ok:
-            findings.append({"kind": "archive_mark_without_kline", "ts_ms": t, "stop": False})
+        if mark_ok:
+            arch_mark[t] = r
         else:
             findings.append({"kind": "archive_mark_not_ok", "ts_ms": t, "stop": False})
-    return usable, findings
+        if kline_ok:
+            arch_kline[t] = r
+        else:
+            findings.append({"kind": "archive_kline_not_ok", "ts_ms": t, "stop": False})
+    return arch_mark, arch_kline, findings
 
 
 def fill_ranges(usable: Iterable[int], start_ms: int, end_ms: int) -> list[list[int]]:
@@ -247,37 +256,49 @@ def _funding(raw: Path, findings: list[dict[str, Any]]) -> list[BD.Funding]:
     return events
 
 
-def analyze(raw: Path, expect_range: tuple[int, int] | None = None) -> tuple[list[BD.Bar1m], list[BD.Funding], dict[str, Any]]:
+def analyze(raw: Path, expect_range: tuple[int, int] | None = None
+            ) -> tuple[list[BD.Bar1m], list[BD.Funding], dict[str, Any], list[dict[str, Any]]]:
     """원시 파일만 읽는다. 중단 조건이 있으면 감사와 함께 `SourceStop`."""
     meta = json.loads((raw / "fill_ranges.json").read_text())
     start, end = meta["start_ms"], meta["end_ms"]
     if expect_range is not None and (start, end) != expect_range:
         raise ValueError(f"원시 캡처 범위 {(start, end)} ≠ 기대 {expect_range}(IS + 워밍업 21일만)")
-    usable, findings = usable_archive(_jsonl(raw / "archive_rows.jsonl"))
-    fr = fill_ranges(usable, start, end)
+    arch_mark, arch_kline, findings = archive_series(_jsonl(raw / "archive_rows.jsonl"))
+    fr = fill_ranges(arch_mark.keys() & arch_kline.keys(), start, end)
     if fr != meta["ranges"]:
         findings.append({"kind": "fill_ranges_mismatch", "stop": True})
     fill = {t for a, b in fr for t in range(a, b + 1, MIN)}
     kl = _rest_rows(raw, "rest_klines.jsonl", fill, REST_KLINE_IDX, "kline", findings)
     mk = _rest_rows(raw, "rest_mark.jsonl", fill, REST_MARK_IDX, "mark", findings)
+    #  K1': mark 계열과 kline 계열은 서로 독립(사전등록 §1 완결성 = mark · §3-1 매수보유 = kline) — 한 계산에서 섞이지 않는다
     bars: list[BD.Bar1m] = []
-    missing = 0
+    kline_daily: dict[int, dict[str, Any]] = {}
+    missing = kline_counts = 0
+    kl_src: Counter[str] = Counter()
     for t in range(start - start % MIN + (MIN if start % MIN else 0), end + 1, MIN):
-        if t in usable:
-            r = usable[t]
-            bars.append(BD.Bar1m(t, r["Open"], r["High"], r["Low"], r["Close"], r["Volume"], r["quote_volume"], int(r["trades"]),
-                                 r["taker_buy_base"], r["taker_buy_quote"], r["mark_open"], r["mark_high"], r["mark_low"],
-                                 r["mark_close"], "archive"))
-        elif t in mk and t in kl:
-            k, m = kl[t], mk[t]
-            bars.append(BD.Bar1m(t, str(k[1]), str(k[2]), str(k[3]), str(k[4]), str(k[5]), str(k[7]), int(k[8]), str(k[9]),
-                                 str(k[10]), str(m[1]), str(m[2]), str(m[3]), str(m[4]), "rest"))
+        kv: tuple[str, ...] | None = None
+        if t in arch_kline:
+            r = arch_kline[t]
+            kv, ksrc = (r["Open"], r["High"], r["Low"], r["Close"], r["Volume"], r["quote_volume"], r["trades"],
+                        r["taker_buy_base"], r["taker_buy_quote"]), "archive"
+        elif t in kl:
+            k = kl[t]
+            kv, ksrc = (str(k[1]), str(k[2]), str(k[3]), str(k[4]), str(k[5]), str(k[7]), str(k[8]), str(k[9]), str(k[10])), "rest"
+        if kv is not None:
+            kline_counts += 1
+            kl_src[ksrc] += 1
+            d = t // DAY
+            if d not in kline_daily or t > kline_daily[d]["minute_ms"]:
+                kline_daily[d] = {"day": d, "minute_ms": t, "close": kv[3], "source": ksrc}
+        if t in arch_mark:
+            m4, msrc = tuple(arch_mark[t][k] for k in ARCH_MARK), "archive"
         elif t in mk:
-            findings.append({"kind": "rest_mark_only", "ts_ms": t, "stop": True})
+            m4, msrc = tuple(str(x) for x in mk[t][1:5]), "rest"
         else:
             missing += 1
-            if t in kl:
-                findings.append({"kind": "rest_kline_only", "ts_ms": t, "stop": False})
+            continue
+        o, h, lo, c, vol, qv, trades, tbb, tbq = kv if kv is not None else ("", "", "", "", "", "", "-1", "", "")
+        bars.append(BD.Bar1m(t, o, h, lo, c, vol, qv, int(trades), tbb, tbq, m4[0], m4[1], m4[2], m4[3], msrc))
     fundings = _funding(raw, findings)
     kinds: dict[str, int] = defaultdict(int)
     for f in findings:
@@ -285,11 +306,13 @@ def analyze(raw: Path, expect_range: tuple[int, int] | None = None) -> tuple[lis
     stops = [f for f in findings if f["stop"]]
     audit = {"start_ms": start, "end_ms": end, "minutes_missing": missing, "bars": len(bars),
              "bars_archive": sum(b.source == "archive" for b in bars), "bars_rest": sum(b.source == "rest" for b in bars),
+             "bars_kline_missing": sum(b.trades == -1 for b in bars), "kline_minutes": kline_counts,
+             "kline_archive": kl_src["archive"], "kline_rest": kl_src["rest"], "kline_days": len(kline_daily),
              "fill_minutes": len(fill), "funding_events": len(fundings), "finding_counts": dict(sorted(kinds.items())),
              "stops": stops, "findings_nonstop": [f for f in findings if not f["stop"]][:1000]}
     if stops:
         raise _StopWithAudit(stops, audit)
-    return bars, fundings, audit
+    return bars, fundings, audit, [kline_daily[d] for d in sorted(kline_daily)]
 
 
 class _StopWithAudit(SourceStop):
@@ -323,15 +346,15 @@ def build(out: Path, expect_range: tuple[int, int] | None = None) -> dict[str, A
     """`out/raw`의 원시 파일 → 감사·산출물·매니페스트. 중단이면 감사만 쓰고 SourceStop을 다시 던진다."""
     raw = out / "raw"
     try:
-        bars, fundings, audit = analyze(raw, expect_range)
+        bars, fundings, audit, kline_daily = analyze(raw, expect_range)
     except _StopWithAudit as e:
         (out / "source_audit.json").write_text(json.dumps(e.audit, sort_keys=True, indent=1))
         raise
     (out / "source_audit.json").write_text(json.dumps(audit, sort_keys=True, indent=1))
     write_bars(out / "bars_1m.parquet", bars)
     (out / "funding.json").write_text(json.dumps([f.__dict__ for f in fundings], sort_keys=True))
-    manifest = {"raw": {n: _sha(raw / n) for n in RAW_FILES}, "source_audit.json": _sha(out / "source_audit.json"),
-                "bars_1m.parquet": _sha(out / "bars_1m.parquet"), "funding.json": _sha(out / "funding.json"),
+    (out / "kline_close_daily.json").write_text(json.dumps(kline_daily, sort_keys=True))
+    manifest = {"raw": {n: _sha(raw / n) for n in RAW_FILES}, **{n: _sha(out / n) for n in PREPARED},
                 "code_commit": _commit(), "window": "IS+warmup21"}
     (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=1))
     return manifest
@@ -340,14 +363,14 @@ def build(out: Path, expect_range: tuple[int, int] | None = None) -> dict[str, A
 def verify_manifest(out: Path) -> dict[str, Any]:
     """소비자 쪽 검사 — 산출물·원시 해시가 매니페스트와 다르면 ValueError."""
     m = json.loads((out / "manifest.json").read_text())
-    bad = [n for n in ("source_audit.json", "bars_1m.parquet", "funding.json") if _sha(out / n) != m[n]]
+    bad = [n for n in PREPARED if _sha(out / n) != m[n]]
     bad += [f"raw/{n}" for n in RAW_FILES if _sha(out / "raw" / n) != m["raw"][n]]
     if bad:
         raise ValueError(f"매니페스트 불일치: {bad}")
     return m
 
 
-PREPARED = ("bars_1m.parquet", "funding.json", "source_audit.json")
+PREPARED = ("bars_1m.parquet", "funding.json", "source_audit.json", "kline_close_daily.json")
 
 
 def load_prepared_pinned(out: Path, pins: dict[str, Any],
@@ -363,6 +386,12 @@ def load_prepared_pinned(out: Path, pins: dict[str, Any],
     return read_bars(out / "bars_1m.parquet"), [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
 
 
+def load_kline_daily_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int]) -> list[dict[str, Any]]:
+    """K2: 매수보유 입력 = kline 일 종가(고정된 준비 산출물 · 같은 해시·범위 검사)."""
+    load_prepared_pinned(out, pins, expect_range)
+    return json.loads((out / "kline_close_daily.json").read_text())
+
+
 def verify_rebuild(out: Path, expect_range: tuple[int, int] | None = None) -> dict[str, Any]:
     """원시 파일에서 **다시 빌드**해 산출물 해시가 매니페스트와 같은지 확인한다(덮어쓰지 않는다 · 임시 디렉터리).
     매니페스트 자체의 원시 해시는 캡처 직후 레지스트리 행에 고정된 값과 호출자가 대조한다(`pinned_raw`)."""
@@ -373,7 +402,7 @@ def verify_rebuild(out: Path, expect_range: tuple[int, int] | None = None) -> di
         t = Path(td)
         shutil.copytree(out / "raw", t / "raw")
         m2 = build(t, expect_range)
-    bad = [n for n in ("source_audit.json", "bars_1m.parquet", "funding.json") if m2[n] != m[n]]
+    bad = [n for n in PREPARED if m2[n] != m[n]]
     if bad:
         raise ValueError(f"원시에서 다시 빌드한 산출물이 다르다: {bad}")
     return m

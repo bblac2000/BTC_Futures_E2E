@@ -171,3 +171,22 @@ def test_p1_source_reader_requires_pair_fields(tmp_path):
     (tmp_path / "u.jsonl").write_text('{"trade_id": 1, "entry_ms": 0, "exit_ms": 60000}\n')
     with pytest.raises(ValueError):
         R.source_trades(tmp_path / "u.jsonl")
+
+
+def test_no_trial02_consumer_reads_bar_kline_fields():
+    """K1': kline 필드가 비어 있는(trades = −1) 봉에서도 전략 재생·P1 추출·실행이 같은 결과(mark만 읽는다)."""
+    from dataclasses import replace
+
+    from strategies.trial02.strategy import Variant
+    from tests.test_trial02_strategy import LONG_BARS, LONG_UP, history
+    base = history() + day(D0, LONG_UP, LONG_BARS)
+    blank = [replace(b, open="", high="", low="", close="", volume="", quote_volume="", trades=-1, taker_buy_base="",
+                     taker_buy_quote="") for b in base]
+    r1 = H.run_t2(base, [], {D0}, Variant("A")).result.trades
+    r2 = H.run_t2(blank, [], {D0}, Variant("A")).result.trades
+    assert r1 == r2 and r1
+    src = [C.SourceTrade(0, D0 * DAY + 60 * MIN, D0 * DAY + 600 * MIN, D("0.01"))]
+    b1 = {b.open_ms: b for b in base}
+    b2 = {b.open_ms: b for b in blank}
+    d1, d2 = P.draw(3, src, [D0], b1, RULES), P.draw(3, src, [D0], b2, RULES)
+    assert d1 == d2 and P.null_point(d1, b1, [], RULES) == P.null_point(d2, b2, [], RULES)

@@ -6196,3 +6196,10 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb5d-9e7e-7d22-b03c-65ffc233d778
 > Resume in Codex: codex resume 01a0eb5d-9e7e-7d22-b03c-65ffc233d778
+
+## 2026-09-29 — K1'·K2·K3'·K5 구현
+- K1': `prepare_t2` mark·kline 독립 계열(mark-only 분 = kline 빈 봉 · kline-only 분 = 봉 없음 · `kline_close_daily.json` 새 준비 출력 · PREPARED/핀 4개) · 시험(mark-only · kline-only 23:59 · 아카이브 mark + REST kline · 빈 kline 봉에서 전략·P1 결과 동일).
+- K2: 판정기 매수보유 = `kline_close_daily.json`(고정 핀 · `load_kline_daily_pinned`).
+- K3': 값 기준 거부 삭제 · 통계 계산을 numpy 넘침·비유한 연산 오류로 감싸 거부.
+- K5: 규약 파일 확정 `docs/trials/trial_02_conventions.md`(초안에서 이름 변경 · 1~37 · 20·27·29 재작성 · 16 채움 · 30~37 추가).
+- 전체 시험 1,171 통과 · ruff · pyright 통과.

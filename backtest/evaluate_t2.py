@@ -39,9 +39,7 @@ from strategies.trial02 import anchor as A
 ROOT = Path(__file__).resolve().parent.parent
 DAY = A.DAY_MS
 N_STAT = Decimal(1000)
-#  수치 건전성 한도(판정 임계가 아니다 · 규약 29): 트레이드·추출 하나의 bps 절댓값 ≤ 10⁶(= 10,000%) — 실제 트레이드는 약 10⁴ 이내.
-#  이 안이면 어떤 합·분산·재표본 합도 float64를 넘지 않는다(Codex 2g r3·r4: 유한한 값들의 넘침 경로를 입력에서 한 번에 막는다).
-BPS_SANITY = 1_000_000.0
+#  K3'(규약 29): 값 기준 거부는 없다. 산술 무결성만 — 입력은 유한한 Decimal, float64 계산이 실제로 넘치면(비유한 결과) 판정 거부.
 SIDECARS = ("verify_receipt.json", "p1_merge_expect.json")
 NOT_COMPUTABLE = "p1_not_computable.json"
 P4 = [f"P4_draw{d:03d}" for d in range(A.P4_DRAWS)]
@@ -185,8 +183,6 @@ def _f(x: Any) -> float:
         raise Refusal(f"수치 해석 불가: {x!r}") from e
     if not d.is_finite():
         raise Refusal(f"유한하지 않은 값: {x!r}")
-    if abs(d) > Decimal(int(BPS_SANITY)):                      # 반올림 전 Decimal로 비교(Codex 2g r5)
-        raise Refusal(f"bps 건전성 한도 밖 값: {x!r}")
     f = float(d)
     if not math.isfinite(f):
         raise Refusal(f"float64 범위 밖 값: {x!r}")                  # 1e400 → inf(Codex 2g r2 #1)
@@ -223,15 +219,12 @@ def by_day(trades: Sequence[dict[str, Any]], field: str) -> dict[int, list[float
     return out
 
 
-def bh_series(bars: Sequence[Bar1m], first_day: int, last_day: int) -> dict[str, Any]:
-    """H5: IS 창의 kline 봉이 있는 UTC 날마다 23:59 봉 종가(없으면 그날 마지막 봉) · 봉 없는 날은 건너뛰고 다음 수익률이 잇는다."""
-    close: dict[int, tuple[int, str]] = {}
-    for b in bars:
-        d = b.open_ms // DAY
-        if first_day <= d <= last_day and (d not in close or b.open_ms > close[d][0]):
-            close[d] = (b.open_ms, b.close)
-    ds = sorted(close)
-    c = [float(Decimal(close[d][1])) for d in ds]
+def bh_series(daily: Sequence[dict[str, Any]], first_day: int, last_day: int) -> dict[str, Any]:
+    """H5·K2: kline 일 종가(`kline_close_daily.json` — 23:59 kline 종가, 없으면 그날 마지막 kline 분) · IS 창 날만 ·
+    kline 없는 날은 목록에 없고 다음 수익률이 잇는다 · mark 계열과 무관."""
+    rows = sorted((r for r in daily if first_day <= int(r["day"]) <= last_day), key=lambda r: int(r["day"]))
+    ds = [int(r["day"]) for r in rows]
+    c = [_f(r["close"]) for r in rows]
     rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))]
     return {"days": len(ds), "daily_sharpe": S2.sharpe_or_none(rets), "window_return": (c[-1] / c[0] - 1) if len(c) >= 2 else None}
 
@@ -279,7 +272,7 @@ def trade_report(trades: Sequence[dict[str, Any]]) -> dict[str, Any]:
             "per_year": {y: {"n": len(v), "mean_net_bps": float(np.mean(v))} for y, v in sorted(years.items())}}
 
 
-def compute(st: T.Stages, validity: DY.Validity, bars: Sequence[Bar1m], first_day: int, last_day: int
+def compute(st: T.Stages, validity: DY.Validity, kline_daily: Sequence[dict[str, Any]], first_day: int, last_day: int
             ) -> tuple[V.ISInputs, dict[str, Any]]:
     va, vb = sorted(validity.v_a), sorted(validity.v_b)
     ta, tb = trades_of(st, "A"), trades_of(st, "B")
@@ -307,7 +300,7 @@ def compute(st: T.Stages, validity: DY.Validity, bars: Sequence[Bar1m], first_da
     ab = S2.daily_diff_bootstrap({d: a_day.get(d, 0.0) for d in vb}, {d: b_day.get(d, 0.0) for d in vb}, vb,
                                  _rng(A.BOOTSTRAP_STREAMS["ab_daily"]), resamples=A.BOOTSTRAP_RESAMPLES, level=A.LEVEL)
     a_sharpe = S2.sharpe_or_none([a_day.get(d, 0.0) / float(N_STAT) for d in va])
-    bh = bh_series(bars, first_day, last_day)
+    bh = bh_series(kline_daily, first_day, last_day)
     label = ("비교 불가" if a_sharpe is None or bh["daily_sharpe"] is None
              else ("ACCEPT — 수동(매수보유)을 이기지는 못함" if a_sharpe < bh["daily_sharpe"] else "ACCEPT"))
     contraction = {int(x["day"]) for x in _jsonl(st.runs / "B" / "days.jsonl") if x.get("status") == "trading"}
@@ -360,6 +353,7 @@ def evaluate(base: Path = T.BASE_DIR, repo: Path = ROOT, **kw: Any) -> tuple[str
 
 def _evaluate(base: Path, repo: Path, *, fetch: bool = True,
               load_prepared: Callable[..., tuple[list[Bar1m], list[Funding]]] = PT.load_prepared_pinned,
+              load_kline: Callable[..., list[dict[str, Any]]] = PT.load_kline_daily_pinned,
               rebuild: Callable[..., Any] = PT.verify_rebuild, window: tuple[int, int] | None = None,
               days: tuple[int, int] | None = None) -> tuple[str, dict[str, Any], dict[str, Any]]:
     decimal.setcontext(decimal.Context())
@@ -385,11 +379,14 @@ def _evaluate(base: Path, repo: Path, *, fetch: bool = True,
         bars, fundings = load_prepared(st.prep, pins, rng)
         validity = DY.validity(bars, fundings, first, last)
         check_meta(st, recs, pins, prov, validity)
-        x, report = compute(st, validity, bars, first, last)
+        kline_daily = load_kline(st.prep, pins, rng)
+        with np.errstate(over="raise", invalid="raise", divide="raise"):   # K3': 실제 넘침·비유한 연산 → 거부
+            x, report = compute(st, validity, kline_daily, first, last)
         v = V.verdict_is(x)
     except Refusal:
         raise
-    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, PV.ProvenanceError) as e:   # advisor #6: 판정 없음
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, FloatingPointError,
+            PV.ProvenanceError) as e:                                                            # advisor #6: 판정 없음
         raise Refusal(f"{type(e).__name__}: {e}") from e
     verdict = verdict_string(v)
     report = {"verdict": verdict, "priority": v.priority, "classification": v.classification, "gates": v.gates,

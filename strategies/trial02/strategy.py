@@ -1,4 +1,4 @@
-"""트라이얼 #2 전략 — 일간 변동성 돌파(사전등록 §1 · 설계 r1 + C1~C20 · 구현 규약 초안 `docs/trials/trial_02_conventions_draft.md`).
+"""트라이얼 #2 전략 — 일간 변동성 돌파(사전등록 §1 · 설계 r1 + C1~C20 · 구현 규약 `docs/trials/trial_02_conventions.md`(#37)).
 
 재생 루프(`backtest.engine_replay.replay`)의 `on_minute_closed` + `exit_at_bar_open`만 구현한다. 날 적격성(V_A/V_B)은 **주입**된다.
 - 날 경계(그날 첫 봉): 전날이 완전한 mark 날(정렬 분 1,440개 · mark 유한)이면 R_전날 = 그날 mark 고가 최대 − 저가 최소를 기록(C1 —

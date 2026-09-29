@@ -89,11 +89,12 @@ def test_complete_archive_needs_no_rest_and_builds_identically(tmp_path):
     bars, fundings = lp(out)
     assert len(bars) == 10 and {b.source for b in bars} == {"archive"} and len(fundings) == 1
     m2 = P.build(out)                                           # 재현: 같은 원시 → 같은 해시
-    assert {k: m[k] for k in ("bars_1m.parquet", "funding.json", "source_audit.json")} == \
-           {k: m2[k] for k in ("bars_1m.parquet", "funding.json", "source_audit.json")}
+    assert {k: m[k] for k in P.PREPARED} == \
+           {k: m2[k] for k in P.PREPARED}
 
 
-def test_archive_row_with_mark_but_empty_kline_is_filled_from_rest(tmp_path):
+def test_archive_row_with_mark_but_empty_kline_takes_kline_from_rest(tmp_path):
+    """K1': mark는 아카이브 그대로 · kline만 REST — 두 계열은 독립(섞어도 한 계산에 함께 쓰이지 않는다)."""
     rows = [arow(T0 + i * MIN) for i in range(10)]
     rows[3] = arow(T0 + 3 * MIN, kline=False)
     rest = FakeRest({T0 + 3 * MIN: kline(T0 + 3 * MIN)}, {T0 + 3 * MIN: mark(T0 + 3 * MIN)})
@@ -102,9 +103,9 @@ def test_archive_row_with_mark_but_empty_kline_is_filled_from_rest(tmp_path):
     P.build(out)
     bars, _ = lp(out)
     b3 = [b for b in bars if b.open_ms == T0 + 3 * MIN][0]
-    assert b3.source == "rest" and b3.mark_open == "200" and b3.open == "200"   # 분 하나 = 출처 하나(혼합 없음)
+    assert b3.source == "archive" and b3.mark_open == "100" and b3.open == "200"
     audit = json.loads((out / "source_audit.json").read_text())
-    assert audit["finding_counts"]["archive_mark_without_kline"] == 1
+    assert audit["finding_counts"]["archive_kline_not_ok"] == 1 and audit["kline_rest"] == 1
 
 
 def test_archive_row_with_bad_mark_is_filled(tmp_path):
@@ -114,13 +115,25 @@ def test_archive_row_with_bad_mark_is_filled(tmp_path):
     P.build(run(tmp_path, rows, rest))
 
 
-def test_rest_mark_only_stops(tmp_path):
+def test_rest_mark_only_minute_is_a_bar_with_empty_kline(tmp_path):
+    """K1' (C12/C19 mark-only 중단 규칙 대체): mark가 있으면 봉 · kline 필드는 빈 값 · trades = −1 · 날 유효성은 mark 기준."""
     rows = [arow(T0 + i * MIN) for i in range(10) if i != 4]
     out = run(tmp_path, rows, FakeRest({}, {T0 + 4 * MIN: mark(T0 + 4 * MIN)}))
-    with pytest.raises(P.SourceStop) as e:
-        P.build(out)
-    assert e.value.findings[0]["kind"] == "rest_mark_only"
-    assert not (out / "bars_1m.parquet").exists() and (out / "source_audit.json").exists()
+    P.build(out)
+    bars, _ = lp(out)
+    b4 = [b for b in bars if b.open_ms == T0 + 4 * MIN][0]
+    assert (b4.source, b4.open, b4.close, b4.trades, b4.mark_close) == ("rest", "", "", -1, "200")
+    assert json.loads((out / "source_audit.json").read_text())["bars_kline_missing"] == 1
+
+
+def test_kline_only_minute_feeds_kline_close_but_not_bars(tmp_path):
+    rows = [arow(T0 + i * MIN) for i in range(10) if i != 9]
+    out = run(tmp_path, rows, FakeRest({T0 + 9 * MIN: kline(T0 + 9 * MIN, "321")}, {}))
+    P.build(out)
+    bars, _ = lp(out)
+    assert T0 + 9 * MIN not in {b.open_ms for b in bars}
+    daily = json.loads((out / "kline_close_daily.json").read_text())
+    assert daily == [{"day": T0 // DAY, "minute_ms": T0 + 9 * MIN, "close": "321", "source": "rest"}]
 
 
 def test_nothing_anywhere_is_a_missing_minute(tmp_path):

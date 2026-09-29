@@ -37,7 +37,7 @@ def _prepared(tmp_path):
     out = tmp_path / "out"
     P.capture(out / "raw", FakeRest(fund=[fund(T0)]), arch, T0, T0 + 9 * MIN)
     m = P.build(out)
-    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in ("bars_1m.parquet", "funding.json", "source_audit.json")}}
+    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in P.PREPARED}}
     return P, out, pins
 
 

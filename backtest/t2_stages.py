@@ -44,7 +44,7 @@ def p4_names() -> list[str]:
 
 RUN_OUTPUTS = ("trades.jsonl", "crosses.jsonl", "days.jsonl", "validity.json", "meta.json")
 P1_OUTPUTS = ("p1_draws.json", "p1_null.jsonl")
-PREP_OUTPUTS = ("manifest.json", "bars_1m.parquet", "funding.json", "source_audit.json")
+PREP_OUTPUTS = ("manifest.json", "bars_1m.parquet", "funding.json", "source_audit.json", "kline_close_daily.json")
 PREP_MODULE = "backtest.prepare_t2"
 
 

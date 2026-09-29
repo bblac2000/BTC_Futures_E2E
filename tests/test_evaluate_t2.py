@@ -142,10 +142,18 @@ def build(tmp_path, scen=None, **kw) -> World:
     return w
 
 
+def kline_daily(bars):
+    last = {}
+    for b in bars:
+        if b.close:
+            last[b.open_ms // DAY] = {"day": b.open_ms // DAY, "minute_ms": b.open_ms, "close": b.close, "source": "archive"}
+    return [last[d] for d in sorted(last)]
+
+
 def run_eval(tmp_path, bars=None, days=(FIRST, LAST)):
     b = bars if bars is not None else BARS
-    return E.evaluate(tmp_path, tmp_path, fetch=False, load_prepared=lambda o, p, r: (b, FUNDS),
-                      rebuild=lambda o, r: None, window=(0, 1), days=days)
+    return E.evaluate(tmp_path, tmp_path, fetch=False, load_prepared=lambda o, p, r: (BARS, FUNDS),
+                      load_kline=lambda o, p, r: kline_daily(b), rebuild=lambda o, r: None, window=(0, 1), days=days)
 
 
 def test_is_pass_and_single_call(tmp_path, patched):
@@ -262,10 +270,12 @@ def test_refuses_trade_outside_valid_days(tmp_path, patched):
         run_eval(tmp_path)
 
 
-def test_bh_series_bridges_missing_days_and_uses_last_bar():
-    p = lambda d, m, c: Bar1m(d * DAY + m * MIN, c, c, c, c, "1", "1", 1, "0", "0", c, c, c, c, "archive")  # noqa: E731
-    bars = [p(1, 1439, "100"), p(1, 100, "90"), p(2, 500, "110"), p(4, 1439, "121")]        # 3일 없음 · 2일은 23:59 없음
-    bh = E.bh_series(bars, 1, 4)
+def test_bh_series_bridges_missing_days_and_uses_kline_rows():
+    rows = [{"day": 1, "minute_ms": 1 * DAY + 1439 * MIN, "close": "100", "source": "archive"},
+            {"day": 2, "minute_ms": 2 * DAY + 500 * MIN, "close": "110", "source": "rest"},        # 23:59 kline 없음 → 마지막 분
+            {"day": 4, "minute_ms": 4 * DAY + 1439 * MIN, "close": "121", "source": "archive"},
+            {"day": 9, "minute_ms": 9 * DAY, "close": "1", "source": "archive"}]                    # 창 밖
+    bh = E.bh_series(rows, 1, 4)
     assert bh["days"] == 3 and bh["window_return"] == pytest.approx(0.21)
     from backtest.stats_t2 import sharpe_or_none
     assert bh["daily_sharpe"] == sharpe_or_none([0.1, 0.1])
@@ -395,7 +405,7 @@ def test_overflowing_value_is_refused(tmp_path, patched):
     rec = json.loads(rec_f.read_text())
     rec["run"]["outputs"]["trades.jsonl"] = hashlib.sha256((d / "trades.jsonl").read_bytes()).hexdigest()
     rec_f.write_text(json.dumps(rec))
-    with pytest.raises(E.Refusal, match="범위|한도"):
+    with pytest.raises(E.Refusal, match="범위"):
         run_eval(tmp_path)
 
 
@@ -445,16 +455,15 @@ def test_overflowing_mean_of_finite_values_is_refused(tmp_path, patched):
         run_eval(tmp_path)
 
 
-def test_sanity_bound_refuses_absurd_bps(tmp_path, patched):
+def test_overflowing_b_sharpe_is_refused_not_undefined(tmp_path, patched):
     build(tmp_path)
     rows = [json.loads(x) for x in (tmp_path / "runs" / "B" / "trades.jsonl").read_text().splitlines()]
     rows[0]["net_bps"], rows[1]["net_bps"] = "1e200", "2e200"                   # 유한하지만 넘침 유발
     _rewrite(tmp_path, "B", "trades.jsonl", rows)
-    with pytest.raises(E.Refusal, match="건전성"):
-        run_eval(tmp_path)
-
-
-def test_sanity_bound_is_checked_on_the_decimal():
     with pytest.raises(E.Refusal):
-        E._f("1000000.00000000001")
-    assert E._f("1000000") == 1e6 and E._f("-1000000") == -1e6
+        run_eval(tmp_path)                                                    # K3': 실제 넘침 → 거부(정의 안 됨이 아님)
+
+
+def test_no_value_based_refusal_for_large_finite_values():
+    """K3': 값 기준 거부 없음 — 큰 유한값도 그대로(넘침만 거부)."""
+    assert E._f("1000000.00000000001") == 1000000.0 and E._f("5e7") == 5e7

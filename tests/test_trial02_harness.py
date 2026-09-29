@@ -178,7 +178,7 @@ def test_verdict_entry_requires_is_range_and_pins(tmp_path):
     P.capture(out / "raw", FakeRest(), arch, T0, T0 + 9 * MIN)
     P.build(out)
     m = json.loads((out / "manifest.json").read_text())
-    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in ("bars_1m.parquet", "funding.json", "source_audit.json")}}
+    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in P.PREPARED}}
     with pytest.raises(ValueError):
         H.run_prepared_is(out, pins, Variant("A"))                        # 합성 캡처 범위 ≠ IS + 21일
     with pytest.raises(ValueError):
@@ -207,7 +207,7 @@ def test_verdict_entry_runs_on_verified_prepared_input(tmp_path):
     P.capture(out / "raw", FakeRest(fund=fs), arch, start, (D0 + 1) * DAY - MIN)
     P.build(out)
     m = json.loads((out / "manifest.json").read_text())
-    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in ("bars_1m.parquet", "funding.json", "source_audit.json")}}
+    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in P.PREPARED}}
     run, v = H._run_prepared(out, pins, Variant("A"), (start, (D0 + 1) * DAY - MIN), D0, D0)
     assert v.v_a == {D0} and len(run.result.trades) == 1 and run.crosses[0]["final_reason"] is None
 
