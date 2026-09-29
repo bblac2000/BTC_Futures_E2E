@@ -6739,3 +6739,16 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ec6b-a8dc-7423-a788-1172b99ae524
 > Resume in Codex: codex resume 01a0ec6b-a8dc-7423-a788-1172b99ae524
+
+## 2026-09-29 — 트라이얼 #3 초안 r3 재확인(Codex task-mumggx8t-70d41v) **MERGE**
+- 두 지적 CLOSED · 새 모호성 없음 · 초안 r3 SHA256 `9b8d2cdf3e40fde82914dea46cd633666584e2fbac7032996c03f7496b224d4b`(#45와 일치) · 입장: ✅ 동의. 다음: 사용자 §12 결정·날짜 확인 → 앵커(사용자). 앵커·코드 없음.
+
+### Codex 원문(verbatim)
+> Both prior findings are **closed**. [§3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:63) now states the shared G-B dependency while keeping each arm’s book and subsequent progression separate. [§0](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_preregistration.md:13) explicitly allows the two positions to overlap in time. The edits introduce no new verdict-relevant ambiguity.
+> 
+> The draft matches registry #45’s SHA256 and is ready for the user’s §12 decisions and date confirmation. The anchor remains theirs. This was read-only; I opened no market returns and used no OI values.
+> 
+> VERDICT: MERGE
+> 
+> Codex session ID: 01a0ec6d-96fd-7d00-a207-63c204be27fd
+> Resume in Codex: codex resume 01a0ec6d-96fd-7d00-a207-63c204be27fd
