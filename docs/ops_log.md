@@ -5782,3 +5782,22 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0eb29-fab2-7ea3-9e34-77edf0f8efde
 > Resume in Codex: codex resume 01a0eb29-fab2-7ea3-9e34-77edf0f8efde
+
+## 2026-09-29 — 2g 설계 r3 재확인(Codex task-mum3x6la-nng26h) **PROCEED** — 설계 r1 + H1~H15 확정
+
+### Codex 원문(verbatim)
+> **The full 2g design (r1 + H1–H15) is ready to implement.** H12 closes the P1 merge content gap by requiring the merged draws and null rows to match the validated parts before p95 is calculated. H13 resolves the prepare/verify provenance mismatch. H14 accounts for the two required sidecars, and H15 covers the remaining strategy metadata and valid-day checks. I found no new verdict-relevant ambiguity.
+> 
+> This was a read-only design review; I did not inspect `var/` or market data. The evaluator has not been implemented or tested by this review.
+> 
+> VERDICT: PROCEED
+> 
+> Codex session ID: 01a0eb2b-fc25-75e0-9d1e-b41d94a12246
+> Resume in Codex: codex resume 01a0eb2b-fc25-75e0-9d1e-b41d94a12246
+
+## 2026-09-29 — 트라이얼 #2 단계 2g 구현(판정기 · 설계 r1 + H1~H15)
+- `backtest/stats_t2.py`(유효일 블록 부트스트랩 · 일별 대비 · ρ̂ 퇴화 0 · Sharpe 정의 규칙 · p95) · `backtest/verdict_t2.py`(순수 핵심: `verdict_is` · 사전확약 `verdict_oos` · `verdict_forward`) · `backtest/evaluate_t2.py`(껍데기: 문 → 결과 파일을 열기 전 독립 기대 목록 → 원시 재빌드 1회 → 메타·유효일·병합 내용 → 통계 → 핵심 → 임시 디렉터리 쓰기·이름 바꾸기 · 표준출력 = 판정 문자열만 · 한 번만).
+- `t2_provenance`: 판정기 동결·지문 집합에 stats_t2 · verdict_t2 추가.
+- 시험: 핵심 진리표·경계 32개 · 통계 10개 · **실제 `Stages` + 실제 출력 형식 가짜 러너로 205 실행 + P1 조각·병합 전체 합성 파이프라인** 위 판정·거부 16개.
+- **TDD 이탈(공개)**: `evaluate_t2.py`는 시험보다 먼저 썼다(stats_t2·verdict_t2는 시험과 함께) → 돌연변이 검사 7개 중 6개 잡음 · 놓친 1개(일관되게 더러운 HEAD)는 시험을 격리해 잡음.
+- 발견: 초안 픽스처의 SR̂_A 0.2는 SR*(0.259)보다 작아 G-B 실패 — §3 공시("SR̂가 #1과 멀수록 SR*가 커진다")의 실제 사례. 규칙 문제가 아니라 픽스처 값 문제로 고침(0.6).

@@ -16,11 +16,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 PINS_REL = "strategies/trial02/data_pins.json"
-EVALUATOR_FILES = ("backtest/evaluate_t2.py", "backtest/stats.py")
+EVALUATOR_FILES = ("backtest/evaluate_t2.py", "backtest/stats.py", "backtest/stats_t2.py", "backtest/verdict_t2.py")
 FINGERPRINT_GLOBS = ("strategies/trial02/*.py", "paper/*.py", "sizing/*.py", "exchange/*.py")
 FINGERPRINT_FILES = tuple(f"backtest/{n}.py" for n in (
     "engine_replay", "prepare_t2", "days", "p1_core", "p1_t2", "p1_t2_run", "placebo_exec", "returns", "data", "replay",
-    "t2_stages", "t2_provenance", "evaluate_t2", "stats")) + ("pyproject.toml", "uv.lock")
+    "t2_stages", "t2_provenance", "evaluate_t2", "stats", "stats_t2", "verdict_t2")) + ("pyproject.toml", "uv.lock")
 
 
 class ProvenanceError(RuntimeError):
