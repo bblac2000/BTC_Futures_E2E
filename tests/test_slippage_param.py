@@ -158,7 +158,7 @@ def test_placebo_exec_rate_reaches_sizing_quote_and_exit():
 
 
 def test_no_non_default_rate_outside_trial03_and_tests():
-    """B5 T6: `slippage_rate=` 인자는 전달(`slippage_rate=slippage_rate`)만 — 다른 값은 strategies/trial03과 테스트에서만."""
+    """B5 T6: `slippage_rate=` 인자 — 전달(`slippage_rate=slippage_rate`)은 engine_replay·placebo_exec 두 모듈만 · 다른 값은 strategies/trial03과 테스트만."""
     allowed_prefix = ("strategies/trial03/", "tests/")
     bad = []
     for base in ("backtest", "paper", "ops", "sizing", "exchange", "strategies", "scripts"):
@@ -169,6 +169,8 @@ def test_no_non_default_rate_outside_trial03_and_tests():
             for n in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
                 if isinstance(n, ast.Call):
                     for k in n.keywords:
-                        if k.arg == "slippage_rate" and not (isinstance(k.value, ast.Name) and k.value.id in ("slippage_rate", "rate")):
+                        passthrough = (isinstance(k.value, ast.Name) and k.value.id == "slippage_rate"
+                                       and rel in ("backtest/engine_replay.py", "backtest/placebo_exec.py"))
+                        if k.arg == "slippage_rate" and not passthrough:
                             bad.append(f"{rel}:{n.lineno}")
     assert bad == []

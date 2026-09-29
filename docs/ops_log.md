@@ -7334,3 +7334,101 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ecbc-7185-75e2-9328-c2d6d4565f04
 > Resume in Codex: codex resume 01a0ecbc-7185-75e2-9328-c2d6d4565f04
+
+## 2026-09-29 — 트라이얼 #3 (b) 슬리피지 매개변수 **after-pass**(advisor + Codex task-mumm96nx-og920u **MERGE**)
+- 커밋: 77cef80(회귀 검사 스크립트 · 기준선 전에 푸시) · dc23273(변경 + 테스트) · 이 커밋(증거 · 정적 검사 강화 · 기록).
+- `git show --stat dc23273`:
+   backtest/engine_replay.py    |   9 ++-
+   backtest/placebo_exec.py     |  18 +++--
+   tests/test_slippage_param.py | 174 +++++++++++++++++++++++++++++++++++++++++++
+   3 files changed, 192 insertions(+), 9 deletions(-)
+- 트라이얼 #2 회귀(전체 205 + P1 0..999 + 병합 · 1,043파일): 기준선(워크트리 77cef80 · 변경 전 코드 · 36:05 · 3.64 GB) · 변경 후(main dc23273 · 35:33 · 3.63 GB) **둘 다 identical · 불일치 0** · 두 재실행 트리 838개 비-meta 파일 SHA256 목록 바이트 동일 · 판정기 report 재계산 9223047c…(진단 · 새 판정 아님 · evaluation/ 무수정). 증거 `docs/trials/trial_03_step_b_regression/`. 기준선 워크트리는 제거·prune.
+- 트라이얼 #2 지문: 77cef80 = `9416d9e2…`(기록된 gate 지문 · 마지막 일치 커밋) · main dc23273 = `1f08d389…` → 트라이얼 #2 문(단계·판정기)은 main에서 의도적으로 거부. 트라이얼 #2는 H 63c1760 · 지문 9416d9e2…로 닫힌 채.
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 B7 해시 확인 | ✅ | 위 지문 두 값 실측 |
+| advisor | 2 증거 영구화 | ✅ | `docs/trials/trial_03_step_b_regression/` 커밋 |
+| advisor | 3 워크트리 제거 | ✅ | remove + prune |
+| advisor | 4 레지스트리 행 | ✅ | #51 |
+| advisor | 5 보고 틀 | ✅ | 보고에 반영(펀딩 00/08/16 테스트 → (c) · P1 두 지점 + 통합 테스트 → (e) · 결정 시점 B2 견적 → (d) 규약 행) |
+| advisor | 6 순서 | ✅ | 기록 → 커밋 → 푸시 → 보고 → 멈춤 |
+| Codex | 1 B1 일치 | ✅ | — |
+| Codex | 2 정적 검사가 두 모듈 제한을 강제하지 않음(MINOR) | ✅ | 전달은 engine_replay·placebo_exec에서만 허용하도록 강화 |
+| Codex | 3 증거가 바이트 동일을 뒷받침 | ✅ | — |
+| Codex | 4 B7 기록 | ✅ | #51 · 이 항목 |
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (b) after-pass. The change matches plan r2 B1/B5 exactly: two files, keyword-only parameters, defaults = #7, no trade-record fields, both `PaperSender` instances in `run_time_exit` wired. The regression evidence is the strongest form available — full 205 + 1,000 + merge, baseline reproduced on pre-change code in an isolated worktree, after-run on the pushed commit, and a direct tree-to-tree cross-check. No substantive objection. What remains is record-keeping, and three items are gaps your checks didn't cover:
+> 
+> **1. B7 is still "to verify" in your own after-brief — close it with hashes before Codex lands.** In the worktree (still at 77cef80): `uv run python -c "from backtest import t2_provenance as PV; print(PV.fingerprint())"`; on main (dc23273): same command. Expected: worktree = `9416d9e2…` (the recorded gate fingerprint in `runs/A/meta.json`), main ≠. If the worktree value is *not* `9416d9e2…`, stop and find what changed the fingerprint set since 63c1760 before writing B7 — don't write "77cef80" as the last-matching commit on inference.
+> 
+> **2. The regression evidence exists only in scratchpad, which is wiped between sessions — that violates "nothing stays local-only."** Commit `t2reg_baseline/summary.json`, `t2reg_after/summary.json`, `h_base.txt`, `h_after.txt` (838 lines each) under `docs/trials/trial_03_step_b_regression/` with a one-paragraph README stating: what each is, that the evaluator hash is a diagnostic recomputation (B3), the commits each ran on, wall time and RSS. Then ops_log quotes both summary JSONs verbatim. Secret scan before push as usual — the summaries contain only paths and hashes.
+> 
+> **3. Remove the worktree after item 1.** `git worktree remove --force <path>` then `git worktree prune`. Otherwise `.git/worktrees/` keeps a stale entry pointing at a wiped directory, and the next `git status`/`git worktree list` in a future session will surprise you. Record in ops_log that the baseline ran there.
+> 
+> **4. Registry row — Codex before-pass Q3 asked for one, so write it (append-only):** shared-layer change (b): commits 77cef80/dc23273; the two signatures; trial #2 regression identical (1,043 files, report `9223047c…` before and after); main after dc23273 intentionally fails trial #2's provenance gate; last matching commit per item 1. Not a gate value; conventions row still pending before P&L.
+> 
+> **5. Report framing — three things the user will read for:**
+> - Say plainly: "evaluator output bit-identical" is a *diagnostic recomputation* through the evaluator's own `compute → verdict → report` path with provenance/inventory/write steps removed; a gated rerun is one-shot and refuses on main by design. Give why that's the right proof (new code on old inputs; a rerun at H would test old code).
+> - Diff stat from `git show --stat dc23273` (the +/− counts in your brief predate the ruff import reorder).
+> - Carried items with their step: funding 00/08/16 tests → (c); trial #3 P1 passes the rate at placement *and* execution + integration test → (e); decision-time B2 gate quotes `m` through `adverse_fill_estimate(…, 0.0006)` → (d) conventions row. State them so the user doesn't read the funding tests as dropped.
+> 
+> **6. Sequence after Codex lands:** log advisor + Codex verbatim with positions → items 1–4 → commit → push → report → **stop**. The user's rule is explicit: report both passes and the diff summary before (c). Update `memory/trial03-status.md` to "(b) complete, after-pass MERGE, waiting on user before (c)" in the same commit.
+> 
+> One thing to watch when Codex returns: if it flags the `--skip-runs` mode again, the answer is already in the script docstring and both summaries show `"skip_runs": false` — cite that, don't remove the flag (it's a useful 30-second path-check).
+
+### Codex 원문(verbatim · task-mumm96nx-og920u)
+> 1. **B1 matches plan r2.** Commit `dc23273` adds a keyword-only rate through `replay`, sizing, time exit, and P1 passthrough. Both entry sizing and execution use the supplied rate. The default remains 2 bps; Trial #1 callers and the bot keep that default. No trade-record fields or other shared layers changed. [replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:70), [placebo_exec](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:43)
+> 
+> 2. **B5 has no blocking test gap.** The tests check exact adverse entry and exit fills in both directions, wallet arithmetic, SL exits, and liquidation with identical restored positions. The time-exit paths exercise `close_now`. The reported 1,228-pass suite, ruff, and pyright results were supplied; I did not rerun them. One minor weakness: the static test permits `slippage_rate=rate` anywhere it scans, so it does not enforce B5’s stated “two passthrough modules only” rule. There is no offending call in this diff. [tests](/home/cms/project/BTC_Futures_E2E/tests/test_slippage_param.py:80)
+> 
+> 3. **The regression evidence supports byte identity for Trial #2 IS outputs under the changed code.** Both summaries say `skip_runs=false`, 205 strategy runs, eight P1 parts, 1,043 files, and zero mismatches. I independently compared the saved baseline and after rerun trees: **all 1,043 files are byte-identical**, including metadata. Against the recorded runs, the only 205 differing files are `meta.json`, differing solely in `git_head` and `gate`, as the checker specifies. The recomputed report hash matches the closed report, but that recomputation is correctly labelled a diagnostic, not a new gated evaluation. [checker](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py:51)
+> 
+> 4. **Record B7 before step (c).** Add an append-only registry note and an ops_log after-pass entry with the two commit hashes, summary hashes, coverage and comparison result, and the diagnostic-only evaluator qualification. State that Trial #2 remains closed under H `63c1760` and fingerprint `9416d9e2…`; `77cef80` is the last pre-change commit with that fingerprint. `dc23273` has fingerprint `1f08d389…`, so Trial #2’s gated stages intentionally refuse on current main. The evidence directory is currently untracked; include durable evidence when making the record. [plan B7](/home/cms/project/BTC_Futures_E2E/docs/ops_log.md:7312)
+> 
+> **VERDICT: MERGE.** The remaining work is the required record, not a code or regression blocker.
+> 
+> Codex session ID: 01a0ed01-dd3a-7470-890e-b9fbde97d06e
+> Resume in Codex: codex resume 01a0ed01-dd3a-7470-890e-b9fbde97d06e
+
+### 기준선 summary.json(verbatim)
+```json
+{
+ "closed_report_expected": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "closed_report_sha256": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "files_compared": 1043,
+ "head": "77cef80bda71418559f31f2517c91c9b530b1e45",
+ "identical": true,
+ "mismatches": [],
+ "p1_parts": 8,
+ "pins_commit": "7b8b842f1050ec9e7f68896cf3b2b9432aeb2e0d",
+ "report_sha256_recorded_runs": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "report_sha256_rerun": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "skip_runs": false,
+ "strategy_runs": 205,
+ "t2_base": "/home/cms/project/BTC_Futures_E2E/var/backtest/t2/IS",
+ "verdict_recorded_equal": true,
+ "verdict_rerun_equal": true
+}
+```
+
+### 변경 후 summary.json(verbatim)
+```json
+{
+ "closed_report_expected": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "closed_report_sha256": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "files_compared": 1043,
+ "head": "dc23273ae4c39c43208eee6ea3963d3fc58aa4fa",
+ "identical": true,
+ "mismatches": [],
+ "p1_parts": 8,
+ "pins_commit": "7b8b842f1050ec9e7f68896cf3b2b9432aeb2e0d",
+ "report_sha256_recorded_runs": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "report_sha256_rerun": "9223047cf7d7698de41e16ca2e2beb42d8461db29d8431cd8195a6c0757ecf2e",
+ "skip_runs": false,
+ "strategy_runs": 205,
+ "t2_base": "/home/cms/project/BTC_Futures_E2E/var/backtest/t2/IS",
+ "verdict_recorded_equal": true,
+ "verdict_rerun_equal": true
+}
+```
