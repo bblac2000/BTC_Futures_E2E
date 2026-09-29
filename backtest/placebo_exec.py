@@ -95,16 +95,19 @@ def run_time_exit(bars: dict[int, Bar1m], fundings: Sequence[Funding], *, entry_
             if isinstance(ev, PositionClosed):
                 closed, exit_ref = ev, liq_now
         t += MINUTE_MS
-    reason = "liquidation"
+    outcome = "liquidation"
     if closed is None:
         last = bars[exit_minute]
         exit_ref = last.d("mark_close")
-        for ev in eng.close_now(ref_mark=exit_ref, ts_ms=exit_ms, reason=reason):
+        for ev in eng.close_now(ref_mark=exit_ref, ts_ms=exit_ms, reason=reason):   # 받은 사유 그대로(트라이얼 #3 (e) R2)
             if isinstance(ev, PositionClosed):
                 closed = ev
-        reason = "time_exit"
+        outcome = "time_exit"
     assert closed is not None
-    return TimeExitResult(True, reason, trade_return(direction=d, entry_mark=first.d("mark_open"), exit_ref=exit_ref,
+    expected = reason if outcome == "time_exit" else ExitReason.LIQUIDATION
+    if closed.reason != expected:
+        raise AssertionError(f"엔진 청산 사유 {closed.reason} ≠ 기대 {expected}")
+    return TimeExitResult(True, outcome, trade_return(direction=d, entry_mark=first.d("mark_open"), exit_ref=exit_ref,
                                                      qty=dec.qty, entry_fill=fill, wallet_before=equity,
                                                      wallet_after=closed.wallet_after))
 

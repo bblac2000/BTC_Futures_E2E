@@ -158,7 +158,8 @@ def test_placebo_exec_rate_reaches_sizing_quote_and_exit():
 
 
 def test_no_non_default_rate_outside_trial03_and_tests():
-    """B5 T6: `slippage_rate=` 인자 — 전달(`slippage_rate=slippage_rate`)은 engine_replay·placebo_exec 두 모듈만 · 다른 값은 strategies/trial03과 테스트만."""
+    """B5 T6: `slippage_rate=` 인자 — 전달(`slippage_rate=slippage_rate`)은 engine_replay·placebo_exec 두 모듈만 · 다른 값은 strategies/trial03과 테스트만 ·
+    트라이얼 #3 backtest 모듈(`*_t3.py`)은 앵커 상수 `TF_V1.slippage`만."""
     allowed_prefix = ("strategies/trial03/", "tests/")
     bad = []
     for base in ("backtest", "paper", "ops", "sizing", "exchange", "strategies", "scripts"):
@@ -171,6 +172,26 @@ def test_no_non_default_rate_outside_trial03_and_tests():
                     for k in n.keywords:
                         passthrough = (isinstance(k.value, ast.Name) and k.value.id == "slippage_rate"
                                        and rel in ("backtest/engine_replay.py", "backtest/placebo_exec.py"))
-                        if k.arg == "slippage_rate" and not passthrough:
+                        t3_const = (rel.startswith("backtest/") and rel.endswith("_t3.py") and isinstance(k.value, ast.Attribute)
+                                    and ast.unparse(k.value) == "TF_V1.slippage")          # 트라이얼 #3 모듈 · 앵커 상수만
+                        if k.arg == "slippage_rate" and not (passthrough or t3_const):
                             bad.append(f"{rel}:{n.lineno}")
     assert bad == []
+
+
+def test_run_time_exit_passes_its_reason_to_the_engine(monkeypatch):
+    """트라이얼 #3 (e) R2: `run_time_exit`는 받은 `reason`을 엔진 `close_now`에 그대로 넘긴다(전에는 "liquidation" 문자열로 덮었다) ·
+    반환 사유(time_exit/liquidation)는 그대로."""
+    seen: list[object] = []
+    orig = Engine.close_now
+
+    def spy(self, *, ref_mark, ts_ms, reason=ExitReason.MANUAL):
+        seen.append(reason)
+        return orig(self, ref_mark=ref_mark, ts_ms=ts_ms, reason=reason)
+
+    monkeypatch.setattr(Engine, "close_now", spy)
+    bars = {b.open_ms: b for b in flat(10)}
+    for reason in (ExitReason.TIME_EXIT, ExitReason.MANUAL):
+        r = PX.run_time_exit(bars, [], entry_ms=T0, h=5, direction=0, sl_dist=D("0.005"), rules=RULES, limits=SizingLimits(),
+                             equity=D("1000"), regime=REGIME, reason=reason)
+        assert r.ok and r.reason == "time_exit" and seen[-1] is reason
