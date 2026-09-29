@@ -115,9 +115,13 @@ def load_pins(repo: Path = ROOT, *, remote_ref: str = "origin/main", fetch: bool
     #  핀과 같은(푸시된) 커밋 시점의 레지스트리에 해시가 있어야 한다 — 작업 트리 문자열 검색이 아니다(Codex 2f r2 #5)
     r = subprocess.run(["git", "-C", str(repo), "show", f"{c}:{REGISTRY_REL}"], capture_output=True, text=True)
     reg = r.stdout if r.returncode == 0 else ""
-    missing = [h for h in list(pins["raw"].values()) + list(pins["prepared"].values()) if h not in reg]
+    rows = [ln for ln in reg.splitlines() if ln.startswith("|") and PINS_REL in ln]
+    if len(rows) != 1:
+        raise ProvenanceError(f"핀 커밋의 레지스트리에 `{PINS_REL}` 행이 정확히 하나가 아니다({len(rows)})")
+    want = [f"{n}={h}" for n, h in {**pins["raw"], **pins["prepared"]}.items()]
+    missing = [w for w in want if w not in rows[0]]
     if missing:
-        raise ProvenanceError(f"레지스트리에 핀 해시가 없다: {missing[:3]}")
+        raise ProvenanceError(f"트라이얼 #2 데이터 핀 행에 `파일=해시`가 없다: {missing[:3]}")
     return pins, c
 
 

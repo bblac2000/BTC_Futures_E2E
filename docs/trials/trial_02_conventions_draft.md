@@ -25,4 +25,5 @@
 22. **position_busy 구조**: 기본 전략에서는 생기지 않는다 — 반대 띠(D < O_d = 초기 SL · 트레일은 이익 쪽으로만 조임)에 닿는 봉은 엔진 `on_bar`(체결 → 청산 → SL → TP)가 전략 판단 전에 이미 SL 청산 · `has_position`의 대기 진입도 같은 이유로 기본 경로에서 비어 있다 · P2 지연 결정에서만 가능(테스트).
 23. **§7-3 결합**(2f 범위): 전략의 `first_cross`(outcome = intent)와 다음 봉 엔진 `EntrySkipped`(sl_crossed_before_fill · sizing_rejected · normalization = {below_min_qty, min_notional})를 run.py가 `on_event`로 이어 한 교차당 사유 하나 · tick·규칙 = #36 스냅샷(SHA256 4개 검증 · 대체 없음).
 24. **날 경계 가드**: 새 날 첫 봉에서 포지션·대기 진입이 있으면 중단(주입 집합 오류 방지).
+25. **데이터 핀 행 형식**: 레지스트리에 `strategies/trial02/data_pins.json`을 적은 행이 **정확히 하나** · 그 행에 원시·산출물 파일마다 `파일=SHA256` · 핀과 같은(푸시된) 커밋에 들어 있어야 한다(`t2_provenance.load_pins`).
 16. **§11-8**: 산출물 스키마 · 격리 CLI 경로 · 커밋/푸시 증거(판정기 푸시 커밋 해시) — 2g에서 채운다.

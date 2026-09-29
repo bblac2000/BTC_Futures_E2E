@@ -5530,3 +5530,18 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 >
 > Codex session ID: 01a0d3d8-a34b-7152-9195-691eee8f95c2
 > Resume in Codex: codex resume 01a0d3d8-a34b-7152-9195-691eee8f95c2
+
+## 2026-09-29 — 2f 재확인 r3(Codex task-mum3dkkx-gd8u46 **FIX-FIRST**) → 수정
+- #1·#4 CLOSED · #5 PARTIAL(해시가 레지스트리 어디에나 있으면 통과) → ✅ 동의 → 핀 커밋 시점 레지스트리에 `strategies/trial02/data_pins.json` 행이 정확히 하나 · 그 행에 `파일=해시` 전부 · 테스트(다른 행에만 있음 · 짝 불일치) · 규약 초안 25.
+
+### Codex 원문(verbatim · task-mum3dkkx-gd8u46)
+> **One provenance gap remains.** The r2 fixes close #1: recorded outputs must match the files in the output directory. They also close #4: direct CLIs now fetch, and P1 merge passes through the gate.
+> 
+> **#5 is still partial.** [load_pins](/home/cms/project/BTC_Futures_E2E/backtest/t2_provenance.py:115) reads the registry at the pushed pins commit, but checks only whether each hash appears *anywhere* in its text. It does not establish that the Trial #2 data-pins row contains those hashes. The [test fixture](/home/cms/project/BTC_Futures_E2E/tests/test_t2_provenance.py:63) even uses an unrelated `| 99 |` row as a passing registry entry. Check the identified Trial #2 row and its named raw and prepared hashes, then test rejection when the hashes appear only in another row.
+> 
+> This was a read-only review of the requested diff and log. I did not access `var/` or market data or run tests.
+> 
+> VERDICT: FIX-FIRST.
+> 
+> Codex session ID: 01a0eb1e-0cee-7cb1-87c7-f9c2b08b2818
+> Resume in Codex: codex resume 01a0eb1e-0cee-7cb1-87c7-f9c2b08b2818

@@ -66,7 +66,9 @@ def pins_file(repo: Path, raw: str = "r1", registry: bool = True) -> dict:
     (repo / PV.PINS_REL).parent.mkdir(parents=True, exist_ok=True)
     (repo / PV.PINS_REL).write_text(json.dumps(pins))
     (repo / PV.REGISTRY_REL).parent.mkdir(parents=True, exist_ok=True)
-    (repo / PV.REGISTRY_REL).write_text("| 99 | pins " + (" ".join([raw, "b1", "f1", "s1"]) if registry else "") + " |\n")
+    toks = " · ".join(f"{n}={h}" for n, h in {**pins["raw"], **pins["prepared"]}.items())
+    (repo / PV.REGISTRY_REL).write_text(f"| 98 | 다른 행 {toks} |\n" + (f"| 99 | 트라이얼 #2 데이터 핀 `{PV.PINS_REL}` {toks} |\n"
+                                                                      if registry else ""))
     return pins
 
 
@@ -172,3 +174,23 @@ def test_failed_fetch_is_an_error(repo):
     with pytest.raises(PV.ProvenanceError):
         PV.require_pushed(repo, h)                                   # 오래된 origin/main으로 통과하지 않는다
     PV.require_pushed(repo, h, fetch=False)                           # 자식 프로세스 경로(부모가 fetch 성공한 뒤)
+
+
+def test_hashes_only_in_another_row_are_refused(repo):
+    pins_file(repo, registry=False)                                # 해시는 다른 행(| 98 |)에만
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)
+
+
+def test_pins_row_needs_name_hash_pairs(repo):
+    pins_file(repo)
+    reg = (repo / PV.REGISTRY_REL).read_text().replace("funding.json=f1", "funding.json=zz")
+    (repo / PV.REGISTRY_REL).write_text(reg)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "pins")
+    push(repo)
+    with pytest.raises(PV.ProvenanceError):
+        PV.load_pins(repo)
