@@ -9773,3 +9773,131 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
   - `uv run python docs/trials/trial_04_calibration/calibrate_r2.py` → calibration_r2.json(A·B)
   - C: `uv run python <scratchpad>/calib_c_channel.py`(SHA256 0ff8c8eb4a39ca819a81b8808e53657a3d352d6630adfbc5ec2c82fc65338957) → calibration_r2_c.json — **CLAUDE.md 하드 규칙 "No Donchian code in this repo" 때문에 스크립트는 저장소 밖** · E2E #74와의 차이는 calibration_r2.md §C.
 - 표: docs/trials/trial_04_calibration/calibration_r2.md. Codex 검토 없음(사용자: 읽기 전용 보정).
+
+## 2026-09-30 — 트라이얼 #4 r2(T-CARRY · 프리미엄 지수) · IS 이전 트레이드 수 · **before-pass**(advisor + Codex REDESIGN-FIRST) · 초안 r2
+
+> 사용자(원문 요지 · 전문은 이 대화의 사용자 메시지): "Calibration accepted; #66 recorded. Candidate C (Donchian) is dropped — 16 trades per side in two IS years cannot meet G0, and the repo rule stays as is (the script stays outside the repo; no amendment needed). Trial #4 r2 = T-CARRY on the premium index. Before drafting, run one more pre-IS-only count (2022–2023, no IS content) with the exact r2 rules below and report trades per year per arm after clustering; then draft r2 with the advisor + Codex before-pass." (규칙 1~12 · Codex 질문 (i)~(iv))
+
+- IS 이전 수: `uv run python docs/trials/trial_04_calibration/count_r2.py` → count_r2.json(SHA256 243e7b234f948d2638f1ab3db25f741e7edeafe6c520c17717ed1f5fbeb51065 · 커밋 58c45a8) · 원시 = premium zip 27개(목록 SHA256 e447bcef…) + 1m 아카이브 2021~2023. 결과: r2 규칙 S 30(12/18) · L 42(22/20) · 헌법 G0 기대 개수 48(ρ̄ 0.15) 미달 · 단일 변경으로 S 48 없음(Q0.10/0.90 S 43 · L 56).
+- 초안 r2 = **새 파일** `docs/trials/trial_04_preregistration_r2.md`(r1 파일 · #64 SHA 보존).
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 1 | 30이 아니라 헌법 48로 보고 | ✅ | §3 G0 · §5-1 · §12-10 |
+| advisor 2 | 순위 대 절대 — 수치로 제시만 | ✅ | §0 · §12-1 |
+| advisor 3a | 가용 분 · T 펀딩 · 전진 검증 | ✅ | §1 · §3 G-F · §12-4 |
+| advisor 3b | 근사 규약 + 35.1% 대 34.7% | ✅ | §1 |
+| advisor 3c | 22% 천장 검산 | ✅ | 롱 22.010% 통과 · 숏 21.835% 실패 → §1-1 · §12-3 |
+| advisor 4 | L 분포 · SL 드묾 · 캐리 작동 | ✅ | §1-1 · §2 |
+| advisor 5 | P1이 통제하는 것 | ✅ | §4 |
+| advisor 6 | r1의 [10,30]을 v1.5로 | ✅ | r2 전체 L ∈ [3, 30] |
+| Codex (i) | 순위 = 상대 쏠림 · 절대 = 이전성 미입증 | ✅ | §0 · §12-1 |
+| Codex (ii) | 부호: S 30 → 13 · L 불변 | ✅ | §12-2 |
+| Codex (iii) | 5일 고정 대 가변 — 가변은 미재현 | ✅ | §12-5 |
+| Codex (iv) | T 펀딩 미정산 · 결정/체결 같은 시각 | ✅ | §1 · §12-4(트라이얼 #3 관례로 제안 · 대안 명시) |
+| Codex (v) | G0 48 미달 · 30으로 바꾸면 헌법 충돌 | ✅ | §3 · §12-10 |
+| Codex (vi) | 22% 숏 실패 · MIN_NOTIONAL로 20% | ✅ | §1-1 · §12-3 |
+| Codex (vii) | 재현 단순화 목록 | ✅ | §5-1 · §12-12 |
+| Codex (viii) | P1 경계·청산 추출 | ✅ | §4 · §12-11 |
+| Codex (ix) | 가용·근사·결손·우선순위·DATA_START | ✅ | §1 · §5 · §12-4·6·7·9 |
+
+### advisor 원문(verbatim)
+> You're at the before-pass with the count table done and pushed. The count is the deliverable the user asked for first; what's missing is the interpretive frame around it and three r2 design points the brief doesn't state.
+> 
+> **1. Report the count against the right bar, and answer the user's item 11 literally.** The brief says "if either arm projects < 30 … propose the smallest rule change." Neither does: S 30, L 42. But the constitution's G0 is `n ≥ 30(1+4ρ̄)` (research-protocol line 22, checklist line 100), which is 48 at trial #3's ρ̄ floor 0.15 — and that floor is a *trial* choice, not a constitution value. So the table must say: passes the brief's floor, fails the constitution's expected-count check at ρ̄ = 0.15 for both arms. That reframes item 11 as a [DECISION]: keep ρ̄ = 0.15 (→ 48, both arms short by pre-IS evidence) or pre-commit a smaller floor with a stated reason. Then the one-knob table: Q0.10/Q0.90 → S 43 / L 56 (L clears 48, S doesn't); hold 3d → 33 / 49; no hysteresis → 35 / 44; sign requirement → S 13 (kills S — the premium is negative most of the time). No single knob gets S to 48. Say that plainly and don't combine knobs unless asked.
+> 
+> **2. The pre-IS extreme counts are wildly regime-dependent (2022: 26 above / 88 below; 2023: 146 / 67).** For Codex (i): a relative-rank threshold guarantees ~5% of prints qualify per window regardless of level, so a bull IS won't starve the S arm — but it also means the S arm fires when the premium is merely *less negative* than usual (median Q0.95 = −0.019%). That's the honest answer to (i)/(ii): relative rank gives count stability, an absolute or sign threshold gives economic meaning and kills the count. Present that tradeoff with the numbers; don't resolve it.
+> 
+> **3. Three r2 items the brief leaves open — pre-commit language for the draft, flagged for Codex:**
+> - a. **Availability minute (iv).** The last 1m bar in the window opens at T−1m and closes at T; the monthly zip is a historical artifact, so in-sample there's no receipt time. Your count used "decision at the close of the bar opening at T, fill at T+1m open" — one full bar of margin. State that as the implementer convention, note that a position filled at T+1m does not settle T, and that the *forward* implementation must poll `/fapi/v1/premiumIndexKlines` and verify the same rule against receipt timestamps (trial #3's OI precedent).
+> - b. **The 8h mean vs Binance's 5-s average — pin as convention (brief item 1 asks for it).** Add the quantitative check you already have: the clamp-zone share 35.1% matches the baseline-funding share 34.7%. That's the evidence the approximation tracks the real average at the level that matters for the threshold.
+> - c. **sl_dist band top 22% and the SL/liquidation ordering.** liq(L=3, long) = (1/3 − 0.0045)/0.996 = 33.0%; 1.5×22 = 33 — the ceiling is *at* the gate boundary, so verify whether `1.5×0.22 < 0.3300` holds or fails by rounding before writing "22% = the L=3 gate ceiling" into a frozen rule. If it fails, the band top is 21.99…% and the wording must say "< liq(3)/1.5". Same check for the short side (32.7% → 21.8%).
+> 
+> **4. Two things from the count that belong in the draft as disclosures, not decisions:**
+> - Median sl_dist ≈ 7–8% and the resulting L sits mostly in 5–9 (S: 1/7/11/11 across bins; L: 5/18/7/12). That's the v1.5 range doing exactly what it was revised for — say so in §1-1 and report the L distribution as item 5 requires.
+> - SL exits are rare (S 5/30, L 4/42); ~85% of trades run to the 5-day exit. The 15 funding crossings are therefore nearly always paid — the carry term is real in this design (unlike r1). Good; state it.
+> 
+> **5. P1 with h fixed at 5 days: name what it does and doesn't control.** It matches hold length and direction but randomizes the entry date → controls timing *and* the premium level at entry, so it also randomizes the carry received. Codex raised this in r1; the r2 answer is "P1 tests whether *this timing* beats random 5-day holds in the same direction, carry included." Say it that way; add price-PnL / funding-PnL split to §7-3.
+> 
+> **6. Sequence and don'ts.** Codex before-pass now (with count_r2.json and the four questions plus 1–3 above), then r2 draft, then ops_log verbatim + positions + registry row for r2 (pattern #64; pre-append gate). Don't anchor, don't touch 2024+, don't pick ρ̄, quantiles, hold length or the sign rule. r2 must restate leverage under v1.5 everywhere (r1 said [10,30] in six places — grep it before writing).
+> 
+> The one thing a reviewer would call an omission: point 1 — reporting "S 30, L 42 ≥ 30 ✓" without the constitution's 48 would be reading the wrong gate.
+
+### Codex 원문(verbatim)
+> Codex session id: 01a0f16d-8bab-7a82-bb0d-d639186575b6 (turn 01a0f16d-8ea8-71f3-af5d-80231b7971b3)
+> 
+> # Trial #4 r2 — read-only BEFORE-pass review
+> 
+> **Scope.** I reviewed the specified brief, pre-IS calibration and count replay, constitution v1.5, trial #3 template, withdrawn r1 draft, and registry. I made no edits or data fetches and did not open market data dated 2024-01-01 or later. The figures below are **2022–2023 count evidence**, not an IS result or a return estimate. The r1 draft is preserved evidence, not the operative r2 design: registry #66 records its pre-anchor withdrawal and leaves N at 6. [Brief](t4r2_brief.md:21) · [registry](docs/trial_registry.md:72)
+> 
+> ### (i) Relative rank or an absolute premium threshold
+> 
+> **Finding.** A trailing rank is more defensible **if the hypothesis is "unusually crowded relative to its recent regime."** The pre-IS premium median was −0.0433%, and the trailing Q0.95 median was still −0.0189%. Thus a Q0.95 short trigger can occur while premium is negative; it does not, by itself, mean positive long crowding. Upper-tail prints also changed sharply by year: 26 in 2022 versus 146 in 2023. An absolute threshold has clearer level or carry meaning **if that is the intended hypothesis**, but a level calibrated in this negative-premium period has no demonstrated stability in the proposed bull IS. That transfer concern is a hypothesis, not an observed IS finding. [calibration](docs/trials/trial_04_calibration/calibration_r2.md:11) · [calibration](docs/trials/trial_04_calibration/calibration_r2.md:20)
+> 
+> **Options and risks.** Pre-commit to rank alone and describe the signal as *relative* crowding; combine rank with a separately justified level or sign condition; or define an absolute premium rule from pre-IS evidence and its economic rationale. The latter two change event frequency and need a count replay before drafting. None should be presented as validated for the sealed IS. The premium index addresses r1's funding-rate tie problem, but the documented funding formula also means premium sign and actual funding received are distinct. [calibration](docs/trials/trial_04_calibration/calibration_r2.md:6) · [constitution L13](.claude/skills/quant-bot-constitution/references/research-protocol.md:95)
+> 
+> ### (ii) Crowding-sign conditions
+> 
+> **Finding.** Requiring `p_T > 0` for S makes its label "positive-premium crowding" more literal, but reduces the replay from **30 to 13 trades**: 2022 falls from 12 to **1**, and 2023 from 18 to 12. Requiring `p_T < 0` for L changes nothing in this replay: **42 remains 42**. These are full state-machine replays, so the difference is not simply a count of rejected prints. [count JSON](docs/trials/trial_04_calibration/count_r2.json:287) · [count JSON](docs/trials/trial_04_calibration/count_r2.json:314) · [sign logic](docs/trials/trial_04_calibration/count_r2.py:70)
+> 
+> **Options and risks.** Keep rank alone with a relative-crowding claim, or require sign and accept the much smaller S sample. A sign gate does **not** guarantee favorable carry at later settlements; premium, the funding formula, and future realized rates must be kept separate. [calibration](docs/trials/trial_04_calibration/calibration_r2.md:8) · [r1 funding-accounting precedent](docs/trials/trial_04_preregistration.md:54)
+> 
+> ### (iii) Fixed five days or minimum three days with median-cross exit and ten-day cap
+> 
+> **Finding.** Fixed five days directly tests the revised multi-day claim and gives a simple, fixed-duration P1 comparison. The replay has 25 time exits and 5 stop exits for S, and 38 time exits and 4 stop exits for L; "five-day hold" therefore remains subject to earlier SL or liquidation. The alternative tests whether normalization after at least three days carries exit information, but its exact median-cross rule and resulting counts have **not** been replayed here. It can also restore the regime-dependent holding-time issue behind r1's withdrawal. [brief](t4r2_brief.md:5) · [count JSON](docs/trials/trial_04_calibration/count_r2.json:274) · [registry #66](docs/trial_registry.md:74)
+> 
+> **Options and risks.** Either duration rule can be stated as a hypothesis before IS. For the variable rule, define which print constitutes a cross, which trailing median is available then, decision and fill times, and precedence against SL and the cap. Longer exposure raises adverse-excursion risk: in the pre-IS daily-entry calibration, moves exceeding 8% were 15.0% long/17.4% short over five days, versus 28.3%/30.8% over ten days. Those unconditional daily-entry rates are context, not signal-conditioned trade outcomes. [calibration](docs/trials/trial_04_calibration/calibration_r2.md:26)
+> 
+> ### (iv) Premium-window look-ahead and the T funding
+> 
+> **Finding.** The specified 480 bars open from `T−8h` through `T−1m`; the last closes at **T**. They contain no bar opening after T. The replay then waits for the bar opening at T to close at **T+1m**, and enters at the T+1m bar open. On that event ordering, the new position **does not settle the T funding**; it can settle later funding boundaries while open. [brief](t4r2_brief.md:2) · [replay](docs/trials/trial_04_calibration/count_r2.py:52) · [trial #3 funding convention](docs/trials/trial_03_preregistration.md:37)
+> 
+> **Risk and options.** The unresolved causality issue is **availability and fill ordering**, not the window endpoints. "Decision at T+1m close" and "fill at T+1m open" share a timestamp; the draft must say whether that open is executable after all inputs arrive, or use a later eligible fill. Historical bar timestamps do not prove publication or receipt time. Options include a documented conservative delay, or a receipt-based forward rule with a specified late/missing-print response. [replay's proposed availability rule](docs/trials/trial_04_calibration/count_r2.py:7) · [r1 availability discussion](docs/trials/trial_04_preregistration.md:179)
+> 
+> ### (v) G0 viability
+> 
+> **Finding.** The brief's `n ≥ 30` is the uncorrelated floor, not the constitution's full expected-count check: `n ≥ 30(1+4ρ̄)`. At the trial #3 convention's `ρ̄ = 0.15` floor, that is **48 per arm**, and greater positive realized dependence can require more. The pre-IS r2 replay's **S 30 / L 42** misses 48 in both arms. It cannot supply `ρ̂` or `n_eff`, because it computes no trade returns. Pre-IS counts also cannot establish actual IS G0. [constitution](.claude/skills/quant-bot-constitution/references/research-protocol.md:22) · [trial #3 G0](docs/trials/trial_03_preregistration.md:68) · [count JSON](docs/trials/trial_04_calibration/count_r2.json:260)
+> 
+> **Options and risks.** Rework the hypothesis using pre-IS evidence and recount; register the current rule with its expected G0 shortfall disclosed; narrow to a separately justified arm; or defer it. None of the tested *single* changes gets S to 48: Q0.90 gives 43, a three-day hold 33, and removing hysteresis 35. Even the tested three-day/no-hysteresis combination gives S 40. Q0.90 gives L 56, and a three-day hold gives L 49, but these are different hypotheses, not free repairs to the current rule. Repeated calibration choices also need transparent pre-commitment. Merely replacing the 48 check with 30 would leave the constitutional expected-count conflict unresolved. [variant outputs](docs/trials/trial_04_calibration/count_r2.json:2) · [variant outputs](docs/trials/trial_04_calibration/count_r2.json:105) · [constitution checklist](.claude/skills/quant-bot-constitution/references/research-protocol.md:98)
+> 
+> ### (vi) The 22% stop-distance band
+> 
+> **Finding.** The table's "22.0% at 3x" is rounded. Under the cited tier-one example and strict `1.5 × sl_dist < liquidation distance`, 3x permits **less than about 22.010% long** and **less than about 21.835% short**. Thus a short at the proposed inclusive 22.0% band top fails B2 even at 3x. The exact B2 gate can reject it, but the band cannot be described as wholly feasible. [constitution formula](.claude/skills/quant-bot-constitution/SKILL.md:76) · [SL↔L table](.claude/skills/quant-bot-constitution/references/strategy-modules.md:16) · [brief arithmetic](t4r2_brief.md:31)
+> 
+> **Additional risk.** At the documented BTC `MIN_NOTIONAL` baseline of 50 USDT, a 1% risk budget on 1,000 USDT targets only `10/sl_dist` notional: **45.45 USDT at 22%**, before quantity rounding. The existing sizing path floors quantity and rejects below-minimum entries. Runtime rules must still be pinned for the trial; the 50 USDT figure is a documented baseline, not a newly fetched value. Options are to state a band with direction-specific gate behavior, define a band whose endpoints pass all pinned execution constraints, or keep a broad screening band while explicitly reporting subsequent B2 and normalization rejections. [constitution](.claude/skills/quant-bot-constitution/SKILL.md:41) · [sizing](sizing/position.py:182) · [normalization](exchange/normalize.py:78)
+> 
+> ### (vii) Count-replay fidelity
+> 
+> **Finding.** `count_r2.py` is useful for **relative frequency, occupancy, and rough leverage distribution**, but is not faithful enough to certify executable entries, G0, survival, or P1. It explicitly calls itself a simplified pre-IS, no-P&L replay. [replay header](docs/trials/trial_04_calibration/count_r2.py:1)
+> 
+> Its material simplifications are:
+> 
+> - It averages available 1m premium closes with a 99% coverage rule; the underlying funding premium is described as a 5-second-sample average. It assumes print availability at the selected decision time. [calibration](docs/trials/trial_04_calibration/calibration_r2.md:8) · [replay](docs/trials/trial_04_calibration/count_r2.py:7)
+> - It uses mark open as entry and stop reference, omitting 6 bps slippage, tick and quantity rounding, `MIN_NOTIONAL`, two-stage sizing, runtime bracket changes, and actual fills. It records a simplified tier-one leverage but does not reject a trade when that leverage is `None`. [replay](docs/trials/trial_04_calibration/count_r2.py:93) · [replay](docs/trials/trial_04_calibration/count_r2.py:109) · [trial #3 execution precedent](docs/trials/trial_03_preregistration.md:29)
+> - Its stop is `entry_open × (1 ± 2 × ATR/prior_close)`, whereas the brief says `entry ∓ 2 × ATR` as an absolute distance. Those coincide only when entry and prior close coincide. An SL touch makes the position flat from the following minute; the replay does not model a gap fill, competing intrabar liquidation, funding-driven liquidation distance, or execution costs. [ATR code](docs/trials/trial_04_calibration/calibrate_r2.py:174) · [replay](docs/trials/trial_04_calibration/count_r2.py:101) · [brief](t4r2_brief.md:7)
+> - It screens the **whole future hold** for mark gaps and rejects holds extending beyond its pre-IS array, including where an earlier stop might have ended exposure. It does not verify funding records across the hold. Its output has no returns, carry, P1, or `ρ̂`. [replay](docs/trials/trial_04_calibration/count_r2.py:97) · [output fields](docs/trials/trial_04_calibration/count_r2.py:117)
+> 
+> **Options and risks.** Use these counts as a redesign screen, or run a closer **pre-IS-only** execution replay before treating a candidate as G0-plausible. Neither approach permits inference about sealed IS performance.
+> 
+> ### (viii) P1 at fixed five days
+> 
+> **Finding.** With fixed five-day `h`, P1 can hold direction and duration constant while randomizing start time, testing whether **signal timing and its associated premium/funding environment** outperform other eligible times. It does not isolate price reversal from carry: random starts change both the premium level and realized funding path. Separately reporting price P&L and funding P&L makes that distinction visible. Trial #3's P1 convention pairs stop distance with duration, places longer slots first, specifies seeded draws, and discards when draw failures exceed 1%; those details need an r2 counterpart. [constitution P1 convention](.claude/skills/quant-bot-constitution/references/research-protocol.md:53) · [trial #3 P1](docs/trials/trial_03_preregistration.md:92) · [r1 P1 discussion](docs/trials/trial_04_preregistration.md:81)
+> 
+> **Boundary and liquidation risks.** Align P1's entry and exit instants with the original's five-day clock, funding-before-exit order, and eligible funding records. Trial #3 P1 exited at the last held minute's **close**, while the original time exit used the next minute's **open**; r1 already flags that asymmetry. P1 has no SL, so an otherwise valid 3–30x draw can liquidate; define whether and how such draws enter the null distribution and report their rate. Trial #2's cited 5.2% P1 liquidation figure arose under its older leverage setting and is a warning, not an r2 estimate. [trial #3 clock](docs/trials/trial_03_preregistration.md:31) · [r1 P1 caveats](docs/trials/trial_04_preregistration.md:86) · [constitution L9](.claude/skills/quant-bot-constitution/references/research-protocol.md:91)
+> 
+> ### (ix) Other rules to pre-commit
+> 
+> **Finding and options.** The r2 draft needs explicit choices for:
+> 
+> - **Forward availability:** timestamp source and receipt test for completed premium bars, action on a late or absent bar, and the earliest executable fill. Historical event timestamps alone cannot verify that rule. [replay](docs/trials/trial_04_calibration/count_r2.py:10) · [r1 precedent](docs/trials/trial_04_preregistration.md:20)
+> - **Premium approximation:** 1m-close mean versus the stated 5-second construction; required minute coverage, treatment of missing or duplicate minutes, and whether 270 means **valid prior prints** or a fixed 90-day calendar window. The replay uses the former. [calibration code](docs/trials/trial_04_calibration/calibrate_r2.py:112) · [calibration](docs/trials/trial_04_calibration/calibration_r2.md:8)
+> - **Gaps during a hold:** retrospective entry inadmissibility using a complete future span, a defined gap exit/censor rule, and the corresponding forward failure rule are different choices. State a common eligible set for original and placebos; never silently fill missing minutes. [replay](docs/trials/trial_04_calibration/count_r2.py:14) · [trial #3 admissibility](docs/trials/trial_03_preregistration.md:35)
+> - **Same-boundary precedence:** funding, pending entry, liquidation, SL, time exit, any median-cross exit, and hysteresis reset. Trial #3 supplies an order, and r1 records a proposed extension, but withdrawn r1 does not settle r2. [trial #3](docs/trials/trial_03_preregistration.md:31) · [r1](docs/trials/trial_04_preregistration.md:29)
+> - **Warm-up and window ends:** For **270 preceding valid prints**, the brief's `DATA_START = 2023-10-02` is arithmetically sufficient for the first 2024-01-01 print if those bars are present; its earliest required preceding print is 2023-10-03 00:00, whose window opens 2023-10-02 16:00. The 14-day ATR also fits. Sufficiency of dates does not prove completeness. Fix the behavior when warm-up prints are invalid and require each admitted trade and its exit to fit its evaluation window without reading beyond it. [brief](t4r2_brief.md:33) · [trial #3 window convention](docs/trials/trial_03_preregistration.md:34)
+> 
+> The standing protocol also calls for the sign-first §7-2 classification, per-arm gates and survival, P1–P3, and explicit N treatment. Registry #66 leaves N at 6 after r1's withdrawal; the brief proposes N = 8 for two newly judged arms. These belong in the preregistration, along with how r2's multi-day premium-and-carry hypothesis differs from L1–L13. [constitution](.claude/skills/quant-bot-constitution/references/research-protocol.md:17) · [constitution](.claude/skills/quant-bot-constitution/references/research-protocol.md:35) · [brief](t4r2_brief.md:12)
+> 
+> **Review rationale:** the present pre-IS count misses the constitution's 48-per-arm planning check, and executable-count and timing rules remain material open design choices. That calls for resolving and documenting a coherent candidate before drafting an anchorable r2; it is not a choice of threshold, hold rule, or arm.
+> 
+> VERDICT: REDESIGN-FIRST
