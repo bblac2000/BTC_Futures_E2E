@@ -49,8 +49,40 @@ def minute_mark() -> tuple[int, np.ndarray, np.ndarray, np.ndarray]:
     return t0, o, h, lo
 
 
+def premium_minutes_checked() -> dict[int, float]:
+    """r3 결정 9: 중복 분 = 데이터 품질 중단(같은 open_ms가 두 번 나오면 예외)."""
+    import hashlib
+    import io
+    import zipfile
+    out: dict[int, float] = {}
+    for r in json.loads((HERE / "premium_fetch.json").read_text())["files"]:
+        data = (C.VAR / r["file"]).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == r["sha256"]
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            [name] = z.namelist()
+            for row in csv.reader(io.TextIOWrapper(z.open(name))):
+                if not row or not row[0].isdigit():
+                    continue
+                t = int(row[0])
+                assert t <= C.PRE_IS_END
+                if t in out:
+                    raise RuntimeError(f"중복 분 {t} — 데이터 품질 중단")
+                out[t] = float(row[4])
+    return out
+
+
+def funding_buckets() -> set[int]:
+    """1차 보정의 펀딩 REST 원시(2021-06 … 2023-12) — 분 버킷에 확정 펀딩이 정확히 1건인 경계."""
+    n: dict[int, int] = defaultdict(int)
+    for ln in (HERE / "raw_funding.jsonl").read_text().splitlines():
+        for r in json.loads(ln)["page"]:
+            t = int(r["fundingTime"])
+            n[t - t % MIN] += 1
+    return {b for b, k in n.items() if k == 1}
+
+
 def prints() -> list[tuple[int, float]]:
-    pm = C.premium_minutes()                                               # open_ms → close
+    pm = premium_minutes_checked()                                         # open_ms → close
     first = min(pm) - min(pm) % H8 + H8
     out = []
     for T in range(first, C.PRE_IS_END + 1, H8):
@@ -60,7 +92,8 @@ def prints() -> list[tuple[int, float]]:
     return out
 
 
-def run(pr, mk, atr, arm: str, q_lo: float, q_hi: float, sign: bool, hold: int = HOLD, hyst: bool = True) -> dict:
+def run(pr, mk, atr, arm: str, q_lo: float, q_hi: float, sign: bool, hold: int = HOLD, hyst: bool = True,
+        band_top: float = 0.22, fund: set[int] | None = None) -> dict:
     t0, o, h, lo = mk
     ts = [t for t, _ in pr]
     ps = [p for _, p in pr]
@@ -99,13 +132,18 @@ def run(pr, mk, atr, arm: str, q_lo: float, q_hi: float, sign: bool, hold: int =
             cnt["abort_no_data"] += 1
             continue
         sl_dist = 2.0 * a
-        if not 0.01 <= sl_dist <= 0.22:
+        if not 0.01 <= sl_dist <= band_top:
             cnt["abort_sl_dist_out_of_range"] += 1
             continue
         seg_h, seg_l = h[fi:end], lo[fi:end]
         if np.isnan(seg_h).any() or np.isnan(o[end]):
             cnt["abort_data_gap"] += 1
             continue
+        if fund is not None:                                               # r3 결정 7: 15개 경계마다 검증된 확정 펀딩
+            bs = [b for b in range(T + H8, fill + hold * MIN + 1, H8)]
+            if len(bs) != hold * MIN // H8 or any(b not in fund for b in bs):
+                cnt["abort_funding_unvalidated"] += 1
+                continue
         e = o[fi]
         sl = e * (1 - sl_dist) if arm == "L" else e * (1 + sl_dist)
         hit = np.nonzero(seg_l <= sl)[0] if arm == "L" else np.nonzero(seg_h >= sl)[0]
@@ -144,6 +182,9 @@ def main() -> int:
                 "Q.10/.90": (0.10, 0.90, False), "Q.10/.90_with_sign": (0.10, 0.90, True)}
     for name, (ql, qh, sign) in variants.items():
         res[name] = {arm: run(pr, mk, atr, arm, ql, qh, sign) for arm in ("S", "L")}
+    fund = funding_buckets()
+    r3 = {arm: run(pr, mk, atr, arm, 0.10, 0.90, False, band_top=0.20, fund=fund) for arm in ("S", "L")}
+    res["r3_decisions(Q.10/.90 · band 1–20% · 15 funding validated)"] = r3
     one_knob = {"hold_3d": dict(hold=3 * 1440), "no_hysteresis": dict(hyst=False), "hold_3d_no_hysteresis": dict(hold=3 * 1440, hyst=False)}
     for name, kw in one_knob.items():
         res[name] = {arm: run(pr, mk, atr, arm, 0.05, 0.95, False, **kw) for arm in ("S", "L")}
