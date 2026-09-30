@@ -8684,3 +8684,262 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0efa5-8f3a-7d22-9c85-1a3f2235317a
 > Resume in Codex: codex resume 01a0efa5-8f3a-7d22-9c85-1a3f2235317a
+
+## 2026-09-30 — 트라이얼 #3 (g) HALF 1 **before-pass**(advisor + Codex task-mund9mud-n4ys5k FIX-PLAN-FIRST → r2 task-mundfdzm-x4v99h FIX-PLAN-FIRST → r3 task-mundkyym-dcyxir **PROCEED**)
+- 사용자 (f) 승인 · (g)를 두 반으로(HALF 1 = 동결 · 멈춤 · "go capture" 뒤 HALF 2).
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 H 정의·행 순서 | ✅ | K1′ C1(규약) → C2(#52 · = H) → C3(목록 + #53) |
+| advisor | 2 판정기가 실행 기록 검증 | ✅ | K5 |
+| advisor | 3 실패 기록의 P&L 필드(사용자 규칙 충돌) | ✅ | K8 — 사용자에게 질문(go capture 전) |
+| advisor | 4 자식마다 fetch 위험 | ✅ | K3/K3′ |
+| advisor | 5 실패 파일 위치·P1 | ✅ | K7 |
+| advisor | 6 jobs는 측정으로 | ✅ | K10 |
+| advisor | 7 stdout 위생 | ✅ | K11 |
+| advisor | 8 격리(지연 import) | ✅ | K11 |
+| advisor | 9 집계 핀 | ✅ | K4 |
+| advisor | 10 go capture 전 목록 | ✅ | 보고 |
+| advisor | 11 행 번호 | ✅ | #52 규약 · #53 동결 · #54 핀 · #55 판정 |
+| Codex | 1 판정기 관문(BLOCKER) | ✅ | K5 + K5′(O_EXCL 시도 기록) |
+| Codex | 2 스케줄러·시도 기록(BLOCKER) | ✅ | K6/K6′ |
+| Codex | 3 핀 형식 | ✅ | K4 |
+| Codex | 4 실패 보존 범위 | ✅ | K7 |
+| Codex | 5 행 강제 | ✅ | K2′(H 이력에 묶음) |
+| Codex | 6 P1 분할 | ✅ | K9 |
+| Codex | 7 kline 범위 | ✅ | K4 |
+| Codex r2 | #52 순환 · 이력 · 동결 집합 · 단독 자식 · 중단 | ✅ | r3 K1′ K2′ K2″ K3′ K6′ |
+| Codex r3 | 고정 경로 존재 | ✅ | _all_present(H 트리·작업 트리) |
+
+### 계획 r1 원문
+> # Trial #3 step (g) HALF 1 — provenance, stage runner, CLI, freeze: BEFORE-PASS plan (no code yet; no real data read in HALF 1)
+> 
+> User (g) instructions: HALF 1 = build remaining (g) items + before/after-pass; append the conventions registry row (final SHA + commit);
+> code-freeze row (frozen set with per-file SHA256 + freeze commit); push; confirm evaluator commit ⊂ origin/main and capture CLI rc-6 gate
+> passes; report HEAD, both row texts, conventions hash, disk/memory estimate; STOP. HALF 2 (after "go capture"): capture → pins → verify →
+> 8 runs → P1 parts ×2 arms → merge → evaluator once; no P&L before the evaluator; failure = stop (no patch-and-rerun without a registry row,
+> Codex review, new freeze row, clean restart; if the evaluator produced a verdict the trial closes with it); push after steps 5, 6, 7.
+> 
+> ## Plan
+> G1 backtest/t3_provenance.py (new, in the freeze set): FREEZE_FILES/FREEZE_GLOBS moved here from evaluate_t3 (+ t3_provenance, t3_stages,
+>    p1_t3_run; strategies/trial03/*.py covers run.py); fingerprint(repo) = SHA256 of the sorted (path, sha256) list of the freeze set;
+>    require_frozen(repo, H) (moved: clean tree, H ⊂ HEAD and origin/main, freeze file set + bytes at H == now).
+> G2 DATA PINS: strategies/trial03/data_pins.json = {"manifest_sha256", "raw_inventory_sha256" (SHA256 of the sorted "name=sha" lines of
+>    manifest.raw — ~830 raw files incl. ~822 OI zips + CHECKSUMs), "prepared": {6 prepared files → sha256}, "oi_unusable_total",
+>    "oi_unusable_is_slots", "is_grid_slots"}. load_pins(repo): tracked, committed, pushed (fetch), and the registry at the pins commit has exactly
+>    one row mentioning the pins path whose `name=64hex` tokens equal {manifest, raw_inventory, 6 prepared} (trial #2 check_pins_registry
+>    pattern, aggregate raw hash instead of 830 tokens).
+> G3 VERIFY RECEIPT: stage `verify` runs `prepare_t3 --verify` (rebuild from raw, hashes == manifest) in a subprocess, then writes
+>    _records/verify_receipt.json {evaluator_commit H, fingerprint, pins_commit, manifest_sha256, raw_inventory_sha256, prepared hashes};
+>    every later stage and the evaluator re-check the receipt against current pins/manifest/fingerprint.
+> G4 PINNED LOADERS: prepare_t3.load_prepared_pinned (existing: dir under var/t3, manifest, pins, range, timestamps) + new
+>    load_kline_daily_pinned; both take the pins dict derived from data_pins (manifest.raw checked against raw_inventory_sha256).
+> G5 RUN CLI strategies/trial03/run.py: `--arm --variant --prepared --out`; decimal.setcontext(Context()); gate = receipt ok for the current
+>    fingerprint; loads pinned prepared (bars, fundings, OI rows, unusable slots); harness.run_arm (production: load_rules, TF_V1);
+>    writes via t3_outputs.write_run (v_days, tf_v1 SHA, #48 SHAs). EVENT-LOG PRESERVATION: harness.run_arm wraps the replay: on any exception
+>    raise RunFailure(strategy=…) from e; the CLI catches it, writes out/_failure/{events.jsonl, state.json (state, funnel, sub, entry,
+>    window_bars, cooldown_end, last event), error.txt (traceback)} and exits rc 7; the stage runner records rc 7 and STOPS the stage.
+> G6 P1 CLI backtest/p1_t3_run.py: `--arm --lo --hi --prepared --out` (out = runs/<arm>_P1/part_<lo>_<hi>); reads that arm's base run via
+>    t3_outputs.read_run (the base run record must be done/verified), p1_t3.run_range (production), writes p1_part.json.
+> G7 backtest/t3_stages.py (CLI `python -m backtest.t3_stages --evaluator-commit H --stage …`): stages prepare → pins (writes data_pins.json;
+>    then commit + registry row + push = checkpoint) → verify → runs (8 isolated subprocesses, --jobs) → p1 (parts per arm, --parts, --jobs) →
+>    p1-merge (t3_outputs.write_p1_merged, in-process, recorded) → evaluate (in-process evaluate_t3.evaluate with pinned loaders + receipt; once).
+>    Every stage: require_frozen(H) + fingerprint; per-job record {run record, provenance (H, fingerprint, pins_commit, manifest sha,
+>    variant), wall_s}; resume only if the record's provenance and ALL output hashes equal now (else error, never silent rerun); a stage
+>    stops at the first non-zero rc (rc 7 → failure preserved). Runner never opens outputs (hashes only).
+> G8 EVALUATOR record.json: inputs_sha256 over base EXCLUDING prepared/raw (hashed via manifest) + "prepared_pins" (data_pins) +
+>    "verify_receipt" + fingerprint. evaluate() gets them from the stage (no new override of computation).
+> G9 prepare_t3 `--gate-check`: evaluates the rc-6 gate (H ⊂ origin/main and H contains backtest/evaluate_t3.py) and exits 0/6 WITHOUT
+>    capturing — used in HALF 1 step 3 to confirm.
+> G10 REGISTRY ROWS (HALF 1): conventions row (#52): file SHA256 + commit + "이 행 뒤 파일 불변" + summary; freeze row (#53): freeze commit H
+>    (= evaluator commit), per-file SHA256 of the freeze set (as a committed manifest file docs/trials/trial_03_freeze_manifest.json whose
+>    SHA256 the row pins, plus the fingerprint) — rows are docs-only commits after H (not in the freeze set).
+> G11 ESTIMATES (report): bars ≈ 822 days × 1,440 = 1.18 M; trial #2's 1.3 M-bar runs peaked 2.35–3.67 GB RSS per child → ~3 GB per run/P1
+>    child → --jobs 3 on the 16 GB box; disk: raw archive rows jsonl ~0.4 GB, OI zips ~10–20 MB, prepared < 0.2 GB, outputs < 0.1 GB → < 1 GB.
+> Tests (synthetic): provenance (fingerprint changes on a freeze-file edit; pins/registry checks in a temp repo; receipt checks); RunFailure
+> preservation (forced PositionBusyError in a subprocess → _failure files + rc 7); stages end-to-end in a temp repo with a stub prepare runner
+> (fake REST/OI) through verify → 8 runs → P1 → merge → evaluate once (synthetic window dates → V empty → both arms 폐기 is fine for plumbing);
+> resume refusal on a changed output; --gate-check rc 0/6; static: no fixture functions / overrides / draws_total in the new CLIs.
+> Q1 aggregate raw pin (raw_inventory_sha256) acceptable vs trial #2's per-file tokens? Q2 anything the HALF 2 failure rule needs from the
+> runner beyond G5/G7? Q3 what else must be frozen/recorded before "go capture"?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (g) HALF 1 before-pass. The plan mirrors trial #2's structure correctly (isolated subprocess per run, verbatim record per job, resume only after verification, evaluator once). What it leaves open, blocking first.
+> 
+> **1. BLOCKER — the freeze commit H is not yet defined, and its position relative to the rows matters.** H must be the last commit that touches any file in the freeze set. After-pass fixes to code move H. So the sequence is: after-pass MERGE → final code commit = H (conventions file finalized in or before H — it's docs, so it can share the commit) → docs-only commit with rows #52 (conventions: final file SHA + commit) and #53 (freeze: H + `docs/trials/trial_03_freeze_manifest.json` generated from H's tree + fingerprint) → push → `git merge-base --is-ancestor H origin/main` and `prepare_t3 --gate-check --evaluator-commit H` → rc 0. Write this sequence into the plan and the report; no code commit after H. Also state now that HALF 2 step 5 contains a mid-half checkpoint the user's text doesn't list: `data_pins.json` + registry row #54 must be committed and pushed between capture and verify (the pins file is `.json`, outside the `*.py` glob, so it doesn't break the freeze — say so).
+> 
+> **2. MAJOR — the evaluator itself must verify the run records, not just the files.** G8 gives the evaluator pins + receipt, but the "once" gate is the evaluator, and `t3_outputs` checks file inventory only. Before `compute`, production `evaluate()` should require: receipt present with `fingerprint == current fingerprint == H's`, `pins_commit` matching `load_pins`; every one of the 8 run records and all P1 part/merge records present with the same provenance and **output hashes equal to the files now**. Trial #2's `check_inventory(st, prov)` did this. Otherwise an output replaced after its run passes. Put it in item 58's "(g)가 채운다" as done-by-(g), and test a tampered `trades_t3.jsonl` after a recorded run → refusal.
+> 
+> **3. MAJOR — a conflict in the user's HALF 2 rules you should surface now.** Rule 6: no P&L before the evaluator. Failure rule: "report the failure with the preserved event log." The event log contains `realized_pnl`, `wallet_after`, `funding_paid`. Propose: on failure, the report shows state, funnel/entry counts, and the last N events with `realized_pnl`/`wallet_after`/`exit_price`/`net`-class fields redacted; the full log is preserved on disk under `_records/failures/`, its SHA256 recorded and pushed (the file itself is in gitignored `var/`, so "nothing local-only" is satisfied by the hash + a copy in the ops_log only of the redacted view). Ask the user to confirm before "go capture."
+> 
+> **4. MAJOR — transient `git fetch` in 24 child gates is a false-failure risk under the strict protocol.** If each subprocess gate fetches and one fetch hiccups, that run exits non-zero and the user's rule says stop, registry row, Codex review, clean restart. Fetch once per stage in the runner; children call `require_frozen(fetch=False)` against the just-fetched `origin/main`; record `fetched_at` in the stage record. State the trade-off explicitly for Codex.
+> 
+> **5. Failure artifacts — placement and P1.** `run_isolated` hashes only `out_dir.iterdir()` files; a `_failure/` subdirectory isn't recorded. Write `_failure_events.jsonl`, `_failure_state.json`, `_failure_error.txt` directly into `out_dir` (they enter the record's output hashes and make `read_run`'s exact file set fail, which is the intended refusal), and have the runner copy them to `_records/failures/<name>/`. For P1, an `AssertionError` (placement-accepted sizing refused at execution) should preserve the draws completed so far the same way.
+> 
+> **6. Memory — don't set `--jobs` from an estimate.** The (b) regression's largest child was 3.64 GB on a 15 GB box; three jobs left ~4 GB free. Trial #3's bar count is similar (1.18 M) and the strategy adds little state. Propose trial #2's own protocol for HALF 2 step 6: run `L_base` alone first, read max RSS from the record, then set jobs (likely 3). Report the estimate as a plan, not a decision. P1 wall time scales with the arm's trade count, unknown until the runs; give a range and refine after step 6 (trade counts are permitted).
+> 
+> **7. Stdout hygiene enforces rule 6 mechanically.** The run and P1 CLIs print counts only (trades, funnel totals, draws, failed); the runner's record stores the stdout tail, so any mean/net/wallet in stdout would leak. Add a test that the CLI stdout contains no `net`, `mean`, `wallet`, `pnl`, `sharpe` tokens.
+> 
+> **8. Isolation.** `t3_stages` should import `evaluate_t3` lazily inside the evaluate stage; at module top it pulls `harness` → `strategy`, so the runner process would hold the strategy module during runs/P1 — against the constitution's isolation intent even though `assert_not_imported` targets only the launched module.
+> 
+> **9. Q1 — the aggregate pin is sound, for a reason worth stating.** `manifest_sha256` pins the manifest; the manifest enumerates every raw file's hash; `verify_manifest` re-hashes every raw file against it. `raw_inventory_sha256` is a redundant second lock. Row tokens: `manifest=…`, `raw_inventory=…`, six `prepared=…`; also put `oi_unusable_is_slots/is_grid_slots` counts in the row text so the 0.5% cap outcome is visible in the registry.
+> 
+> **10. Q3 — what else before "go capture":** the freeze manifest test should compare against `git show H:<file>` (stable forever), not the working tree; Python/numpy versions already land in `RunRecord`; the archive CSV contents are captured into raw and therefore pinned; `liq_fee` for the evaluate stage comes from `load_rules()` (#48), say so; `BASE_DIR = var/t3/IS` (the `check_out_dir` bound). Nothing else needs freezing.
+> 
+> **11. Registry numbering:** #52 conventions, #53 freeze, then HALF 2: #54 data pins, #55 evaluator verdict.
+> 
+> **Sequence:** Codex lands → log both verbatim with positions → plan r2 with items 1–5 → narrow re-check → PROCEED → build test-first (`t3_provenance` → `run.py` + RunFailure → `p1_t3_run` → `t3_stages` → `--gate-check`) → shared-diff check → after-pass → H → rows → push → gate-check → report → STOP. Item 3 goes in the report as a question; everything else the user can read as done.
+
+### Codex 원문(verbatim · task-mund9mud-n4ys5k)
+> ## Before-pass findings
+> 
+> 1. **BLOCKER — The evaluator can reach computation without proving the stage chain.** G8 adds hashes to `record.json`, but [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:388) currently computes before collecting input hashes, and its public `evaluate()` accepts caller-supplied bars and daily closes. G3/G7 do not explicitly require it to validate the successful verify record and every run, P1 part, and merge record. **Fix:** put that validation inside the production `evaluate()` entry point. Require the receipt plus its successful `prepare_t3 --verify` record; validate the exact eight run records, both arms’ complete P1 part records, and both merge records against their commands, provenance, and output hashes. Load bars and daily closes there through pinned loaders. Hash the declared inputs before computation, check them again before publishing, and write those hashes to `record.json`. A direct call must pass the same gate as the stage CLI.
+> 
+> 2. **BLOCKER — “Stop at first failure” needs an explicit scheduler and evaluation-attempt rule.** The Trial #2 model queues a whole batch with `ThreadPoolExecutor.map` ([t2_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:102)); copying it would let later jobs launch after a child returns rc 7. Also, [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:392) blocks a repeat only once `evaluation/` exists, leaving a gap if a verdict is computed but publication fails. **Fix:** launch at most `--jobs` children, stop submitting immediately on the first nonzero result, cancel pending work, account for children already running, preserve each failure record, and return failure without starting the next stage. Write a durable evaluation-attempt record *before* calling the evaluator; any interrupted attempt requires the stated registry/review/new-freeze procedure, while a published verdict closes the trial.
+> 
+> 3. **MAJOR — The aggregate pin format is incompatible with the existing loader.** [prepare_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:305) requires `pins["raw"]` to equal `manifest["raw"]`; G2 supplies only `raw_inventory_sha256`. **Fix:** define one canonical encoding, such as sorted UTF-8 `name=sha256\n` lines, and change both pinned loaders and the pins/verify checks to compare its hash with the pin. Keep `verify_manifest()` checking every actual raw file and the exact file inventory. Validate the six prepared hashes and derive/check the OI count fields against the pinned prepared audit.
+> 
+> 4. **MAJOR — G5 must preserve failures after replay as well as during it.** [harness.py](/home/cms/project/BTC_Futures_E2E/strategies/trial03/harness.py:157) can raise during `replay`, `finish`, invariant checks, trade pairing, or the V check. Its strategy object is local to `_run_arm`, so a caller cannot recover its events when one of those steps raises. **Fix:** create and retain the strategy before the protected block, wrap every step from replay through final validation in `RunFailure(strategy=…)`, and write `_failure` atomically from that strategy on rc 7. Keep input and rule loading failures distinguishable, since no strategy exists yet.
+> 
+> 5. **MAJOR — The freeze rows need to be enforced, not only reported.** G10’s manifest is committed after H, but G1 checks code against H without checking that the pushed #52 conventions row and #53 freeze row identify the current conventions hash, manifest hash, fingerprint, and H. The conventions file itself still says the (g) choices are pending ([conventions.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:1)). **Fix:** append the final (g) choices before computing its SHA; commit the conventions file and #52 row before H. Generate the per-file manifest from H, commit #53 afterward, and require both pushed rows and the manifest bytes to match before capture and at every later gate. Apply the same gate to direct `prepare_t3` capture and `--gate-check`.
+> 
+> 6. **MAJOR — P1 completion must use an expected partition.** The current [P1 merge](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3.py:183) returns early for a zero-trade arm, before checking draw coverage. G7 also leaves `--parts` free to change between invocations. **Fix:** record a canonical partition of 0…999 for each arm before P1 starts. Require exactly those successful part records and no extra part directories before either merge, including for a zero-trade arm; reject a changed `--parts` value on resume. The evaluator should verify the same partition.
+> 
+> 7. **MINOR — Complete the kline loader’s IS range check.** The proposed new loader must check daily row dates, ordering, uniqueness, and the IS bound after hash validation. The Trial #2 analogue only reads the JSON after validating the other prepared inputs ([prepare_t2.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:400)); Trial #3’s OOS guard calls for a check at each loader boundary.
+> 
+> ## Q1–Q3
+> 
+> **Q1.** Yes. An aggregate raw pin is acceptable if its byte encoding is specified, it includes the exact raw inventory and each file hash, and every consumer recomputes it from a manifest that has been checked against the actual files. The registry row can then carry one aggregate token plus the manifest and six prepared hashes. The estimate should count ZIPs *and* CHECKSUMs: 822 OI days imply about 1,644 OI raw files, before the other raw files.
+> 
+> **Q2.** Add the scheduler stop rule, durable evaluation-attempt record, exact failed-output inventory, and a rule that no failed or partial job is resumed or overwritten. Record rc 7 and hash `_failure` recursively; never treat it as a completed run. Jobs already active when another fails need an explicit stop/accounting policy.
+> 
+> **Q3.** Before “go capture,” freeze the final conventions text and rows #52/#53; the complete code set including the new CLIs, provenance, and stage runner; the per-file manifest and fingerprint; the expected P1 partition; and the exact gate behavior for direct capture. Record the pushed HEAD, H, both row texts, conventions and manifest SHA256s, fingerprint, and the observed rc 0/6 gate checks. The rules snapshot hashes remain anchored by #48 and must still be checked by the production loaders.
+> 
+> This was a read-only review; I did not run tests or read real trial data.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0efb6-266a-77c0-8e15-f0c7c1d15ed5
+> Resume in Codex: codex resume 01a0efb6-266a-77c0-8e15-f0c7c1d15ed5
+
+### 계획 r2 원문
+> # Trial #3 (g) HALF 1 plan r2 — resolutions (advisor 1–11 + Codex task-mund9mud-n4ys5k 1–7, Q1–Q3)
+> 
+> K1 FREEZE SEQUENCE (advisor 1, Codex 5): after-pass MERGE → append conventions section H (the (g) choices) → docs commit with row #52
+>    (conventions file SHA256 + "the commit holding those bytes" = this same commit) → this commit is H (last commit before freeze; its tree holds
+>    all final code) → generate docs/trials/trial_03_freeze_manifest.json from `git show H:<file>` for the freeze set (+ fingerprint) → commit
+>    with row #53 (H, manifest SHA256, fingerprint) → push → gate-check. No code commit after H. HALF 2 mid checkpoint: data_pins.json
+>    (a .json outside the *.py glob, not in the freeze set) + row #54 committed and pushed between capture and verify; #55 = verdict.
+> K2 ROW GATES (Codex 5): t3_provenance.require_rows(repo, H, ref="origin/main"): the registry at origin/main has exactly one #52 row whose
+>    `conventions=<64hex>` == SHA256(docs/trials/trial_03_conventions.md now) and one #53 row with `H=<40hex>` == H, `freeze_manifest=<64hex>`
+>    == SHA256(manifest file now), `fingerprint=<64hex>` == fingerprint(now) == fingerprint recomputed from H's tree. Called by every stage,
+>    by the child CLIs (fetch=False), by prepare_t3 capture AND --gate-check, and by evaluate().
+> K3 FETCH ONCE (advisor 4): the stage runner fetches once per stage and records fetched_at; children run require_frozen/require_rows with
+>    fetch=False against that origin/main ref (trade-off: a push landing mid-stage is not seen until the next stage — acceptable, nothing
+>    is pushed during a stage).
+> K4 PINS ENCODING (Codex 3, advisor 9): raw_inventory = SHA256 of UTF-8 "".join(f"{name}={sha}\n" for name in sorted(manifest.raw));
+>    data_pins.json = {manifest_sha256, raw_inventory_sha256, prepared{6}, oi_unusable_total, oi_unusable_is_slots, is_grid_slots};
+>    load_pins: tracked, clean, pushed, and exactly one registry row mentioning the pins path whose tokens `manifest=`, `raw_inventory=`,
+>    `prepared/<name>=` equal the file, OI counts equal the prepared audit. prepare_t3.load_prepared_pinned / new load_kline_daily_pinned take
+>    these pins: SHA256(manifest.json) == pin, raw_inventory(manifest.raw) == pin, prepared hashes == pin, verify_manifest re-hashes every raw
+>    file and the exact raw inventory; kline loader checks unique ascending days inside [DATA_START, IS_END] (Codex 7). Estimate counts
+>    ~1,644 OI raw files (zip + CHECKSUM) + 5.
+> K5 EVALUATOR GATE INSIDE evaluate() (Codex 1, advisor 2): production evaluate(base, repo, evaluator_commit, fetch) takes NO data arguments:
+>    require_frozen + require_rows; durable attempt record (_records/evaluation_attempt.json written BEFORE computing; if it exists without
+>    evaluation/ → refuse "interrupted attempt" — the stated registry/review/refreeze procedure applies; a published verdict closes the trial);
+>    load_pins; receipt + its successful verify record; the exact 8 run records, the recorded P1 partition's part records and both merge records —
+>    each rc 0, provenance (H, fingerprint, pins_commit, manifest sha, variant) and output hashes == files now; bars/kline via pinned loaders;
+>    liq_fee from load_rules() (#48); hash all declared inputs before compute, re-hash before publish (mismatch → refuse); record.json =
+>    {H, fingerprint, pins, receipt, record SHA256s, input SHA256s (prepared/raw excluded — covered by manifest), report/verdict SHA256}.
+>    evaluate_with_fixture keeps the computation override only (tests/-only guard).
+> K6 SCHEDULER (Codex 2): at most --jobs children; on the first nonzero rc stop submitting, let running children finish and record them, return
+>    failure; the next stage never starts after a failure; a record with rc ≠ 0 (or a _failure file) is never resumed or overwritten
+>    (runner refuses the job); resume only for rc 0 records with matching provenance and output hashes.
+> K7 FAILURE PRESERVATION (Codex 4, advisor 5): harness creates the strategy before the protected block and wraps replay → finish →
+>    invariants → pairing → V check in RunFailure(strategy); the run CLI writes _failure_events.jsonl, _failure_state.json, _failure_error.txt
+>    directly in out_dir (hashed by the record; read_run's exact file set then refuses), exit rc 7; failures before a strategy exists (inputs,
+>    rules, gate) → _failure_error.txt only, rc 8; P1 CLI: p1_t3._run_range raises P1Failure(completed draws, null rows) → _failure_draws.json +
+>    _failure_error.txt, rc 7; the runner copies failure files to _records/failures/<name>/.
+> K8 REDACTION QUESTION (advisor 3 — to the user before "go capture"): a failure report would show state, funnel/entry counts and the last N events
+>    with realized_pnl / wallet_after / exit_price / funding_paid / fill prices redacted; the full log stays in var/ with its SHA256 recorded and
+>    pushed in ops_log.
+> K9 P1 PARTITION (Codex 6): the first p1 invocation writes _records/p1_partition.json {L: [[lo,hi]…], S: …} (canonical from --parts, covering
+>    0..999 exactly); a later invocation with a different --parts refuses; merge requires exactly those successful part records and no extra
+>    part directories — also for a zero-trade arm (p1_t3.merge checks range coverage before the early return); the evaluator verifies the
+>    partition file and records.
+> K10 JOBS (advisor 6): HALF 2 runs L_base alone first, reads max RSS from its record, then sets --jobs; estimates reported as a plan.
+> K11 HYGIENE (advisor 7, 8): run/P1 CLI stdout = counts only (test: no net/mean/wallet/pnl/sharpe tokens); t3_stages imports
+>    evaluate_t3/harness lazily inside the stages that need them.
+> K12 prepare_t3: capture and --gate-check both run require_frozen + require_rows for the given H (rc 6 on any failure).
+> Tests: provenance/rows/pins/receipt in temp repos (tamper each token → refusal); RunFailure at replay and at a post-replay check (files +
+> rc 7), rc 8 path; P1 failure preservation; scheduler stops after a failing child; resume refused for failed/changed records; P1 partition
+> change refused; zero-trade merge coverage; stdout hygiene; end-to-end stages in a temp repo with a stub prepare runner through evaluate
+> (once) and the attempt-record refusal; gate-check rc 0/6.
+
+### Codex 원문(verbatim · task-mundfdzm-x4v99h)
+> ## Narrow re-check
+> 
+> | Before-pass finding | Status | r2 assessment |
+> |---|---|---|
+> | 1. Evaluator gate | **PARTIAL** | K5 moves the gate into production `evaluate()` and removes caller-supplied data, which addresses the main bypass. The attempt record still needs an **exclusive, durable create** before computation so two evaluators cannot both pass the one-time check. The current function accepts caller-supplied bars, kline data, and fee, so this is a required implementation change, not an existing safeguard. [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:388) |
+> | 2. Scheduler failure handling | **CLOSED** | K6 specifies bounded submission, draining and recording children already running, no next stage after failure, and refusal to resume failed or changed records. |
+> | 3. Data pin encoding | **CLOSED** | K4 defines the raw inventory digest, six prepared hashes, OI counts, registry tokens, and rehash checks precisely enough to implement and test. |
+> | 4. Failure preservation | **CLOSED** | K7 covers both strategy and pre-strategy failures, preserves P1’s completed draws, and makes the normal output reader reject failure files. |
+> | 5. Freeze and row sequence | **PARTIAL** | K1–K2 improve the order, but the commit identity and historical binding remain ambiguous; see blockers below. |
+> | 6. P1 partition | **CLOSED** | K9 pins the first partition, rejects a changed `--parts`, checks exact part records and directories, and includes the zero-trade path. |
+> | 7. Pinned kline loader | **CLOSED** | K4 requires pinned preparation inputs and unique ascending kline days within the IS data bounds. |
+> 
+> ### Fix before proceeding
+> 
+> 1. **Resolve row #52’s commit reference.** If row #52 must contain the hash of the *same commit that contains row #52*, K1 is circular: adding the hash changes that commit. State explicitly that #52 contains the conventions SHA and a textual “this commit” reference, with H’s actual hash recorded in #53; or put the conventions in an earlier commit that #52 names. The existing conventions require their final SHA in a registry row before the evaluator push. [trial_03_conventions.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:3)
+> 
+> 2. **Bind the rows to H’s history, not only today’s files.** K2 compares #52 with the conventions file *now* and reads rows at `origin/main`. It should also require the conventions bytes and #52 row **at H** to match, then check that the current conventions bytes remain identical. Otherwise a later rewrite of the conventions and #52 can satisfy the stated checks while changing what was supposedly fixed at H.
+> 
+> 3. **Name the complete freeze set.** The existing set omits the proposed `t3_provenance`, `t3_stages`, and run/P1 CLI modules. K1 says the manifest uses “the freeze set” but does not explicitly add them. Include every new gate and execution module in the manifest and fingerprint, and require the manifest’s exact path set to match that specification. Otherwise gate code can change after H without changing the fingerprint. [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:43)
+> 
+> ### New gaps to pin down
+> 
+> - **Standalone child CLIs:** K3 gives them `fetch=False`. A child invoked outside the stage runner could check a stale `origin/main`. Require a fresh fetch for standalone use, or require proof that it was launched under the stage’s fetched ref. The Trial #2 direct CLI gate fetches for this reason. [t2_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t2_stages.py:186)
+> - **Abrupt child termination:** K6–K7 cover recorded nonzero exits and written `_failure` files. Specify refusal when an output directory already contains partial files but has no successful record, as can happen after a kill or crash; preserve it for review.
+> 
+> K8 still explicitly places the redacted failure-report format before the user for a decision. The original wording of Q1–Q3 is not present in the supplied r2 text or checkout, so I cannot independently mark those questions closed. This was a read-only plan review; no Trial #3 run or tests were executed.
+> 
+> **VERDICT: FIX-PLAN-FIRST.**
+> 
+> Codex session ID: 01a0efba-3f1c-7561-8853-b92534e8ff93
+> Resume in Codex: codex resume 01a0efba-3f1c-7561-8853-b92534e8ff93
+
+### 계획 r3 원문
+> # Trial #3 (g) HALF 1 plan r3 = r2 + fixes from Codex task-mundfdzm-x4v99h
+> K1' COMMIT CHAIN (no circularity): C1 = docs commit with the FINAL conventions file (section H appended); C2 = docs commit appending row #52
+>     with tokens `t3_conventions=<SHA256 of the file>` and `t3_conventions_commit=<C1 40hex>` — C2 is H (its tree holds all final code; no code
+>     commit after it); C3 = docs commit with docs/trials/trial_03_freeze_manifest.json generated from `git show H:<file>` and row #53 with
+>     `t3_freeze_H=<H>`, `t3_freeze_manifest=<SHA256>`, `t3_fingerprint=<fingerprint>` → push → gate-check.
+> K2' ROW GATE BOUND TO HISTORY: require_rows(repo, H): at origin/main exactly one #52 row and one #53 row; #52's tokens equal the #52 row as
+>     it exists AT H (git show H:registry) — the #52 row must already be in H's tree; conventions bytes at C1 == at H == at origin/main == now and
+>     their SHA256 == t3_conventions; C1 ⊂ H; #53: t3_freeze_H == H, manifest bytes at origin/main == now, SHA256 == t3_freeze_manifest,
+>     manifest.H == H, manifest.fingerprint == fingerprint_at(H) == fingerprint(now) == t3_fingerprint, manifest.files == file_hashes_at(H) ==
+>     file_hashes(now), and manifest.files' path set == the freeze-set specification evaluated on H's tree.
+> K2'' FREEZE SET = backtest/{evaluate_t3, verdict_t3, t3_outputs, t3_provenance, t3_stages, p1_t3, p1_t3_run, stats, stats_t2, p1_core,
+>     placebo_exec, engine_replay, returns, data, replay, prepare_t3, prepare_t2}.py + strategies/trial03/*.py (incl. run.py, harness,
+>     strategy, features, config, anchor, exit_schedule) + paper/*.py + sizing/*.py + exchange/*.py + pyproject.toml + uv.lock.
+> K3' CHILD GATE: the runner fetches once, reads `git rev-parse origin/main` = R, and launches children with env T3_STAGE_ORIGIN=R; a child
+>     with that env verifies `git rev-parse origin/main` == R and skips fetch; a child without it (standalone) fetches first. Both then run
+>     require_frozen + require_rows + receipt checks.
+> K5' ATTEMPT RECORD: _records/evaluation_attempt.json created with os.open(O_CREAT|O_EXCL|O_WRONLY) + fsync before any computation (two
+>     evaluators cannot both pass); existing attempt without evaluation/ → refuse (interrupted attempt procedure).
+> K6' PARTIAL OUTPUTS: the runner refuses a job whose out_dir exists without a successful (rc 0, matching) record — e.g. after a kill/crash —
+>     and leaves it in place for review (no overwrite, no resume).
+> Everything else as r2 (K3–K12).
+
+### Codex 원문(verbatim · task-mundkyym-dcyxir)
+> | Re-check item | Status | Reason |
+> | --- | --- | --- |
+> | Finding 1 — commit and freeze history | **CLOSED** | C1 → C2 (= H) → C3 removes the hash circularity. K2′ binds row #52 and the conventions bytes to H’s history; K2″ defines the freeze set. |
+> | Finding 5 — one evaluation attempt | **CLOSED** | K5′ claims the attempt with `O_EXCL` before computation and refuses an interrupted attempt. |
+> | Standalone child CLIs | **CLOSED** | K3′ makes them fetch when no runner supplied `T3_STAGE_ORIGIN`, then run the same gates. |
+> | Abrupt termination | **CLOSED** | K6′ refuses an output directory left without a successful matching record and preserves it for review. |
+> 
+> **VERDICT: PROCEED** for the r3 plan. This is a plan verdict, not an implementation sign-off. When implementing K2″, ensure every fixed freeze-set path exists and has a SHA256: the current draft [file_hashes_at](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:78) can return `None` for a missing file. I made no changes or test runs.
+> 
+> Codex session ID: 01a0efbe-38ac-7c52-b3ed-14038a086fa6
+> Resume in Codex: codex resume 01a0efbe-38ac-7c52-b3ed-14038a086fa6

@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from backtest import prepare_t3 as P
+from backtest import t3_provenance as PV
 from exchange.client import Response
 from strategies.trial03 import anchor as A
 
@@ -234,8 +235,10 @@ def test_build_verify_and_load_roundtrip(tmp_path):
     assert set(m) >= {"raw", "bars_1m.parquet", "funding.json", "source_audit.json", "kline_close_daily.json",
                       "oi_5m.json", "code_commit", "window"}
     assert "oi/BTCUSDT-metrics-2025-12-31.zip" in m["raw"]
-    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in P.PREPARED}}
+    pins = PV.make_pins(out)
     bars, fundings, oi, unusable = P.load_prepared_pinned(out, pins, (START, END), root=tmp_path)
+    kd = P.load_kline_daily_pinned(out, pins, (START, END), root=tmp_path)
+    assert [r["day"] for r in kd] == [START // A.DAY_MS]
     assert unusable == []
     assert len(bars) == 10 and fundings == []
     assert oi == [[START, "80000.5"], [START + 5 * MIN, "80000.5"]]
@@ -254,11 +257,11 @@ def test_build_stops_on_oi_defect_and_writes_audit_only(tmp_path):
 def test_loader_refuses_other_trials_directories_and_wrong_pins(tmp_path):
     out = capture(tmp_path)
     m = P.build(out, (START, END))
-    pins = {"raw": m["raw"], "prepared": {k: m[k] for k in P.PREPARED}}
+    pins = PV.make_pins(out)
     for bad in ("var/t3_s0/IS", "var/backtest/t2/IS", "elsewhere/IS"):
         with pytest.raises(P.OOSGuard):
             P.load_prepared_pinned(tmp_path / bad, pins, (START, END), root=tmp_path)
-    with pytest.raises(ValueError):
+    with pytest.raises((ValueError, PV.ProvenanceError)):
         P.load_prepared_pinned(out, pins | {"prepared": pins["prepared"] | {"oi_5m.json": "0" * 64}}, (START, END),
                                root=tmp_path)
 
@@ -282,8 +285,20 @@ def test_oos_range_requires_a_user_dated_registry_row(tmp_path):
     assert b == A.OOS_END_MS and a < A.OOS_START_MS
 
 
-def test_cli_refuses_capture_without_a_pushed_evaluator(tmp_path, capsys):
-    rc = P.main(["--out", str(tmp_path / "var" / "t3" / "IS")])
-    assert rc == 6 and not (tmp_path / "var" / "t3" / "IS" / "raw").exists()
-    rc = P.main(["--out", str(tmp_path / "var" / "t3" / "IS"), "--evaluator-commit", "0" * 40])
-    assert rc == 6
+def test_cli_refuses_capture_and_gate_check_without_a_frozen_commit(tmp_path):
+    for extra in ([], ["--evaluator-commit", "0" * 40], ["--gate-check", "--evaluator-commit", "0" * 40]):
+        rc = P.main(["--out", str(tmp_path / "var" / "t3" / "IS"), *extra])
+        assert rc == 6 and not (tmp_path / "var" / "t3" / "IS" / "raw").exists()
+
+
+def test_loader_refuses_tampered_manifest_and_raw_inventory(tmp_path):
+    out = capture(tmp_path)
+    P.build(out, (START, END))
+    pins = PV.make_pins(out)
+    for bad in (pins | {"manifest_sha256": "0" * 64}, pins | {"raw_inventory_sha256": "0" * 64}, pins | {"oi_unusable_total": 7}):
+        with pytest.raises((ValueError, PV.ProvenanceError)):
+            P.load_prepared_pinned(out, bad, (START, END), root=tmp_path)
+    raw = out / "raw" / "funding.jsonl"
+    raw.write_text(raw.read_text() + " ")
+    with pytest.raises((ValueError, PV.ProvenanceError)):
+        P.load_prepared_pinned(out, pins, (START, END), root=tmp_path)

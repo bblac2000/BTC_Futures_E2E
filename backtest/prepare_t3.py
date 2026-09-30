@@ -27,7 +27,6 @@ import io
 import json
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import zipfile
@@ -302,18 +301,24 @@ def check_out_dir(out: Path, root: Path = ROOT) -> None:
         raise OOSGuard(f"{out}는 {base} 아래가 아니다")
 
 
-def load_prepared_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], *, root: Path = ROOT
-                         ) -> tuple[list[BD.Bar1m], list[BD.Funding], list[list[Any]], list[int]]:
-    """실행 경로(해시만 · 다시 빌드하지 않음): 디렉터리 · 매니페스트 · 고정값(data_pins) · 범위 · 타임스탬프를 모두 단언."""
+def _pinned_manifest(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], root: Path) -> dict[str, Any]:
+    """데이터 핀(트라이얼 #3 형식 · t3_provenance K4): 매니페스트 SHA256 · 원시 목록 · 산출물 해시 · OI 개수 + 원시 파일 전부 재해시 + 범위."""
+    from backtest.t3_provenance import check_pins_against_prepared
     check_out_dir(out, root)
-    start, end = expect_range
-    check_is_bounds(start, end)
+    check_is_bounds(*expect_range)
+    check_pins_against_prepared(out, pins)
     m = verify_manifest(out)
-    if m["raw"] != pins["raw"] or {k: m[k] for k in PREPARED} != pins["prepared"]:
-        raise ValueError("준비 산출물·원시 해시가 고정값(data_pins)과 다르다")
     meta = json.loads((out / "raw" / "fill_ranges.json").read_text())
     if (meta["start_ms"], meta["end_ms"]) != expect_range:
         raise ValueError(f"캡처 범위 {(meta['start_ms'], meta['end_ms'])} ≠ 기대 {expect_range}")
+    return m
+
+
+def load_prepared_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], *, root: Path = ROOT
+                         ) -> tuple[list[BD.Bar1m], list[BD.Funding], list[list[Any]], list[int]]:
+    """실행 경로(해시만 · 다시 빌드하지 않음): 디렉터리 · 핀 · 매니페스트 · 범위 · 타임스탬프를 모두 단언."""
+    start, end = expect_range
+    _pinned_manifest(out, pins, expect_range, root)
     bars = T2.read_bars(out / "bars_1m.parquet")
     fundings = [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
     oi = json.loads((out / "oi_5m.json").read_text())
@@ -323,6 +328,22 @@ def load_prepared_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[in
     assert_in_range([f.funding_ms for f in fundings], start, end)
     assert_in_range([t for t, _ in oi], start, end)
     return bars, fundings, oi, unusable
+
+
+def load_kline_daily_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], *, root: Path = ROOT
+                            ) -> list[dict[str, Any]]:
+    """매수보유 입력(kline 일 종가) — 같은 핀 검사 + 날이 유일·오름차순 · 날·분 시각이 범위 안(Codex (g) before #7)."""
+    start, end = expect_range
+    _pinned_manifest(out, pins, expect_range, root)
+    rows = json.loads((out / "kline_close_daily.json").read_text())
+    days = [int(r["day"]) for r in rows]
+    if days != sorted(set(days)):
+        raise ValueError("kline 일 종가의 날이 유일·오름차순이 아니다")
+    assert_in_range([d * A.DAY_MS for d in days], start - start % A.DAY_MS, end)
+    assert_in_range([int(r["minute_ms"]) for r in rows], start, end)
+    if any(int(r["minute_ms"]) // A.DAY_MS != int(r["day"]) for r in rows):
+        raise ValueError("kline 일 종가의 분 시각이 그 날에 속하지 않는다")
+    return rows
 
 
 # ── OOS 진입점(정의만 · 사용자 결정 전 거부) ─────────────────────────────────
@@ -337,39 +358,39 @@ def oos_range(registry: Path, row_id: int) -> tuple[int, int]:
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
-EVALUATOR_FILE = "backtest/evaluate_t3.py"
-
-
-def evaluator_pushed(commit: str | None) -> bool:
-    """판정기 커밋 H가 origin/main의 조상이고 H에 트라이얼 #3 판정기 파일이 있어야 한다(§4-1 3 → 4)."""
-    if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
-        return False
-
-    def git(*a: str) -> int:
-        return subprocess.run(["git", *a], cwd=ROOT, capture_output=True).returncode
-
-    return git("merge-base", "--is-ancestor", commit, "origin/main") == 0 and git("cat-file", "-e", f"{commit}:{EVALUATOR_FILE}") == 0
+def gate(commit: str | None) -> str | None:
+    """캡처·verify·--gate-check 공통 관문(계획 r3 K12): 동결(H) + 레지스트리 행(#52·#53). 통과하면 None, 아니면 사유."""
+    from backtest.t3_provenance import ProvenanceError, child_gate
+    try:
+        child_gate(ROOT, commit or "")
+    except ProvenanceError as e:
+        return str(e)
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="트라이얼 #3 IS 데이터 준비(원시 캡처 → 감사 → 빌드) · 창 (B)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--verify", action="store_true", help="캡처·덮어쓰기 없이 raw/에서 다시 빌드해 대조")
-    ap.add_argument("--evaluator-commit", help="origin/main에 푸시된 판정기 커밋 H(캡처 전 필수)")
+    ap.add_argument("--gate-check", action="store_true", help="관문만 검사(캡처 없음) — 통과 0 · 실패 6")
+    ap.add_argument("--evaluator-commit", help="동결 커밋 H(캡처·verify 전 필수)")
     a = ap.parse_args(argv)
     out = Path(a.out)
     rng = is_range()
+    why = gate(a.evaluator_commit)
+    if why is not None:
+        print(f"🚫 관문 실패(rc 6): {why}", file=sys.stderr)
+        return 6
+    if a.gate_check:
+        print("gate ok")
+        return 0
+    check_out_dir(out)
     if a.verify:
-        check_out_dir(out)
         m = verify_rebuild(out, rng)
         print(json.dumps({"verified": True} | m, sort_keys=True, indent=1))
         return 0
-    if not evaluator_pushed(a.evaluator_commit):
-        print("🚫 판정기가 origin/main에 푸시되기 전에는 실데이터를 캡처하지 않는다(§4-1 · 계획 r5 S1)", file=sys.stderr)
-        return 6
-    check_out_dir(out)
-    if (out / "manifest.json").exists():
-        print("🚫 이미 준비된 출력이 있다 — 다시 캡처하지 않는다(--verify로 대조만)", file=sys.stderr)
+    if (out / "manifest.json").exists() or (out / "raw").exists():
+        print("🚫 이미 준비된(또는 부분) 출력이 있다 — 다시 캡처하지 않는다(--verify로 대조만)", file=sys.stderr)
         return 5
     from exchange.ccxt_rest import CcxtRestClient
     from exchange.client import ReadOnlyClient
@@ -379,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
     except SourceStop as e:
         print(f"🚫 {e}", file=sys.stderr)
         return 3
-    print(json.dumps(m, sort_keys=True, indent=1))
+    print(json.dumps({k: v for k, v in m.items() if k != "raw"} | {"raw_files": len(m["raw"])}, sort_keys=True, indent=1))
     return 0
 
 

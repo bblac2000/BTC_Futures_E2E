@@ -41,6 +41,14 @@ class RulesSnapshotMismatch(RuntimeError):
     pass
 
 
+class RunFailure(RuntimeError):
+    """재생·마무리 검사 중 실패 — 전략 객체(이벤트 기록·깔때기·상태)를 담아 실행 CLI가 `_failure_*`로 보존한다(원인은 __cause__)."""
+
+    def __init__(self, strategy: Trial03):
+        super().__init__(f"트라이얼 #3 실행 실패(arm {strategy.arm} · 상태 {strategy.state})")
+        self.strategy = strategy
+
+
 class InputError(RuntimeError):
     """실행 입력이 준비 규약을 어긴다(중복·비정렬 분 · 펀딩 버킷 중복 · 비유한 율/mark) — 실행하지 않는다."""
 
@@ -154,6 +162,14 @@ def _run_arm(bars: Sequence[Bar1m], fundings: Sequence[Funding], oi_rows: Sequen
     validate_inputs(bars, fundings)
     adm = admissible or Admissibility(bars, fundings, p=p, window_end=window[1])
     s = Trial03(arm, rules=rules, oi=OiIndex(oi_rows, unusable, p), admissible=adm, variant=variant, p=p, window=window)
+    try:
+        return _run_protected(s, bars, fundings, arm, variant, rules=rules, p=p)
+    except BaseException as e:                                  # 재생 → 마무리 검사 전체 · 전략 기록을 들고 나간다((g) 계획 K7)
+        raise RunFailure(s) from e
+
+
+def _run_protected(s: Trial03, bars: Sequence[Bar1m], fundings: Sequence[Funding], arm: str, variant: Variant, *,
+                   rules: RuntimeRules, p: TfParams) -> T3Run:
     r = replay(bars, fundings, s, rules=rules, limits=LIMITS, equity=p.e_ref, sizing_capital=p.e_ref, slippage_rate=p.slippage)
     s.finish()
     if r.open_at_end is not None:
@@ -183,4 +199,4 @@ def v_days(s: Trial03, days: set[int]) -> list[int]:
     return sorted(d for d, ok in s.q_valid.items() if ok and d in days)
 
 
-__all__ = ["InputError", "validate_inputs", "run_arm_with_fixture_rules", "Admissibility", "RulesSnapshotMismatch", "T3Run", "complete_days", "load_rules", "run_arm", "v_days"]
+__all__ = ["RunFailure", "InputError", "validate_inputs", "run_arm_with_fixture_rules", "Admissibility", "RulesSnapshotMismatch", "T3Run", "complete_days", "load_rules", "run_arm", "v_days"]
