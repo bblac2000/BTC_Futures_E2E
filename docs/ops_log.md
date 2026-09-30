@@ -9989,3 +9989,44 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > VERDICT: FIX-FIRST
 - **정정(Claude Code · 2026-09-30)**: 트라이얼 #4 r1 before-pass 입장표에서 Codex (xi) "P1은 방향도 무작위"에 ⚠️ 부분 반대("이 저장소 P1 규약은 원 방향 유지")로 적었으나 **틀렸다** — 트라이얼 #3 §4 P1은 슬롯마다 `dir_k = integers(0, 2)`로 **방향을 무작위화**한다(트라이얼 #1 규약 (c)). r2·r3 §4의 "원 방향"은 그 규약과 다르며, 앵커 전 사용자 결정 사항이다.
+
+## 2026-09-30 — 트라이얼 #4 r3 결정 14~16 반영 · 짧은 재확인(advisor MERGE · Codex FIX-FIRST) → **앵커 보류**
+
+> 사용자(원문 요지): "Decisions on the three findings: 1. §7-2 thresholds — CONFIRMED as written ... 2. P1 — option (i): randomize direction ... Report-only addition (NOT a gate) ... 3. P2 +3 prints — option (A) ... If FIX-FIRST again, stop and send me the findings."
+- 반영 커밋 5dd4fc2 · r3 SHA256 2d504b41… · 27,697 bytes · tc_v3(16~39행 · 24행) e0362fb3… · 재계수 S 43 · L 56(변화 없음 · count_r2.json 12f59896…).
+- 결과: advisor MERGE(§9 문구 한 줄 · 스냅샷 경로 위험 지적) · Codex **FIX-FIRST**(문구 2 + P1 적격 경계 1) → **앵커·업로드·스냅샷 없음**.
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor | §9 "같은 방향" 문구 | ✅ | Codex 1과 같음 — 수정 대기 |
+| advisor | 스냅샷 스크립트가 trial_03 경로를 덮어씀 | ✅ | 모듈 OUT_DIR 교체 + main() · trial_03 변경 없음 확인 · 값 대조 뒤 업로드 |
+| Codex 1 | 94·148행 "같은 방향" = 보고 전용 설명 | ✅ | 문구 수정 필요 |
+| Codex 2 | 106행 5일·15경계 서술 vs 112행 재계수 | ✅ | "이전 계수"로 표기 필요 |
+| Codex 3 | P1 시작 t가 펀딩 경계면 닫힌 구간에 경계 19개 | ✅ | 사용자 결정 필요 — 권고: 보유 경계 (t, t + 6일] 18개(트라이얼 #3 "경계 분에 체결된 포지션은 그 경계를 내지 않는다"와 일치 · 원판 표본 규칙도 같은 반열린 구간으로 명시) |
+
+### advisor 원문
+> (advisor · short re-check · verbatim) **Advisor verdict: MERGE.** The three FIX-FIRST findings are closed: §7-2 is confirmed with the tag removed and recorded as decision 14; P1 is a determinate port of trial #3 (a)–(f) with h fixed (pair_k → dir_k → placement, ≤1,000 attempts, no overlap, B2 over [3,30], no SL, >10/1,000 → discard, exit on the base clock per decision 11 — the one intentional departure from "verbatim", and it's stated as such); the sample rule now covers fill + 7,200 min + 24 h, so base/P1/P2 share one set and the delayed exit lands exactly at fill + 144 h with all 18 boundaries validated. Seeds don't collide: (20260930, 1) bootstrap, (2|3) children 0–999 gate P1, children 1000–1999 report-only, and the report-only run is labeled 게이트 아님. The tc_v3 declaration sentence sits outside the hashed span (lines 16–39, 24 lines), so it isn't circular.
+> 
+> **One leftover that should be fixed before upload, because the file becomes immutable:** §9's weakness line still says "같은 방향·같은 5일의 P1이 그 노출을 통제한다". The gate P1 now randomizes direction; only the report-only P1-timing is same-direction. Drop "같은 방향·" (or say "P1(방향 무작위 · 게이트) · 보고 전용 P1-timing"). It's a narrative clause, not a rule — non-substantive — but a reader of the anchored text would call §9 contradicting §4. Since it changes bytes after Codex's review: log the one-line `git diff` against `2d504b41…` in ops_log, confirm lines 16–39 are untouched so tc_v3 `e0362fb3…` stands, and cite the new commit in the anchor row. Make no other edit; don't write the review verdicts into the file (trial #3's anchored r3 also says 초안 r3(앵커 전) in its header — the registry row establishes the anchor).
+> 
+> **Snapshot hazard your plan hasn't covered — it can corrupt trial #3.** `capture_trial03_rules.py` hardcodes `OUT_DIR = docs/trials/trial_03_rules_snapshot/`; running it as-is overwrites #48's four files, which `strategies/trial03/anchor.py` pins by hash (`RULES_SNAPSHOT_SHA256`) and the closed trial's `load_rules()` asserts against. Run it as `import scripts.capture_trial03_rules as C; C.OUT_DIR = ROOT/'docs/trials/trial_04_rules_snapshot'; C.main()` — `main()` reads the module global at call time, so you keep the permission check and TakerMismatch gate — then `git status` must show nothing changed under `trial_03_rules_snapshot/`. Then, **before** rclone, compare the fresh values to what r3's [DERIVED] arithmetic and decision 3 assume: MIN_NOTIONAL = 50 (the 20% ceiling rests on it), tier-1 MMR 0.004 and taker 0.0005 (§1-1, L=3 gate 21.835/22.010%), bracket 1 max leverage ≥ 30 at these notionals. Any mismatch is a substantive change to the pre-registration → stop and report; do not upload. Snapshot row (#69) precedes the anchor row (#70), as #48 preceded #50, and its hashes go inline in backticks — no `t4_…=` token shapes.
+> 
+> (Sequence and non-blocking notes: see the session; non-blocking — P1 (a) inherits "결정일 전 14일 완전" with 결정일 = UTC day of t; §1 펀딩 row says 15 settlements per hold while the sample rule validates 18 — both correct, say so.)
+
+### Codex 원문(verbatim)
+> **Review session:** `01a0f1b9-b816-7380-8b99-888e512b65fe`
+> 
+> The three prior FIX-FIRST findings are **closed in the operative rules**: §7-2 thresholds are confirmed in [lines 125 and 170](docs/trials/trial_04_preregistration_r3.md:125); gate P1 randomizes direction and P1-timing is report-only in [lines 88–93](docs/trials/trial_04_preregistration_r3.md:88); and the shared sample extends through fill + 7,200 minutes + 24 hours in [lines 35–36](docs/trials/trial_04_preregistration_r3.md:35).
+> 
+> **Three substantive points remain before anchoring:**
+> 
+> 1. [Lines 94 and 148](docs/trials/trial_04_preregistration_r3.md:94) still say P1 tests a *same-direction* comparison. That describes the report-only P1-timing arm, and contradicts the gate's randomized direction in [lines 88 and 91–92](docs/trials/trial_04_preregistration_r3.md:88). Correct the stated interpretation of the preregistered gate.
+> 2. [Line 106](docs/trials/trial_04_preregistration_r3.md:106) still describes the count method as a five-day, 15-funding-boundary check, while [line 112](docs/trials/trial_04_preregistration_r3.md:112) says the reported 43/56 counts were recomputed with the six-day, 18-boundary check. Label the former as the earlier count or update it.
+> 3. **P1 boundary case:** P1 permits any one-minute start `t` ([line 88](docs/trials/trial_04_preregistration_r3.md:88)). When `t` itself is a funding boundary, the closed six-day interval specified in [line 35](docs/trials/trial_04_preregistration_r3.md:35) contains **19** boundary timestamps, although that line says 18. Specify whether P1 checks held-position boundaries `(t, t + 6 days]`—18, consistent with funding before entry—or also requires the boundary at `t`. This changes P1 eligibility at those starts.
+> 
+> The trial #3 `t+h−1` close convention is explicitly superseded here by the base trial's `t+h` open clock ([lines 29 and 88](docs/trials/trial_04_preregistration_r3.md:29)). The 24-hour extension covers P2's +3-print exit ([lines 35–36 and 89](docs/trials/trial_04_preregistration_r3.md:35)). The bootstrap stream `(20260930, 1)`, gate P1 streams `(…, 2|3)` children 0–999, and report-only children 1000–1999 are distinct ([lines 70 and 88–92](docs/trials/trial_04_preregistration_r3.md:70)).
+> 
+> **Byte checks pass:** `origin/main` equals `HEAD`; the document is 27,697 bytes, 172 lines, SHA256 `2d504b4122e1e9f7a4c3e251aa61cf71c882af700321528e169ea2ea366daa8b`. The §1 table is 24 LF-terminated lines, 5,315 bytes, SHA256 `e0362fb31452dff128b1ccf6f1381062225a0417152aa5f271ccc0646d3c492e`. `count_r2.json` hashes to `12f598968487d96c49300228f011af4b6960c8f2c466dd66c3e34101f1f5627b` and records S 43 / L 56. I verified the recorded counts and hash; I did not rerun the count or open market data.
+> 
+> VERDICT: FIX-FIRST
