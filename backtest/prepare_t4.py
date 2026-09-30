@@ -1,7 +1,8 @@
 """트라이얼 #4 데이터 준비(단계 (a) · 계획 r3 C2~C4·C12~C14 · 사전등록 r3 §1·§5) — **원시 캡처 하나 → 감사 → 빌드 → 매니페스트**.
 
 가격·펀딩은 공유 계층 `prepare_t2`를 import한다(수정하지 않는다). 트라이얼 #3 전용 도우미 둘(`read_archive_rows_bounded` · `funding_view`)은
-**import하지 않고 복사**했다(출처: backtest/prepare_t3.py @ 177e7f7 · 앵커 import만 trial04로 바꿈 · 감사 표지는 "trial #4 convention").
+**import하지 않고 복사**했다(출처: backtest/prepare_t3.py @ 177e7f7 · 바꾼 것: 앵커 import를 trial04로 · 감사 표지를 "trial #4 convention"으로 ·
+`funding_view`의 보고 전용 필드 둘(shared_bucket · rate_not_ok) 제거 — 버림 규칙 자체는 같다).
 새 원천(r3 §1 · 결정 9):
 - **프리미엄 지수**: binance.vision `futures/um/monthly/premiumIndexKlines/BTCUSDT/1m` 월별 zip + CHECKSUM(원시 바이트와 해시를 캡처 시점에 고정 ·
   L12) · 범위의 달만 받는다(IS 경로 = 2023-10 … 2025-12 · 2026 달은 요청하지 않는다).
@@ -226,7 +227,10 @@ def build_prints(minutes: dict[int, Decimal | None], start_ms: int, end_ms: int)
         vals = [minutes.get(t) for t in range(T - A.H8_MS, T, MIN)]
         use = [v for v in vals if v is not None]
         n = len(use)
-        p = str(P_CONTEXT.divide(sum(use, Decimal(0)), Decimal(n))) if n else None
+        p = None
+        if n:
+            with decimal.localcontext(P_CONTEXT):                  # 합과 나눗셈 모두 지역 문맥(주변 정밀도 무관)
+                p = str(sum(use, Decimal(0)) / Decimal(n))
         out.append({"T": T, "p": p, "n_minutes": n, "valid": n >= PRINT_VALID_MIN,
                     "final_minute_present": minutes.get(T - MIN) is not None})
     return out

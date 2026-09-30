@@ -95,12 +95,15 @@ def test_non_finite_close_is_an_absent_minute_not_a_stop(tmp_path):
 
 def test_decimal_mean_is_exact_and_context_local(tmp_path):
     import decimal
-    decimal.getcontext().prec = 5                                    # 주변 문맥이 결과를 바꾸지 않는다
+    closes = {i: ("0.00012345" if i % 2 else "0.00067891") for i in range(480)}     # 합 0.1925664(유효숫자 7) > prec 5
+    ref = prints_of(tmp_path / "ref", day_rows(close=closes))[0]["p"]
+    decimal.getcontext().prec = 5                                    # 주변 문맥이 합·나눗셈을 바꾸지 않는다
     try:
-        pr = prints_of(tmp_path, day_rows(close={i: "0.00000003" for i in range(480)}))
+        got = prints_of(tmp_path / "low", day_rows(close=closes))[0]["p"]
     finally:
         decimal.getcontext().prec = 28
-    assert pr[0]["p"] == str(Decimal("0.00000003"))
+    assert got == ref
+    assert Decimal(ref) == (Decimal("0.00012345") * 240 + Decimal("0.00067891") * 240) / 480
 
 
 def test_header_optional_but_exact(tmp_path):
@@ -206,10 +209,16 @@ def test_capture_build_verify_roundtrip(tmp_path):
         P.verify_manifest(out)
 
 
-def test_no_trial03_import_in_trial04_data_path():
-    tree = ast.parse((ROOT / "backtest" / "prepare_t4.py").read_text(encoding="utf-8"))
-    mods = [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
-    mods += [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
-    names = [a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names]
-    assert not [m for m in mods if "trial03" in m or "prepare_t3" in m or "trial02" in m or "trial01" in m]
-    assert "prepare_t3" not in names
+def test_no_other_trial_import_in_any_trial04_file():
+    """strategies/trial04/*.py · backtest/*_t4.py 전부 — 다른 트라이얼 모듈 import 금지(허용: strategies.trial03.exit_schedule — 단계 (c))."""
+    allowed = {"strategies.trial03.exit_schedule"}
+    files = sorted((ROOT / "strategies" / "trial04").glob("*.py")) + sorted((ROOT / "backtest").glob("*_t4.py"))
+    assert (ROOT / "backtest" / "prepare_t4.py") in files
+    for f in files:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        mods = [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
+        mods += [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
+        froms = [(n.module or "", a.name) for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names]
+        bad = [m for m in mods if m not in allowed and any(k in m for k in ("trial01", "trial02", "trial03", "_t3", "_t2"))]
+        bad += [f"{m}.{a}" for m, a in froms if a in {"prepare_t3", "prepare_t2"} and m == "backtest" and a != "prepare_t2"]
+        assert not bad, (f.name, bad)
