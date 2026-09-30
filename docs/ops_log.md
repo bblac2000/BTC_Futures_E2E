@@ -9566,3 +9566,10 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Codex session/thread ID: `01a0f078-edaf-7f71-80fe-b381a4d8ff32`.
 > 
 > VERDICT: MERGE
+
+## 2026-09-30 — 트라이얼 #3 HALF 2 단계 5 재캡처(H′ f087611) rc 0
+- var/t3/ 삭제(사용자 허락 · H′ ⊂ origin/main · B 기록 7d4d883 푸시 뒤) → `--stage prepare` 04:09:44→04:14:00Z rc 0 · children_max_rss_kb 4,088,680 · 원시 1,649 파일.
+- 버린 워밍업 빈 mark 펀딩 88(2023-10-02 00:00 → 2023-10-31 00:00) · shared_bucket 0 · rate_not_ok 0 · pages = [줄 0 · 5d16a0c3… · 88] · raw funding.jsonl 41fe9bd8…(시도 1과 바이트 동일) · 펀딩 이벤트 2,378 · 중단 0.
+- OI 사용 불가 0 / IS 슬롯 210,528(0.5% 상한 통과) · 822일.
+- **시도 1과 다른 점**: 2024-08-12 10:02·10:03 두 분(아카이브 mark 비정상 · 채움 범위)에 REST `markPriceKlines`가 이번엔 2행을 돌려줬다(시도 1 rest_mark.jsonl = 빈 파일 e3b0c442…) → 봉 1,183,680 · 결손 0 · 그날은 이제 완전(항목 30 제외 목록에 없음). 다른 원시(funding · archive_rows · rest_klines · fill_ranges)는 시도 1과 바이트 동일. rest_mark.jsonl c154c1b3….
+- 기록 사본 `docs/trials/trial_03/records/prepare/`.

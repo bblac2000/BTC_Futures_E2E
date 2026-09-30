@@ -1,0 +1,42 @@
+{
+ "children_max_rss_kb": 4088680,
+ "provenance": {
+  "evaluator_commit": "f087611fa2367a4eb0b709e89059cac626cfa909",
+  "fetched_at": "2026-09-30T04:09:44+00:00",
+  "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+  "origin": "7d4d8830b3392c02a0745983eb96ea887089cb29",
+  "rows": {
+   "conventions_commit": "54b049a99736054931a3974d05d38b0e1b16281a",
+   "conventions_sha256": "937930b3fba874015191fd8b8d930e26ba6da29ca17895150949d0e2b4884e6a",
+   "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+   "freeze_manifest_sha256": "5828120e2616b08eecdb00f31a3149f59cad27b2871629d3f9c9b20a188c0ebb",
+   "freeze_version": "2"
+  },
+  "variant": "prepare"
+ },
+ "run": {
+  "args": [
+   "--evaluator-commit",
+   "f087611fa2367a4eb0b709e89059cac626cfa909"
+  ],
+  "ended_utc": "2026-09-30T04:14:00.865344Z",
+  "git_head": "7d4d8830b3392c02a0745983eb96ea887089cb29",
+  "module": "backtest.prepare_t3",
+  "numpy": "2.5.3",
+  "outputs": {
+   "bars_1m.parquet": "d3483144b4d6f004d2c6fa5b0818194ea7ec2f5487b35ad186abef7492bfa6ac",
+   "funding.json": "c0d449ed84a08acf0545ef0ea2f1883e209b88d94ed736748442c412d315b9be",
+   "kline_close_daily.json": "c36080cc5c962bb8c6e8c2545db0bfaf0c7ab4adf0f96c531406490811ce9040",
+   "manifest.json": "7d267f9864e2f8f0f42b2c209363918978c07e36d9a0c97cf10b349b429977df",
+   "oi_5m.json": "bd4e949eb3463d73807bfe0c47661dcaedf84e6b121e69779d9a527ce2398f38",
+   "oi_unusable.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "source_audit.json": "9df904619d59db075d7c2fbada15c1f1dcaa9eda13bb13e975f758db3947606f"
+  },
+  "python": "3.12.13",
+  "returncode": 0,
+  "started_utc": "2026-09-30T04:09:44.397755Z",
+  "stderr": "",
+  "stdout": "{\n \"bars_1m.parquet\": \"d3483144b4d6f004d2c6fa5b0818194ea7ec2f5487b35ad186abef7492bfa6ac\",\n \"code_commit\": \"7d4d8830b3392c02a0745983eb96ea887089cb29\",\n \"funding.json\": \"c0d449ed84a08acf0545ef0ea2f1883e209b88d94ed736748442c412d315b9be\",\n \"kline_close_daily.json\": \"c36080cc5c962bb8c6e8c2545db0bfaf0c7ab4adf0f96c531406490811ce9040\",\n \"oi_5m.json\": \"bd4e949eb3463d73807bfe0c47661dcaedf84e6b121e69779d9a527ce2398f38\",\n \"oi_unusable.json\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n \"raw_files\": 1649,\n \"source_audit.json\": \"9df904619d59db075d7c2fbada15c1f1dcaa9eda13bb13e975f758db3947606f\",\n \"window\": \"IS+warmup(2023-10-02) \\u00b7 window B\"\n}\n"
+ },
+ "wall_s": 256.7
+}
