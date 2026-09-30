@@ -8674,3 +8674,13 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef9f-1112-7ec0-becf-5070d62bf947
 > Resume in Codex: codex resume 01a0ef9f-1112-7ec0-becf-5070d62bf947
+
+## 2026-09-30 — 트라이얼 #3 (f) 완료: Codex task-muncmbk1-pg9k5u **MERGE**
+
+### Codex 원문(verbatim)
+> **VERDICT: MERGE.** Finding 3 is closed at HEAD (`7cef5f1`). [read_p1_merged](/home/cms/project/BTC_Futures_E2E/backtest/t3_outputs.py:143) now rejects booleans in integer fields and integers in boolean fields, including manifest `lo` and `hi`. [read_p1_parts](/home/cms/project/BTC_Futures_E2E/backtest/t3_outputs.py:110) applies the same checks to part metadata. The new [tamper tests](/home/cms/project/BTC_Futures_E2E/tests/test_evaluate_t3.py:300) cover `lo = false`, `n_source = true`, and `computable = 1`.
+> 
+> This was a read-only code review. I did not run the fixture tests because they write files.
+> 
+> Codex session ID: 01a0efa5-8f3a-7d22-9c85-1a3f2235317a
+> Resume in Codex: codex resume 01a0efa5-8f3a-7d22-9c85-1a3f2235317a
