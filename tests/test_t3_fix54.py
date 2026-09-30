@@ -317,6 +317,9 @@ def test_prose_freeze_mention_does_not_expose_other_malformed_tokens():
     f"| d | t3_freeze_H_v2 ={'c' * 40} |", f"| d | t3_freeze_H_v2 = {'c' * 40} |", f"| d | T3_FREEZE_H_V2={'c' * 40} |",
     f"| d | `t3_freeze_H_v2`={'c' * 40} |", f"| d | t3_freeze_H_v2 | ={'c' * 40} |", f"| d | t3_freeze_H_v2:={'c' * 40} |",
     f"| d | t3_freeze_auth_v2 = {H40} |", f"| d | T3_Fingerprint_v2={H64} |",
+    f"| d | t3_freeze_H_v2{' ' * 9}={'c' * 40} |", f"| d | t3_freeze_H_v2 |  |  | ={'c' * 40} |",
+    f"| d | t3_freeze_H_v2\n={'c' * 40} |", f"| d | t3\\_freeze\\_H\\_v2={'c' * 40} |", f"| d | t3_freeze_H_v2&#61;{'c' * 40} |",
+    f"| d | t3_freeze_H_v2\uff1d{'c' * 40} |", f"t3_freeze_H_v2={'c' * 40} (표 밖 줄)",
 ])
 def test_near_miss_freeze_assignments_are_refused_not_skipped(dup):
     """Codex A 재확인 MAJOR: 둘째 v2·승인 행이 모양만 비틀려 조용히 건너뛰어지지 않는다."""
@@ -331,3 +334,10 @@ def test_prose_mentions_without_assignment_still_pass():
     reg = (f"| a | t3_freeze_H={H40} · t3_freeze_manifest={H64} · t3_fingerprint={H64} |\n"
            "| p | 키 이름 `t3_freeze_H_v2` · T3_FINGERPRINT 설명 · t3_freeze 절차 (등호 없는 산문) |")
     assert sorted(PV.freeze_versions(reg)) == [1]
+
+
+def test_near_assignment_scan_is_linear():
+    import time
+    t0 = time.perf_counter()
+    PV.near_freeze_assignments("t3_freeze_" * 20000)
+    assert time.perf_counter() - t0 < 1.0

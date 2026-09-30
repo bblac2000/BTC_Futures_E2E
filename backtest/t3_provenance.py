@@ -212,6 +212,9 @@ def freeze_versions(reg: str) -> dict[int, dict[str, Any]]:
     `t3_freeze_manifest` · `t3_fingerprint`(접미어 없음) · v≥2 = 같은 이름 + `_v<n>` · 승인 `t3_freeze_auth_v<n>`(n ≥ 2) ·
     그 밖의 `t3_freeze*`·`t3_fingerprint*` 키 → 거부 · 행마다 동결 계열 토큰만 (엄격하게) 파싱한다(`_freeze_tokens`). 버전마다 세 토큰을 모두 가진 행 정확히 하나(부분 세트 거부) · 버전 = {1..N} ·
     n ≥ 2마다 승인 행 정확히 하나(그 행에는 다른 동결 키 없음) · 짝 없는 승인 거부."""
+    canonical = sum(len(_freeze_tokens(ln)) for ln in reg.splitlines() if ln.startswith("|"))
+    if near_freeze_assignments(reg) != canonical:                 # 모양만 비튼 동결 할당은 건너뛰지 않고 거부(Codex A 재확인 MAJOR ×2)
+        raise ProvenanceError("동결 키 모양의 할당이 정규 토큰이 아니다(공백·대소문자·칸 나눔·개행·이스케이프·전각 등)")
     trip: dict[int, list[tuple[str, dict[str, str]]]] = defaultdict(list)
     auth: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for ln in reg.splitlines():
@@ -260,14 +263,33 @@ def _freeze_tokens(line: str) -> dict[str, str]:
         if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", v):
             raise ProvenanceError(f"행의 {k} 값 형식이 틀렸다")
         out[k] = v
-    near = _NEAR_FREEZE.findall(line)
-    if len(near) != len(out):                                      # 동결 키 모양의 할당은 모두 정규 토큰이어야 한다(Codex A 재확인 MAJOR)
-        raise ProvenanceError(f"동결 키 모양의 할당이 정규 토큰이 아니다(공백·대소문자·칸 나눔 등): {near}")
     return out
 
 
-# 대소문자 무시 · 키 뒤 비단어 문자(공백·백틱·칸 경계·구두점) 최대 8개 뒤 "=" — 산문 언급(등호 없음)은 걸리지 않는다
-_NEAR_FREEZE = re.compile(r"(?i)t3_(?:freeze|fingerprint)[\w./-]*[^\w=\n]{0,8}=")
+def _key_char(c: str) -> bool:
+    return c.isalnum() or c in "_./-"
+
+
+def near_freeze_assignments(text: str) -> int:
+    """레지스트리 전체(표 행만이 아니라)에서 동결 계열 키 모양 뒤에 구분 문자(단어 문자·"="가 아닌 모든 것 — 공백·개행·칸 경계·백틱·
+    구두점, 길이 제한 없음)만 있고 이어서 "="가 오는 곳의 수. 먼저 정규화: NFKC(전각 등호 등) · HTML 엔티티 풀기 · 역슬래시 제거
+    (마크다운 이스케이프) · casefold. 선형(뒤에서 한 번 훑어 다음 비키 문자·다음 단어/등호 위치를 미리 계산 · Codex A 재확인 MINOR)."""
+    import html
+    import unicodedata
+    t = unicodedata.normalize("NFKC", html.unescape(text)).replace("\\", "").casefold()
+    n = len(t)
+    next_nonkey = [n] * (n + 1)
+    next_stop = [n] * (n + 1)                                        # 다음 단어 문자 또는 "="
+    for i in range(n - 1, -1, -1):
+        c = t[i]
+        next_nonkey[i] = next_nonkey[i + 1] if _key_char(c) else i
+        next_stop[i] = i if (c.isalnum() or c == "_" or c == "=") else next_stop[i + 1]
+    count = 0
+    for m in re.finditer(r"t3_(?:freeze|fingerprint)", t):
+        j = next_stop[next_nonkey[m.end()]]
+        if j < n and t[j] == "=":
+            count += 1
+    return count
 
 
 def _check_version(repo: Path, ref: str, v: dict[str, Any], k: int) -> None:
