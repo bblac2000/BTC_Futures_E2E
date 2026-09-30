@@ -108,9 +108,15 @@ def test_prepare_t2_is_not_modified_by_the_fix():
 
 
 # ── 동결 행 버전화 ────────────────────────────────────────────────────────────
-def test_real_registry_has_only_freeze_version_1_today():
-    fz = PV.freeze_versions((ROOT / PV.REGISTRY_REL).read_text())
-    assert sorted(fz) == [1] and fz[1]["H"] == "305e664b15b93201ea0e5446a5df5f5e9b265fa8"
+def test_real_registry_parses_and_v1_is_305e664():
+    fz = PV.freeze_versions((ROOT / PV.REGISTRY_REL).read_text())             # C3′ 뒤에도 통과(앞으로 호환)
+    assert 1 in fz and fz[1]["H"] == "305e664b15b93201ea0e5446a5df5f5e9b265fa8"
+
+
+def test_rows_without_freeze_keys_are_not_parsed():
+    reg = (f"| a | t3_freeze_H={H40} · t3_freeze_manifest={H64} · t3_fingerprint={H64} |\n"
+           "| x | 메모 t3_note=hello |\n| w | t3_freeze_H_v2 언급(등호 없음) |\n| y | t3_prepared/bars_1m.parquet=zz |")
+    assert sorted(PV.freeze_versions(reg)) == [1]
 
 
 def _code_change(r: Path) -> None:
@@ -256,3 +262,44 @@ def test_v1_key_is_not_a_substring_match_for_v2_keys():
            f"| b | t3_freeze_H_v2={'c' * 40} · t3_freeze_manifest_v2={H64} · t3_fingerprint_v2={H64} |\n| c | t3_freeze_auth_v2={H40} |")
     fz = PV.freeze_versions(reg)
     assert fz[1]["H"] == H40 and fz[2]["H"] == "c" * 40 and fz[2]["auth"] == H40
+
+
+def test_build_verify_and_pinned_load_with_drops_and_a_retained_funding(tmp_path):
+    """Codex A MINOR 1: 버린 워밍업 행 + 남는 정상 펀딩(창 안 16:00) → 빌드 · 다시 빌드 대조 · 고정 로더."""
+    start = TP.END + 1 - 490 * TP.MIN                                             # 2025-12-31 15:50
+    out = TP.capture(tmp_path, start=start)
+    keep_ms = TP.END + 1 - 8 * 3_600_000                                         # 2025-12-31 16:00
+    write_funding(out / "raw", [WARM88 + [row(keep_ms, mark="100")]])
+    m = P.build(out, (start, TP.END))
+    assert P.verify_rebuild(out, (start, TP.END)) == m
+    pins = PV.make_pins(out)
+    _, fundings, _, _ = P.load_prepared_pinned(out, pins, (start, TP.END), root=tmp_path)
+    assert [f.funding_ms for f in fundings] == [keep_ms] and fundings[0].mark == "100"
+    assert json.loads((out / "source_audit.json").read_text())["price"][P.DROP_KEY]["count"] == 88
+
+
+def _next_version(ch: dict[str, Any], n: int, prev_h: str) -> str:
+    r = ch["repo"]
+    _code_change(r)
+    _commit(r, f"code v{n}")
+    _append_row(r, f"| a{n} | 승인 · t3_freeze_auth_v{n}={prev_h} |")
+    h = _commit(r, f"H v{n}", push=False)
+    man = PV.freeze_manifest(r, h)
+    (r / PV.manifest_rel(n)).write_text(json.dumps(man, sort_keys=True, indent=1) + "\n")
+    _append_row(r, f"| f{n} | 동결 · t3_freeze_H_v{n}={h} · t3_freeze_manifest_v{n}={PV.sha_file(r / PV.manifest_rel(n))} · "
+                   f"t3_fingerprint_v{n}={man['fingerprint']} |")
+    _commit(r, f"C3 v{n}")
+    return h
+
+
+def test_v3_chain_and_a_later_pins_row_pass(chain):
+    """Codex A MINOR 2: v3까지의 사슬 · 뒤에 붙는 핀 행(t3_manifest · t3_raw_inventory · t3_prepared/...)이 관문을 깨지 않는다."""
+    h2 = _v2(chain)
+    h3 = _next_version(chain, 3, h2)
+    r = chain["repo"]
+    _append_row(r, f"| 57 | 데이터 핀 `{PV.PINS_REL}` · t3_manifest={H64} · t3_raw_inventory={H64} · t3_prepared/bars_1m.parquet={H64} |")
+    _commit(r, "pins-like row")
+    rows = PV.require_rows(r, h3)
+    assert rows["freeze_version"] == "3"
+    with pytest.raises(PV.ProvenanceError):
+        PV.require_rows(r, h2)

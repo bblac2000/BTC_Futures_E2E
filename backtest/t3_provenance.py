@@ -210,13 +210,13 @@ def manifest_rel(k: int) -> str:
 def freeze_versions(reg: str) -> dict[int, dict[str, Any]]:
     """레지스트리 #54 관문 버전화: 표 행의 토큰(엄격 파싱)에서만 버전을 찾는다. 키 허용 목록 — v1 = `t3_freeze_H` ·
     `t3_freeze_manifest` · `t3_fingerprint`(접미어 없음) · v≥2 = 같은 이름 + `_v<n>` · 승인 `t3_freeze_auth_v<n>`(n ≥ 2) ·
-    그 밖의 `t3_freeze*`·`t3_fingerprint*` 키 → 거부. 버전마다 세 토큰을 모두 가진 행 정확히 하나(부분 세트 거부) · 버전 = {1..N} ·
+    그 밖의 `t3_freeze*`·`t3_fingerprint*` 키 → 거부 · `t3_freeze`·`t3_fingerprint`를 담은 행만 (엄격하게) 파싱한다. 버전마다 세 토큰을 모두 가진 행 정확히 하나(부분 세트 거부) · 버전 = {1..N} ·
     n ≥ 2마다 승인 행 정확히 하나(그 행에는 다른 동결 키 없음) · 짝 없는 승인 거부."""
     trip: dict[int, list[tuple[str, dict[str, str]]]] = defaultdict(list)
     auth: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for ln in reg.splitlines():
-        if not ln.startswith("|"):
-            continue
+        if not ln.startswith("|") or not ("t3_freeze" in ln or "t3_fingerprint" in ln):
+            continue                                               # 동결 키가 없는 행은 파싱하지 않는다(다른 행의 오타가 관문을 잠그지 않게)
         fam: dict[int, dict[str, str]] = defaultdict(dict)
         for key, val in _tokens(ln).items():
             if not key.startswith(("t3_freeze", "t3_fingerprint")):
