@@ -10609,3 +10609,191 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 ## 2026-09-30 — 트라이얼 #4 사용자 결정(단계 (a) 보고 뒤 · verbatim 요지)
 > "Decision 1 (item 9): distribution membership = valid print (≥ 475/480 minutes); TRIGGER requires all 480 minutes present at decision time. This is the literal reading of r3 §1 ... Reason code for a valid-but-incomplete print at decision: print_incomplete (distinct from print_invalid). Report-only: on pre-IS 2022–2023, count prints with 475–479 minutes ... Decision 2 (step b): GO. Append-only one line adding (3, 30) ... focused tests; trial #2 full regression as in step (b) of trial #3; trial #3 regression by scratch-directory comparison of run_arm outputs (all 8 runs) and P1 part outputs against the recorded hashes in docs/trials/trial_03/records/ ... Codex review of the diff; registry row stating that trial #3's run gate refuses from this commit by design ... Stop and report after (b) with both regressions' results before starting (c)."
 - 결정 1 반영: prepare_t4 인쇄 필드 `final_minute_present` → `complete`(480분 전부) · 감사 `prints_valid_incomplete` · 규약 A9 교체 · IS 이전 효과 크기(보정 zip · 2022~2023 인쇄 2,190): 480분 2,181 · 475~479분 1 · 475 미만 8.
+
+## 2026-09-30 — 트라이얼 #4 단계 (b) **before-pass + 차이 검토 + after-pass**(advisor + Codex: before FIX-PLAN-FIRST → r2 PROCEED · 차이 검토 FIX-FIRST → 재확인 FIX-FIRST(문구) → **MERGE** · advisor after MERGE)
+- 변경: `sizing/config.py` `REGISTERED_LEVERAGE_BANDS`에 `(3, 30)` 추가(6a47bf2) · 시험 후속 0ddba1d(LIQ_DISTANCE 고정) · 증거 0455f28 · 레지스트리 #72.
+- 회귀(진단 · 관문 없이 · 스크래치에만): 트라이얼 #2 — 기준선 b1b03e1 워크트리(43:17 · RSS 3.65 GB) · 후 0ddba1d(41:22 · 3.67 GB) · 1,043파일 불일치 0 · report 재계산 9223047c… · 재실행 목록 838줄 전후 바이트 동일(트라이얼 #3 (b) 목록과도 동일). 트라이얼 #3 — 기준선 main 체크아웃 HEAD b1b03e1 · 추적되지 않은 검사기 deaa1c3c…(14:54 · 2.17 GB) · 후 6a47bf2 · 검사기 181507c8…(14:03 · 2.19 GB) · 46파일 불일치 0 · 목록 전후 동일.
+- 트라이얼 #3 관문(깨끗한 트리 0455f28에서 관찰): `require_frozen(f087611f…)` → "동결 파일 sizing/config.py가 판정기 커밋 f087611fa2367a4eb0b709e89059cac626cfa909 뒤에 바뀌었다" · 동결 51파일 중 이 하나만 다름 · 지문 8554df6d… → 85f3a8a4….
+- 전체 시험 1,588 passed · ruff·pyright 깨끗.
+- 절차 사고(공개): 트라이얼 #2 기준선 첫 시도는 `--out`이 트라이얼 #3 (b)의 옛 스크래치 디렉터리(`t2reg_baseline`, 2026-09-29)라 빠진 산출물이 옛 파일로 가려질 수 있어 약 6분 뒤 중단 · 새 디렉터리로 다시 실행(기록된 기준선). `t2_regression_check.check_out`은 기존 디렉터리를 거부하지 않는다 — 트라이얼 #2 스크립트는 고치지 않고(닫힌 트라이얼 도구 · 이번 범위 밖) 운영 규칙으로: 매 실행 새 `--out`.
+- **기록 결함(공개)**: (b) before-pass **advisor 원문은 verbatim으로 복구할 수 없다** — 대화 압축 전에 스크래치 파일로 저장하지 않았고, 대화 기록에는 advisor 결과가 암호화된 형태로만 남는다. 아래는 압축 요약에 남은 **요지**다(K6 선례 2026-09-29: 요지로 기록했던 advisor 통과를 나중에 verbatim으로 바꿈 — 이번에는 원문이 없어 바꿀 수 없다). 고침: 이후 모든 advisor 결과는 호출 직후 스크래치 파일로 저장한다(이번 after-pass부터 적용 — `t4b_advisor_after.md`).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor before(요지) | 변경 전 트라이얼 #3 기준선을 돌려 검사기가 공허하지 않음을 확인 | 동의 — 실행(46/0) |
+| 2 | advisor before(요지) | 넓어진 RegimeSizing 부분범위 공개 | 동의 — #72·A12 |
+| 3 | advisor before(요지) | 트라이얼 #2는 --jobs 2로 순차(겹치지 않게) | 동의 — 기준선 → 후 순서 |
+| 4 | advisor before(요지) | 증거는 `docs/trials/trial_04_step_b_regression/{t2,t3}/` | 동의 — 0455f28 |
+| 5 | Codex before MAJOR 1 | 워크트리 기준선은 데이터 경로 때문에 실행 불가 — 빼거나 명세 | 동의(명세) — r2 B4-1: main 체크아웃 HEAD b1b03e1에서 실행 · r2 PROCEED |
+| 6 | Codex before MAJOR 2 | 출력이 스크래치만이라는 강제가 없다 | 동의 — `check_out`(저장소 밖 · 새 경로) + 시험 4개 |
+| 7 | Codex before MINOR | 경계 시험 입력 명시 · 공유 시험 머리말 | 동의 — 50,000 · step 0.001 · 머리말 3대역 |
+| 8 | Codex before Q4 | 트라이얼 #3 기준선은 선택 | 부분 동의 — advisor 1에 따라 유지(검사기 검증) · 두 검사기 해시 기록 |
+| 9 | Codex 차이 MAJOR | 트라이얼 #2 after 증거가 필요 | 동의 — 0ddba1d에서 1,043/0 · 목록 동일 |
+| 10 | Codex 차이 MINOR | 숏 경계 시험이 거부 사유를 고정하지 않는다 | 동의 — 0ddba1d `RejectReason.LIQ_DISTANCE` |
+| 11 | Codex 차이 (행) | #72에 추적되지 않은 검사기 · 전체 시험 결과 · 진단일 뿐 명시 | 동의 — 행에 반영 |
+| 12 | advisor after 1 | 트라이얼 #3 기준선 위치를 워크트리로 잘못 적음 | 동의 — "main 체크아웃 HEAD b1b03e1"로 고침(행·README) |
+| 13 | advisor after 2 | 관문 거부는 관찰이 아니라 추론이었다(더러운 트리 메시지) | 동의 — 깨끗한 트리에서 다시 실행 · 실제 메시지 기록 |
+| 14 | advisor after 3 | 덧붙이기 전 레지스트리 검사(칸 · freeze_versions · near 수 · t3 토큰) | 동의 — 결과는 아래 |
+| 15 | advisor after 4 | advisor before 원문 결손을 사용자 보고에 결함으로 | 동의 — 이 절 · 보고 |
+| 16 | Codex 재확인 1 MINOR | #72가 트라이얼 #2 1,043파일 전부 "바이트 동일"로 과장 — meta.json은 JSON 대조 | 동의 — "1,043파일 대조 · meta.json은 git_head·gate 뺀 JSON · 비-meta 838파일 목록 동일"로 고침(행·README) |
+| 17 | Codex 재확인 2 | 남은 지적 없음 · README 고침은 #72와 함께 커밋 | 동의 — 같은 커밋 · **MERGE** |
+
+레지스트리 덧붙이기 전 검사(#72 최종 문안): 8칸 · `freeze_versions` [1, 2] → [1, 2] · near 동결 할당 수 7 → 7 · 행 안 `t3_…=` 토큰 0.
+
+
+### advisor before-pass — **요지(verbatim 아님 · 원문 복구 불가 · 위 기록 결함 참조)**
+- 변경 전 코드에서 트라이얼 #3 기준선을 돌려 새 검사기가 공허하지 않음을 먼저 보인다.
+- 넓어진 `RegimeSizing` 부분범위를 공개한다.
+- 트라이얼 #2 회귀는 --jobs 2로, 기준선과 후를 겹치지 않게 순차로.
+- 증거는 `docs/trials/trial_04_step_b_regression/{t2,t3}/`.
+
+### Codex before-pass r1 — FIX-PLAN-FIRST(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+**STEP (b) BEFORE-pass at `b1b03e1`: FIX-PLAN-FIRST.** The append-only band change is well scoped, but B4 needs a clear baseline decision and a safer scratch-output rule before its regression script is used. This was a read-only review; I did not open market data or run either regression. An untracked draft of `scripts/t3_regression_check.py` was present and informed the B4 findings below. It is not part of HEAD.
+
+The text below is Codex's output, reproduced in full.
+
+### Findings, ranked
+
+- **MAJOR — B4's proposed pre-change baseline is not executable as drafted.** [Plan B4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:21) calls for a run in a pre-change worktree. The [draft script](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:23) derives both code root and `var/t3/IS` from its own location and offers only `--out`. A separate worktree will not have the main checkout's ignored prepared data; pointing the pinned loader at that data also requires its matching `root` because the loader checks the output path against that root ([prepare_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:366)). **Fix:** remove the optional trial #3 baseline run from B4 and use the closed recorded hashes as the reference. If retaining it, specify how the script runs under pre-change code, accepts the main checkout's data path, and passes the matching data root to the pinned loader.
+
+- **MAJOR — the draft B4 script does not enforce "scratch directory only."** Its output guard rejects locations inside `var/t3/IS`, but permits an `--out` under the closed `docs/trials/trial_03/records/` tree or elsewhere in the repo; it then creates directories and writes results there ([t3_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:51)). **Fix:** require a resolved scratch output outside protected repo and trial directories, and test refusal before directory creation.
+
+- **MINOR — make B2's boundary test inputs precise.** [Plan B2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:9) expects an accepted 20% `size_entry` at L=3. Quantity is stepped down and checked against minimum quantity and notional *after* leverage selection ([normalize.py](/home/cms/project/BTC_Futures_E2E/exchange/normalize.py:78), [position.py](/home/cms/project/BTC_Futures_E2E/sizing/position.py:225)); the preregistration explicitly warns that a 20% signal can be rejected after rounding ([preregistration §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:28)). **Fix:** state an entry price and quantity step combination that leaves the target notional on a valid step, then assert both `ok` and `leverage == 3`. Update the two-band description in the shared test module header when editing its assertions ([test_engine_trial02_ext.py](/home/cms/project/BTC_Futures_E2E/tests/test_engine_trial02_ext.py:3)).
+
+### B1–B5
+
+- **B1 — sound.** Appending `(3, 30)` preserves `PERMITTED_LEVERAGE` and the existing tuples. `SizingLimits` requires an exact registered tuple, while `RegimeSizing` permits a subrange of one registered tuple; the plan accurately discloses that widening ([plan](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:2), [config.py](/home/cms/project/BTC_Futures_E2E/sizing/config.py:13)).
+
+- **B2 — sound with the MINOR test clarification above.** Moving `(5,30)` from rejected to accepted follows the actual `RegimeSizing` predicate. The proposed remaining invalid ranges cross or fall outside every band ([plan](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:7), [shared test](/home/cms/project/BTC_Futures_E2E/tests/test_engine_trial02_ext.py:53)). Keep an explicit check that a newly valid regime still cannot be used with mismatched old limits; `size_entry` enforces that separately ([position.py](/home/cms/project/BTC_Futures_E2E/sizing/position.py:156)).
+
+- **B3 — sound.** The unchanged trial #2 script reruns strategy variants, recorded P1 partitions and merge, compares output files, and recomputes the closed report diagnostically ([t2_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py:118)). The proposed pre/post summaries and byte-identical rerun lists match the [trial #3 step (b) precedent](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_step_b_regression/README.md:1). The stated 1,043 files are an expected result to verify, not a result of this before-pass.
+
+- **B4 — partial; fix the two MAJOR findings first.** The core 46-file comparison is feasible: eight runs produce three files each; 16 P1 parts produce one each; two merges produce three each ([t3_outputs.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_outputs.py:20)). The draft calls the same run and write functions as the trial #3 runner and uses rerun base trades for P1 ([trial #3 runner](/home/cms/project/BTC_Futures_E2E/strategies/trial03/run.py:53), [draft](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:60)). Its record-key distinction is correct: run and P1-part hashes are under `run.outputs`, while merge hashes are top-level `outputs` ([t3_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:140), [merge record writer](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:298)).
+
+- **B5 — sound.** A new append-only registry row should record the band change, regression results, and the planned trial #3 gate consequence. `sizing/*.py` is in trial #3's frozen set, and its gate compares current bytes with the frozen commit ([t3_provenance.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:33), [gate](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:114)). Record the outcome in conventions A12 as planned ([plan](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:23)).
+
+### Plan questions
+
+1. **Is regression coverage complete for the band append?** Yes, once B4's scratch rule is fixed: focused construction, rejection and sizing tests cover the new policy, while full trial #2 and all 46 recorded trial #3 outputs cover unchanged closed behavior. Compare actual counts and hashes before recording success; this review has not done so ([plan B2–B4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:7)).
+
+2. **Any other reader of `REGISTERED_LEVERAGE_BANDS`?** The repo-wide Python-code search found the two runtime predicates in `sizing/config.py` and the assertion in `tests/test_engine_trial02_ext.py`; no other code reader was found ([config.py](/home/cms/project/BTC_Futures_E2E/sizing/config.py:40), [shared test](/home/cms/project/BTC_Futures_E2E/tests/test_engine_trial02_ext.py:55)). Documentation also mentions the constant but does not execute it.
+
+3. **Does `RegimeSizing` widening need more than disclosure?** No further runtime change is indicated. Disclose the newly accepted subranges and test that pairing them with incompatible old `SizingLimits` still fails ([config.py](/home/cms/project/BTC_Futures_E2E/sizing/config.py:35), [position.py](/home/cms/project/BTC_Futures_E2E/sizing/position.py:156)).
+
+4. **Is a trial #3 pre-change baseline needed?** No. The closed trial #3 records supply the reference hashes for the after-change rerun. A pre-change rerun is optional extra diagnostic evidence, and B4 should drop it unless its separate-worktree data path and code provenance are specified ([plan question](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan.md:25), [record comparison design](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:104)).
+
+Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`.
+
+VERDICT: FIX-PLAN-FIRST
+
+### Codex before-pass r2 — PROCEED(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+**Read-only re-check at HEAD `b1b03e1`:** Codex found that plan r2 resolves the three prior findings. It did not run the regression script or open market data or regression outputs.
+
+The session/thread ID is `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`. This is Codex's output, reproduced in full.
+
+- **MAJOR 1, baseline executability: RESOLVED.** [Plan r2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan_r2.md:2) now places the pre-change trial #3 run in the main checkout, where `ROOT`, `T3_BASE`, and the pinned loader's `root=ROOT` agree ([t3_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:23), [prepare_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:379)). HEAD remains pre-B1, and `sizing/config.py` has no working-tree change. Codex did not verify the reported run's progress or result.
+
+- **MAJOR 2, scratch-only output: RESOLVED.** `main` resolves `--out` and calls `check_out` before `mkdir`; the guard rejects paths inside the repo and paths that already exist ([t3_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:34), [main](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:58)). Synthetic tests cover protected repo paths and an existing external path ([test_t3_regression_check_guard.py](/home/cms/project/BTC_Futures_E2E/tests/test_t3_regression_check_guard.py:16)). With the stated external scratch output, the script reads pinned prepared data and records, while its run, P1, summary, and hash-list writes are beneath `--out` ([t3_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:60)). So the main-checkout baseline has no code path that writes to prepared data or closed records.
+
+- **MINOR, B2 boundary inputs: RESOLVED.** [Plan r2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4b_plan_r2.md:9) specifies a 50,000 entry price, which makes the 20% target notional 50 and the quantity 0.001 on the stated step. The draft focused test uses those inputs, checks L=3 and L=30, and checks that newly constructible regimes remain incompatible with mismatched old limits ([test_sizing_band_3_30.py](/home/cms/project/BTC_Futures_E2E/tests/test_sizing_band_3_30.py:42)). The shared test header update is still a planned edit, which is appropriate before B1.
+
+**Guard versus baseline script:** the saved baseline digest is `deaa1c3c…`; the current script hashes to `181507c8…`. Compared with the earlier draft inspected in this review thread, the visible change replaces its narrower inline output check with `check_out` before `base.mkdir`. The replay and comparison block, from pinned loading through result writing, appears unchanged ([t3_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:34), [replay block](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:63)). **Limit:** the digest alone cannot prove a byte-for-byte diff from the baseline source, which no longer exists as a separate file. Recording both script hashes and comparing each run with the closed output hashes makes that distinction visible in the evidence.
+
+**New findings:** None. The r2 plan is consistent with a main-checkout pre-change baseline followed by the B1 change and after run.
+
+Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`.
+
+VERDICT: PROCEED
+
+### Codex 차이 검토(b1b03e1..6a47bf2) — FIX-FIRST(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+**Diff review of `b1b03e1..6a47bf2`:** Codex found the code change correctly scoped. The worktree is clean and `git diff --check` reports no whitespace errors. It did not run regressions or inspect market data. The 1,588 passing tests and the trial #3 regression results are reported figures, not independently verified.
+
+The session/thread ID is `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`. This is Codex's output, reproduced in full.
+
+### Findings
+
+- **MAJOR — required trial #2 post-change evidence is pending.** The baseline is still running, and the after run has not been reported. A baseline cannot establish that the shared-code change preserves trial #2 outputs. **Fix:** complete both runs, require `identical: true`, zero recorded-output mismatches, and byte-identical baseline/after rerun hash lists; record the actual counts and results before merging the step (b) work ([t2_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py:153), [success condition](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py:170)).
+
+- **MINOR — the short boundary test does not pin its stated rejection cause.** It asserts only `not d.ok` and `leverage is None`, so another pre-selection rejection could satisfy it ([test_sizing_band_3_30.py](/home/cms/project/BTC_Futures_E2E/tests/test_sizing_band_3_30.py:60)). **Fix:** also assert `RejectReason.LIQ_DISTANCE`, the reason selected when every candidate fails the liquidation-distance gate ([position.py](/home/cms/project/BTC_Futures_E2E/sizing/position.py:191)). This test improvement does not change the runtime assessment.
+
+### Runtime and test assessment
+
+The sole runtime change appends `(3,30)` to `REGISTERED_LEVERAGE_BANDS`. `PERMITTED_LEVERAGE` and the default `SizingLimits()` remain `(50,100)` ([config.py](/home/cms/project/BTC_Futures_E2E/sizing/config.py:13)). Trial #2 and #3 explicitly retain `(10,30)` ([trial #2 config](/home/cms/project/BTC_Futures_E2E/strategies/trial02/config.py:28), [trial #3 config](/home/cms/project/BTC_Futures_E2E/strategies/trial03/config.py:41)). The intentional widening is that `RegimeSizing` can now construct subranges such as `[5,30]`. A regime still must fit the chosen `SizingLimits` at sizing time ([config.py](/home/cms/project/BTC_Futures_E2E/sizing/config.py:40), [position.py](/home/cms/project/BTC_Futures_E2E/sizing/position.py:156)). I found no unintended bot-default or closed-trial configuration change.
+
+The shared test updates the tuple and reclassifies `[5,30]` correctly ([test_engine_trial02_ext.py](/home/cms/project/BTC_Futures_E2E/tests/test_engine_trial02_ext.py:53)). The focused tests cover old defaults, new and invalid bands, mismatched limits, and the specified 50,000-price sizing boundaries ([test_sizing_band_3_30.py](/home/cms/project/BTC_Futures_E2E/tests/test_sizing_band_3_30.py:23)). The regression checker writes beneath a resolved, new, external scratch path and compares eight runs, 16 P1 parts, and two merges against recorded hashes ([t3_regression_check.py](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:34), [comparison](/home/cms/project/BTC_Futures_E2E/scripts/t3_regression_check.py:63)). Its guard has synthetic refusal tests ([test_t3_regression_check_guard.py](/home/cms/project/BTC_Futures_E2E/tests/test_t3_regression_check_guard.py:16)). The reported trial #3 result supports unchanged trial #3 outputs: 46 files, zero mismatches before and after, with byte-identical rerun lists.
+
+### Registry row and merge decision
+
+The next append-only row is **#72**, after [#71](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:79). It should identify commit `6a47bf2`, the `(3,30)` addition under #65/constitution v1.5, unchanged bot default and trial #2/#3 `(10,30)` configs, and the disclosed `RegimeSizing` subrange widening. It should record:
+
+- the reported trial #3 baseline and after results;
+- both checker SHA256 values;
+- that the baseline used pre-change code with an **untracked diagnostic checker**;
+- the actual trial #2 baseline/after results, only once complete, with evidence paths and the reported full-suite result;
+- that both regressions are diagnostics, with no new closed-trial verdict or OOS opening.
+
+The row must also state that trial #3's provenance gate **refuses by design** after this commit. `sizing/*.py` belongs to its frozen file set, and the gate rejects changed frozen bytes ([t3_provenance.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:33), [gate check](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:114)). The trial #3 checker's gate-free replay does not alter that rule.
+
+**Yes, trial #2 after-run results are required before merge** under the authorized step (b) regression scope. Code review and the reported trial #3 pass do not substitute for them.
+
+Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`.
+
+VERDICT: FIX-FIRST
+
+### Codex 재확인 1(6a47bf2..0455f28 + #72 초안) — FIX-FIRST(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+## Findings
+
+**MINOR — Draft row #72 overstates trial #2 byte equality.** The row says all 1,043 files were byte-identical to the recorded files. The checker compares `meta.json` as parsed JSON after removing `git_head` and `gate`; it hashes the other files. The committed evidence separately shows byte-identical hash lists for 838 non-meta rerun files. Fix the row to say "1,043 files compared, with `meta.json` equal after excluding `git_head`/`gate`; 838 non-meta rerun files byte-identical; zero mismatches." See [row72.txt:1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/row72.txt:1), [t2_regression_check.py:51](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py:51), and [evidence README:8](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:8).
+
+No BLOCKER or MAJOR finding in the committed diff or evidence reviewed.
+
+## Claim checks
+
+1. **Test correction verified.** The boundary test now requires `RejectReason.LIQ_DISTANCE` for the rejected short, alongside `not d.ok` and no leverage. [test_sizing_band_3_30.py:60](/home/cms/project/BTC_Futures_E2E/tests/test_sizing_band_3_30.py:60)
+
+2. **Trial #2 evidence matches the stated results.** Both summaries name the stated commits and report 205 strategy runs, eight P1 parts, 1,043 files compared, zero mismatches, `identical: true`, equal verdicts, and the closed and rerun report hash `9223047c…`. The two 838-entry non-meta hash lists are byte-identical to each other and to the trial #3 step (b) precedent list. The README discloses the stopped stale-output attempt and the fresh baseline run. These checks inspect the committed evidence; I did not rerun the regression or open its outputs. [baseline summary:1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/t2/baseline_summary.json:1), [after summary:1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/t2/after_summary.json:1), [evidence README:13](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:13), [evidence README:38](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:38)
+
+3. **Trial #3 evidence matches the stated results.** Both summaries report 46 files, `identical: true`, and zero mismatches; their 46-entry hash lists are byte-identical. The README records the baseline as the main checkout at `b1b03e1` with the untracked checker and the after run at `6a47bf2` with the committed checker. [baseline summary:1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/t3/baseline_summary.json:1), [after summary:1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/t3/after_summary.json:1), [evidence README:20](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:20)
+
+4. **Freeze-gate claim verified.** The frozen set has 51 paths; against freeze v2, only `sizing/config.py` differs, producing the stated fingerprint change. `require_frozen` refuses changed frozen bytes, so the reported refusal is consistent with the code. [evidence README:34](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:34), [t3_provenance.py:33](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:33), [t3_provenance.py:126](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:126)
+
+5. **Conventions A12 records the step (b) outcome** and points to the committed evidence. [trial_04_conventions.md:20](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:20)
+
+6. **The 1,588-pass suite and clean ruff/pyright results remain author-reported.** This narrow review did not run those checks. The draft row already includes both requested add-ons: the untracked trial #3 baseline checker and "1,588 passed." Its eight columns match the [registry header](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:7). [row72.txt:1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/row72.txt:1)
+
+**Row #72 may be appended after correcting the trial #2 wording above and replacing `@VERDICT@` with the actual review verdict.** No regression rerun is needed for that wording fix.
+
+Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+
+VERDICT: FIX-FIRST
+
+### Codex 재확인 2 — MERGE(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+## Findings
+
+**No BLOCKER, MAJOR, or MINOR findings remain.** The prior MINOR is resolved: the revised row and README accurately distinguish the 1,043 trial #2 file comparisons from the 838 non-meta rerun files whose hash lists are byte-identical. The checker compares `meta.json` as JSON after excluding `git_head` and `gate`, and hashes the other files. [row72.txt:1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/row72.txt:1), [README.md:8](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:8), [t2_regression_check.py:51](/home/cms/project/BTC_Futures_E2E/scripts/t2_regression_check.py:51)
+
+The row and README both disclose that the trial #3 baseline used the **main checkout** at `b1b03e1` with an untracked checker. Both record the refusal observed on the clean tree at `0455f28`; its stated reason matches `require_frozen`'s changed-file check. The trial #2 and #3 before/after hash lists remain equal, with 838 and 46 entries respectively; the trial #2 list also equals the stated precedent list. [row72.txt:1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/row72.txt:1), [README.md:28](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:28), [README.md:34](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_step_b_regression/README.md:34), [t3_provenance.py:126](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:126)
+
+**Row #72 is appendable.** It has the registry's eight-column shape, includes the untracked-checker disclosure and "1,588 passed," and has one `@VERDICT@` placeholder to replace with this verdict. Commit the currently uncommitted README correction with the row so the referenced evidence retains the reviewed wording. The suite result is author-reported; I did not rerun tests or regressions. [row72.txt:1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/row72.txt:1), [trial_registry.md:7](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:7)
+
+Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+
+VERDICT: MERGE
+
+### advisor after-pass — MERGE(기록 위생 4건)(verbatim)
+You're at the review stage of (b): both regressions pass, evidence is pushed at `0455f28`, Codex re-check is out, row #72 is drafted. Technically this is MERGE — every number in the README, row draft and A12 reconciles with the tool output (1,043/0 and 838-line lists for t2; 46/0 for t3; RSS/wall figures match; 1,588 passed). Nothing reopens the code change.
+
+Three record-hygiene items to fix **before appending #72**, plus one disclosure that must reach the user report:
+
+1. **Row #72 mislabels where the t3 baseline ran.** Your edit says the trial #3 baseline ran "b1b03e1 워크트리에 … 추적되지 않은 진단 검사기". Plan r2 B4-1 states the t3 baseline ran in the **main checkout at HEAD b1b03e1**, not a `git worktree`; only the t2 baseline used a linked worktree. Since the same row uses "b1b03e1 워크트리" for t2 (correct there), a reader will assume the same for t3. Say "main 체크아웃 HEAD b1b03e1(B1 커밋 전) · 추적되지 않은 검사기" for t3. This is exactly the kind of mislabel that produced #71.
+
+2. **The `require_frozen` refusal you observed was the dirty-tree message, not the freeze-file one.** Your README and row claim it refuses on `sizing/config.py` — that's an inference from the hash diff, not an observation. The tree is clean now (post-`0455f28`). Re-run the same one-liner and you should get "동결 파일 sizing/config.py가 판정기 커밋 f087611f… 뒤에 바뀌었다". Record that actual message in the ops_log (and optionally the README in the #72 commit) so the claim is observed, not derived.
+
+3. **Run your established registry pre-append check on the final row text.** You've done cell count (8). Also confirm `freeze_versions(reg)` still returns `[1, 2]` after appending, the near-freeze-assignment count is unchanged, and there is no `t3_*=` token outside designated gate tokens (row #55 rule). Row #58 was caught by this check — don't skip it.
+
+4. **Disclose the advisor before-pass gap, not just in the log.** The (b) before-pass advisor text is unrecoverable verbatim (transcript stores it encrypted; it wasn't saved to scratch before compaction). Log it as a clearly labeled 요지 with the reason, cite the K6 precedent, and state the fix: save every advisor result to a scratch file immediately after the call — including this one. This is a standing-rule miss; it doesn't block (b), but it must appear in the user report as a stated defect, not be buried in the ops_log.
+
+Also for the report: the user asked for the conventions diff at each step — show the A12 before/after text (git diff `b1b03e1..0455f28 -- docs/trials/trial_04_conventions.md`), both regression result blocks with commits, and state explicitly that (c) has not started.
+
+Sequence from here: Codex re-check verdict → fill `@VERDICT@` → fixes 1–3 → append #72 → ops_log section (Codex before r1/r2, diff review, re-check verbatim; advisor before as disclosed summary; advisor after verbatim; per-point positions) → secret scan → commit/push → update trial04-status memory → report → STOP. Do not start (c).
