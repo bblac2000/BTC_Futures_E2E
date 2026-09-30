@@ -10,6 +10,8 @@
   `load_pins`: 추적·깨끗·푸시 · 핀 커밋의 레지스트리에 핀 경로를 담은 행 정확히 하나 · 그 행의 `t3_manifest=`·`t3_raw_inventory=`·
   `t3_prepared/<이름>=` 토큰 = 파일.
 - verify 영수증: H · 지문 · 핀 커밋 · 매니페스트·원시 목록·산출물 해시 — 이후 모든 단계와 판정기가 대조한다.
+- 레지스트리 #54 버전화: 동결 행 키 v1 = `t3_freeze_H`·`t3_freeze_manifest`·`t3_fingerprint` · v≥2 = `_v<n>` 접미어 + 승인 행
+  `t3_freeze_auth_v<n>=<이전 H>` · 버전 1..N을 모두 각자의 H로 검사 · 최신 N만 판정기 커밋(`freeze_versions` · `_check_version`).
 git 호출은 `repo`를 받는다(테스트는 임시 저장소) · 읽기 명령과 `fetch`만.
 """
 from __future__ import annotations
@@ -18,6 +20,7 @@ import hashlib
 import json
 import re
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -162,8 +165,9 @@ def _at(repo: Path, ref: str, rel: str) -> bytes:
 
 
 def require_rows(repo: Path, commit: str, *, ref: str = "origin/main") -> dict[str, str]:
-    """계획 r3 K2′ — 행을 H의 이력에 묶는다: #52 행은 H 트리에 이미 있고 origin/main의 행과 같다 · 규약 바이트는 C1 = H = origin/main = 지금 ·
-    #53은 origin/main에 · 목록 파일·지문·파일별 해시는 H 트리 = 지금."""
+    """계획 r3 K2′ + 레지스트리 #54 버전화 — #52 행은 H 트리에 이미 있고 origin/main의 행과 같다 · 규약 바이트는 C1 = H = origin/main = 지금 ·
+    동결 행은 버전 1..N 전부를 각자의 H에 대해 온전히 검사(`_check_version`) · 사슬(엄격한 조상 · 이전 행·목록·승인 행이 다음 H 트리에) ·
+    최신 버전 N의 H = 판정기 커밋 · 지금 파일 = H_N 트리."""
     reg_ref = _at(repo, ref, REGISTRY_REL).decode("utf-8")
     reg_h = _at(repo, commit, REGISTRY_REL).decode("utf-8")
     conv = _one_row(reg_ref, "t3_conventions")
@@ -175,21 +179,93 @@ def require_rows(repo: Path, commit: str, *, ref: str = "origin/main") -> dict[s
     b_now = (repo / CONVENTIONS_REL).read_bytes()
     if any(_at(repo, x, CONVENTIONS_REL) != b_now for x in (c1, commit, ref)) or conv.get("t3_conventions") != _sha_bytes(b_now):
         raise ProvenanceError("규약 파일 바이트가 C1·H·origin/main·지금 중 하나와 다르거나 행의 SHA256과 다르다")
-    frz = _one_row(reg_ref, "t3_freeze_H")
-    man_path = repo / FREEZE_MANIFEST_REL
-    if not man_path.exists():
-        raise ProvenanceError("동결 목록 파일이 없다")
-    man_b = man_path.read_bytes()
-    if frz.get("t3_freeze_H") != commit or _at(repo, ref, FREEZE_MANIFEST_REL) != man_b or frz.get("t3_freeze_manifest") != _sha_bytes(man_b):
-        raise ProvenanceError("동결 행(#53)의 H·목록 해시가 다르다")
-    man = json.loads(man_b)
-    files_h, files_now = file_hashes_at(repo, commit), file_hashes(repo)
-    fp_h = _fp([[k, v] for k, v in files_h.items()])
-    if man.get("H") != commit or man.get("files") != files_h or files_h != files_now or set(files_h) != freeze_set_at(repo, commit) \
-            or man.get("fingerprint") != fp_h or frz.get("t3_fingerprint") != fp_h:
-        raise ProvenanceError("동결 목록·지문·파일 집합이 H 트리·지금과 다르다")
-    return {"conventions_sha256": _sha_bytes(b_now), "conventions_commit": c1, "freeze_manifest_sha256": _sha_bytes(man_b),
-            "fingerprint": fp_h}
+    fz = freeze_versions(reg_ref)
+    n_top = max(fz)
+    for k in sorted(fz):
+        _check_version(repo, ref, fz[k], k)
+    for k in range(1, n_top):                                      # 사슬: 엄격한 조상 · 이전 행·목록이 다음 H 트리에 그대로
+        a, b = fz[k], fz[k + 1]
+        if a["H"] == b["H"] or _git(repo, "merge-base", "--is-ancestor", a["H"], b["H"]).returncode != 0:
+            raise ProvenanceError(f"동결 v{k} H가 v{k + 1} H의 엄격한 조상이 아니다")
+        reg_next = _at(repo, b["H"], REGISTRY_REL).decode("utf-8")
+        if a["line"] not in reg_next.splitlines() or _at(repo, b["H"], a["manifest_rel"]) != (repo / a["manifest_rel"]).read_bytes():
+            raise ProvenanceError(f"동결 v{k} 행·목록이 v{k + 1} H 트리에 그대로 있지 않다")
+        if b["auth"] != a["H"] or b["auth_line"] not in reg_next.splitlines():
+            raise ProvenanceError(f"동결 v{k + 1} 승인 행(t3_freeze_auth_v{k + 1})이 v{k} H를 가리키지 않거나 v{k + 1} H 트리에 없다")
+    top = fz[n_top]
+    if top["H"] != commit or file_hashes(repo) != top["files"]:
+        raise ProvenanceError(f"최신 동결(v{n_top})의 H가 판정기 커밋이 아니거나 지금 파일이 그 H와 다르다")
+    return {"conventions_sha256": _sha_bytes(b_now), "conventions_commit": c1, "freeze_manifest_sha256": top["manifest_sha256"],
+            "fingerprint": top["fingerprint"], "freeze_version": str(n_top)}
+
+
+_FREEZE_KEY = re.compile(r"t3_(freeze_H|freeze_manifest|fingerprint|freeze_auth)(?:_v([1-9][0-9]*))?")
+_TRIPLE = ("freeze_H", "freeze_manifest", "fingerprint")
+
+
+def manifest_rel(k: int) -> str:
+    return FREEZE_MANIFEST_REL if k == 1 else FREEZE_MANIFEST_REL.replace(".json", f"_v{k}.json")
+
+
+def freeze_versions(reg: str) -> dict[int, dict[str, Any]]:
+    """레지스트리 #54 관문 버전화: 표 행의 토큰(엄격 파싱)에서만 버전을 찾는다. 키 허용 목록 — v1 = `t3_freeze_H` ·
+    `t3_freeze_manifest` · `t3_fingerprint`(접미어 없음) · v≥2 = 같은 이름 + `_v<n>` · 승인 `t3_freeze_auth_v<n>`(n ≥ 2) ·
+    그 밖의 `t3_freeze*`·`t3_fingerprint*` 키 → 거부. 버전마다 세 토큰을 모두 가진 행 정확히 하나(부분 세트 거부) · 버전 = {1..N} ·
+    n ≥ 2마다 승인 행 정확히 하나(그 행에는 다른 동결 키 없음) · 짝 없는 승인 거부."""
+    trip: dict[int, list[tuple[str, dict[str, str]]]] = defaultdict(list)
+    auth: dict[int, list[tuple[str, str]]] = defaultdict(list)
+    for ln in reg.splitlines():
+        if not ln.startswith("|"):
+            continue
+        fam: dict[int, dict[str, str]] = defaultdict(dict)
+        for key, val in _tokens(ln).items():
+            if not key.startswith(("t3_freeze", "t3_fingerprint")):
+                continue
+            m = _FREEZE_KEY.fullmatch(key)
+            if not m or m.group(2) == "1" or (m.group(1) == "freeze_auth" and m.group(2) is None):
+                raise ProvenanceError(f"동결 키 형식이 틀렸다: {key}")
+            n = int(m.group(2)) if m.group(2) else 1
+            fam[n][m.group(1)] = val
+        for n, d in fam.items():
+            if set(d) == {"freeze_auth"} and n >= 2 and len(fam) == 1:
+                auth[n].append((ln, d["freeze_auth"]))
+            elif set(d) == set(_TRIPLE) and len(fam) == 1:
+                trip[n].append((ln, d))
+            else:
+                raise ProvenanceError(f"동결 행이 버전 {n}의 온전한 세 토큰(또는 승인 하나)이 아니다: {sorted(d)}")
+    if not trip:
+        raise ProvenanceError("레지스트리에 동결 행이 없다")
+    n_top = max(trip)
+    if sorted(trip) != list(range(1, n_top + 1)) or any(len(v) != 1 for v in trip.values()):
+        raise ProvenanceError(f"동결 버전이 1..N으로 이어지지 않거나 버전마다 행이 정확히 하나가 아니다: {sorted((k, len(v)) for k, v in trip.items())}")
+    if sorted(auth) != list(range(2, n_top + 1)) or any(len(v) != 1 for v in auth.values()):
+        raise ProvenanceError(f"승인 행이 버전 2..N마다 정확히 하나가 아니다: {sorted((k, len(v)) for k, v in auth.items())}")
+    out: dict[int, dict[str, Any]] = {}
+    for n, [(ln, d)] in trip.items():
+        a_line, a_val = auth[n][0] if n >= 2 else ("", "")
+        out[n] = {"H": d["freeze_H"], "manifest_sha256": d["freeze_manifest"], "fingerprint": d["fingerprint"], "line": ln,
+                  "manifest_rel": manifest_rel(n), "auth": a_val, "auth_line": a_line}
+    return out
+
+
+def _check_version(repo: Path, ref: str, v: dict[str, Any], k: int) -> None:
+    """버전 k 행 하나를 그 H에 대해 온전히(K2′): 목록 바이트 지금 = ref · SHA256 = 토큰 · 목록.H = H_k · 목록.files = H_k 트리 해시(전부
+    있음) · 경로 집합 = H_k에서 평가한 동결 집합 · 목록.fingerprint = 토큰 = H_k 트리 지문."""
+    rel = v["manifest_rel"]
+    p = repo / rel
+    if not p.exists():
+        raise ProvenanceError(f"동결 v{k} 목록 파일이 없다: {rel}")
+    b = p.read_bytes()
+    if _at(repo, ref, rel) != b or v["manifest_sha256"] != _sha_bytes(b):
+        raise ProvenanceError(f"동결 v{k} 행의 목록 해시·origin/main 바이트가 다르다")
+    man = json.loads(b)
+    files_h = file_hashes_at(repo, v["H"])
+    _all_present(files_h, f"동결 v{k} H")
+    fp_h = _fp([[a, h] for a, h in files_h.items()])
+    if man.get("H") != v["H"] or man.get("files") != files_h or set(files_h) != freeze_set_at(repo, v["H"]) \
+            or man.get("fingerprint") != fp_h or v["fingerprint"] != fp_h:
+        raise ProvenanceError(f"동결 v{k} 목록·지문·파일 집합이 그 H 트리와 다르다")
+    v["files"] = files_h
 
 
 def require_running_code(repo: Path) -> None:

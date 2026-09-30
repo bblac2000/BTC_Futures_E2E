@@ -56,6 +56,10 @@ def _append_row(repo: Path, row: str) -> None:
 
 @pytest.fixture
 def chain(tmp_path) -> dict[str, Any]:
+    return build_chain(tmp_path)
+
+
+def build_chain(tmp_path: Path) -> dict[str, Any]:
     """C1(규약 최종) → C2 = H(행 #52) → C3(동결 목록 + 행 #53) · 푸시."""
     r, origin = tmp_path / "repo", tmp_path / "origin.git"
     subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
@@ -102,7 +106,7 @@ def test_rows_gate_refuses_changed_conventions_manifest_or_code(chain):
     man = r / PV.FREEZE_MANIFEST_REL
     man.write_text(man.read_text().replace('"H"', '"H" ', 1))
     _commit(r, "touch manifest")
-    with pytest.raises(PV.ProvenanceError, match="동결 행"):
+    with pytest.raises(PV.ProvenanceError, match="목록 해시"):
         PV.require_rows(r, h)
     _git(r, "reset", "-q", "--hard", chain["C3"])
     _git(r, "push", "-q", "-f", "origin", "main")
@@ -112,7 +116,7 @@ def test_rows_gate_refuses_changed_conventions_manifest_or_code(chain):
     _commit(r, "code change after H")
     with pytest.raises(PV.ProvenanceError, match="바뀌었다"):
         PV.require_frozen(r, h, fetch_first=False)
-    with pytest.raises(PV.ProvenanceError, match="동결 목록"):
+    with pytest.raises(PV.ProvenanceError, match="지금 파일"):
         PV.require_rows(r, h)
 
 

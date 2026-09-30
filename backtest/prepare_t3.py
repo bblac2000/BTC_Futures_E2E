@@ -219,16 +219,76 @@ def analyze_oi(oi_dir: Path, start_ms: int, end_ms: int) -> tuple[list[list[Any]
     return series, audit, stops
 
 
+DROP_KEY = "funding_warmup_empty_mark_dropped"
+
+
+def funding_view(raw: Path) -> tuple[bytes, dict[str, Any]]:
+    """레지스트리 #54(사용자 결정 2026-09-30 (a) 최소형): 원시 펀딩 행은 markPrice == ""(정확히 빈 문자열) ∧ fundingTime 정수 ∧
+    fundingTime < WINDOW_START **일 때만** 버린다 — 버킷·율 조건 없음. 나머지 행(창 안 빈 mark 포함)은 그대로 T2에 넘어가 기존 규칙으로
+    판정된다(창 안 빈 mark → funding_malformed 중단). 반환 = (걸러진 funding.jsonl 바이트, 감사). 원시 파일은 건드리지 않는다.
+    감사의 line_sha256 = 캡처가 쓴 JSONL 페이지 줄(개행 제외)의 SHA256(캡처가 REST 페이지를 직렬화한 것 — HTTP 바이트 아님)."""
+    data = (raw / "funding.jsonl").read_bytes()
+    lines = [ln for ln in data.split(b"\n") if ln.strip()]
+    recs = [json.loads(ln) for ln in lines]
+    bucket_n: dict[int, int] = defaultdict(int)
+    for rec in recs:
+        for r in rec["page"]:
+            if T2._int_ok(r.get("fundingTime")):
+                ft = int(r["fundingTime"])
+                bucket_n[ft - ft % MIN] += 1
+    dropped: list[int] = []
+    shared: list[int] = []
+    rate_bad: list[int] = []
+    pages: list[dict[str, Any]] = []
+    out: list[str] = []
+    for i, (ln, rec) in enumerate(zip(lines, recs, strict=True)):
+        keep, k = [], 0
+        for r in rec["page"]:
+            ft = r.get("fundingTime")
+            if r.get("markPrice") == "" and T2._int_ok(ft) and int(ft) < A.WINDOW_START_MS:
+                ft = int(ft)
+                dropped.append(ft)
+                k += 1
+                if bucket_n[ft - ft % MIN] > 1:
+                    shared.append(ft)
+                if T2.classify(r.get("fundingRate")) != "ok":
+                    rate_bad.append(ft)
+            else:
+                keep.append(r)
+        if k:
+            pages.append({"line": i, "line_sha256": hashlib.sha256(ln).hexdigest(), "dropped": k})
+        out.append(json.dumps(rec | {"page": keep}) + "\n")
+    audit = {"rule": "registry #54", "count": len(dropped), "first_ms": min(dropped) if dropped else None,
+             "last_ms": max(dropped) if dropped else None, "funding_ms": sorted(dropped),
+             "raw_file_sha256": hashlib.sha256(data).hexdigest(), "pages": pages,
+             "shared_bucket": {"n": len(shared), "funding_ms": sorted(shared)},
+             "rate_not_ok": {"n": len(rate_bad), "funding_ms": sorted(rate_bad)}}
+    return "".join(out).encode(), audit
+
+
+def _t2_analyze_view(raw: Path, expect_range: tuple[int, int], view: bytes) -> tuple[Any, ...]:
+    """T2.analyze만 임시 보기 디렉터리에서(펀딩 = 걸러진 바이트 · 다른 가격 원시 = 원본 심볼릭 링크). OI·매니페스트는 원본 raw/."""
+    with tempfile.TemporaryDirectory(prefix="t3_funding_view_") as td:
+        v = Path(td)
+        for n in PRICE_RAW:
+            if n != "funding.jsonl":
+                (v / n).symlink_to((raw / n).resolve())
+        (v / "funding.jsonl").write_bytes(view)
+        return T2.analyze(v, expect_range)
+
+
 def analyze(raw: Path, expect_range: tuple[int, int]) -> tuple[list[BD.Bar1m], list[BD.Funding], dict[str, Any],
                                                              list[dict[str, Any]], list[list[Any]]]:
     start, end = expect_range
     check_is_bounds(start, end)
     price_stop: SourceStop | None = None
+    view, drop_audit = funding_view(raw)
     try:
-        bars, fundings, price_audit, kline_daily = T2.analyze(raw, expect_range)
+        bars, fundings, price_audit, kline_daily = _t2_analyze_view(raw, expect_range, view)
     except T2._StopWithAudit as e:
         price_stop, price_audit = e, e.audit
         bars, fundings, kline_daily = [], [], []
+    price_audit[DROP_KEY] = drop_audit                           # 성공·중단 두 경로 모두
     oi, oi_audit, oi_stops = analyze_oi(raw / "oi", start, end)
     audit = {"price": price_audit, "oi": oi_audit, "window": "IS+warmup · window B(#47) · 2023-10-02 → 2025-12-31"}
     if price_stop is not None or oi_stops:
@@ -266,6 +326,8 @@ def build(out: Path, expect_range: tuple[int, int]) -> dict[str, Any]:
     (out / "oi_unusable.json").write_text(json.dumps(audit["oi"]["unusable_slots"]))
     manifest = {"raw": {n: T2._sha(raw / n) for n in raw_files(raw)}, **{n: T2._sha(out / n) for n in PREPARED},
                 "code_commit": T2._commit(), "window": "IS+warmup(2023-10-02) · window B"}
+    if audit["price"][DROP_KEY]["raw_file_sha256"] != manifest["raw"]["funding.jsonl"]:
+        raise ValueError("버린 펀딩 행 감사의 원시 해시가 매니페스트와 다르다")
     (out / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=1))
     return manifest
 
