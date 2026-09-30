@@ -11,9 +11,10 @@ from decimal import Decimal
 #  사용자 확정(2026-09-12 open-decisions #1): 허용 레버리지 **범위**. 거래소 값이 아니라 정책 값이다.
 #  거래소 상한(브라켓 initialLeverage)은 런타임 규칙에서 따로 적용된다.
 PERMITTED_LEVERAGE: tuple[int, int] = (50, 100)
-#  등록된 레버리지 정책 대역(append-only) — (50,100) = open-decisions #1(봇 기본) · (10,30) = 레지스트리 #30(트라이얼 #2).
+#  등록된 레버리지 정책 대역(append-only) — (50,100) = open-decisions #1(봇 기본) · (10,30) = 레지스트리 #30(트라이얼 #2) ·
+#  (3,30) = 레지스트리 #65 · 헌법 v1.5(트라이얼 #4).
 #  봇 기본은 PERMITTED_LEVERAGE 그대로다. 다른 대역은 `SizingLimits(leverage_range=…)`로 **명시**할 때만 쓰인다.
-REGISTERED_LEVERAGE_BANDS: tuple[tuple[int, int], ...] = ((50, 100), (10, 30))
+REGISTERED_LEVERAGE_BANDS: tuple[tuple[int, int], ...] = ((50, 100), (10, 30), (3, 30))
 
 #  사용자 확정(2026-09-15 레지스트리 #2) 정책 값 — 거래소 값 아님(tests/test_no_exchange_literals.py 허용 목록)
 #  레지스트리 #5(2026-09-15 · 시장 데이터를 보기 전에 사전확약) — SL·청산 게이트. 14일 페이퍼 후 새 행으로만 재평가, 사후 완화 금지.

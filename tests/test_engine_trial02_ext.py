@@ -1,6 +1,6 @@
 """단계 2b — 공유 계층 확장(트라이얼 #2 · 기본 경로 불변). 사전등록 §1 · 계획 r2(ops_log 2026-09-24).
 
-- 레버리지 대역: 등록된 정책 대역 {(50,100) · (10,30)}(#30) · 기본 (50,100) · 트라이얼 #2는 `SizingLimits(leverage_range=(10,30))`를 명시.
+- 레버리지 대역: 등록된 정책 대역 {(50,100) · (10,30)(#30) · (3,30)(#65 · 트라이얼 #4 · 추가 전용)} · 기본 (50,100) · 트라이얼 #2는 `SizingLimits(leverage_range=(10,30))`를 명시.
 - `Trail.dist_r`: 트레일 거리 = dist_r × R(R = |체결 − SL|) — 체결 때 가격 거리로 확정(스냅샷 형태 불변).
 - `SlFromFill(anchor, mirror=True)`: SL′ = 2F − anchor(P3 거울상) · 사이징 전에 확정 · TP/트레일 R = |F − anchor|.
 - `sizing_capital`(E_ref): 체결된 진입마다 실행 지갑을 E_ref로 리셋 · 거부된 시도는 리셋 없음 · PAPER만.
@@ -52,14 +52,15 @@ def eng(rules, *, capital: Decimal | None = E_REF, wallet: str = "1000") -> Engi
 # ── 레버리지 대역 ─────────────────────────────────────────────────────────
 def test_bands_and_default():
     assert PERMITTED_LEVERAGE == (50, 100)
-    assert REGISTERED_LEVERAGE_BANDS == ((50, 100), (10, 30))
+    assert REGISTERED_LEVERAGE_BANDS == ((50, 100), (10, 30), (3, 30))
     assert SizingLimits().leverage_range == (50, 100)
 
 
 def test_regime_must_sit_inside_one_registered_band():
     RegimeSizing("a", D("0.01"), 10, 30)
     RegimeSizing("b", D("0.01"), 12, 20)
-    for lo, hi in ((20, 60), (5, 30), (10, 31), (30, 50)):
+    RegimeSizing("c", D("0.01"), 5, 30)                       # (3,30) 등록(#65) 뒤 부분 구간으로 유효 — 전에는 거부
+    for lo, hi in ((20, 60), (2, 30), (10, 31), (30, 50), (1, 3)):
         with pytest.raises(ValueError):
             RegimeSizing("x", D("0.01"), lo, hi)
 
