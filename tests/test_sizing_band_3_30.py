@@ -12,7 +12,7 @@ import pytest
 from exchange.loader import rules_from_snapshot_dir
 from exchange.orders import Direction
 from sizing.config import PERMITTED_LEVERAGE, REGISTERED_LEVERAGE_BANDS, RegimeSizing, SizingLimits
-from sizing.position import size_entry
+from sizing.position import RejectReason, size_entry
 
 ROOT = Path(__file__).resolve().parent.parent
 RULES = rules_from_snapshot_dir(ROOT / "docs" / "trials" / "trial_04_rules_snapshot", "BTCUSDT")
@@ -60,4 +60,4 @@ def test_boundary_sizing_under_snapshot_rules():
 def test_short_above_the_l3_gate_is_refused():
     """숏 L = 3 한계 sl < 21.835% — 21.9%는 어떤 L도 게이트를 통과하지 못한다."""
     d = size_entry(D("50000.0"), D("60950.0"), Direction.SHORT, D("1000"), R330, RULES, L330)
-    assert not d.ok and d.leverage is None, d
+    assert not d.ok and d.leverage is None and d.reason == RejectReason.LIQ_DISTANCE, d
