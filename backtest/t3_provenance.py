@@ -210,17 +210,15 @@ def manifest_rel(k: int) -> str:
 def freeze_versions(reg: str) -> dict[int, dict[str, Any]]:
     """레지스트리 #54 관문 버전화: 표 행의 토큰(엄격 파싱)에서만 버전을 찾는다. 키 허용 목록 — v1 = `t3_freeze_H` ·
     `t3_freeze_manifest` · `t3_fingerprint`(접미어 없음) · v≥2 = 같은 이름 + `_v<n>` · 승인 `t3_freeze_auth_v<n>`(n ≥ 2) ·
-    그 밖의 `t3_freeze*`·`t3_fingerprint*` 키 → 거부 · `t3_freeze`·`t3_fingerprint`를 담은 행만 (엄격하게) 파싱한다. 버전마다 세 토큰을 모두 가진 행 정확히 하나(부분 세트 거부) · 버전 = {1..N} ·
+    그 밖의 `t3_freeze*`·`t3_fingerprint*` 키 → 거부 · 행마다 동결 계열 토큰만 (엄격하게) 파싱한다(`_freeze_tokens`). 버전마다 세 토큰을 모두 가진 행 정확히 하나(부분 세트 거부) · 버전 = {1..N} ·
     n ≥ 2마다 승인 행 정확히 하나(그 행에는 다른 동결 키 없음) · 짝 없는 승인 거부."""
     trip: dict[int, list[tuple[str, dict[str, str]]]] = defaultdict(list)
     auth: dict[int, list[tuple[str, str]]] = defaultdict(list)
     for ln in reg.splitlines():
-        if not ln.startswith("|") or not ("t3_freeze" in ln or "t3_fingerprint" in ln):
-            continue                                               # 동결 키가 없는 행은 파싱하지 않는다(다른 행의 오타가 관문을 잠그지 않게)
+        if not ln.startswith("|"):
+            continue
         fam: dict[int, dict[str, str]] = defaultdict(dict)
-        for key, val in _tokens(ln).items():
-            if not key.startswith(("t3_freeze", "t3_fingerprint")):
-                continue
+        for key, val in _freeze_tokens(ln).items():
             m = _FREEZE_KEY.fullmatch(key)
             if not m or m.group(2) == "1" or (m.group(1) == "freeze_auth" and m.group(2) is None):
                 raise ProvenanceError(f"동결 키 형식이 틀렸다: {key}")
@@ -245,6 +243,23 @@ def freeze_versions(reg: str) -> dict[int, dict[str, Any]]:
         a_line, a_val = auth[n][0] if n >= 2 else ("", "")
         out[n] = {"H": d["freeze_H"], "manifest_sha256": d["freeze_manifest"], "fingerprint": d["fingerprint"], "line": ln,
                   "manifest_rel": manifest_rel(n), "auth": a_val, "auth_line": a_line}
+    return out
+
+
+def _freeze_tokens(line: str) -> dict[str, str]:
+    """동결 계열(`t3_freeze*`·`t3_fingerprint*`) 토큰만 골라 엄격하게(같은 키 두 번 · 40/64 hex 아님 → 거부) — 같은 행의 다른 t3 토큰은
+    보지 않는다(Codex (fix) A 재확인 MINOR · 다른 행·다른 토큰의 오타가 관문을 잠그지 않게)."""
+    out: dict[str, str] = {}
+    for tok in re.split(r"[\s|·,`]+", line):
+        m = re.fullmatch(r"(t3_[\w./-]+)=(.*)", tok)
+        if not m or not m.group(1).startswith(("t3_freeze", "t3_fingerprint")):
+            continue
+        k, v = m.groups()
+        if k in out:
+            raise ProvenanceError(f"행에 {k} 토큰이 둘 이상")
+        if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", v):
+            raise ProvenanceError(f"행의 {k} 값 형식이 틀렸다")
+        out[k] = v
     return out
 
 

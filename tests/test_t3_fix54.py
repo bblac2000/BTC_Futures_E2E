@@ -303,3 +303,11 @@ def test_v3_chain_and_a_later_pins_row_pass(chain):
     assert rows["freeze_version"] == "3"
     with pytest.raises(PV.ProvenanceError):
         PV.require_rows(r, h2)
+
+
+def test_prose_freeze_mention_does_not_expose_other_malformed_tokens():
+    """Codex A 재확인 MINOR: 동결을 산문으로 언급한 행의 다른 오타 토큰은 관문을 잠그지 않는다 · 동결 키 모양의 오타는 여전히 거부."""
+    base = f"| a | t3_freeze_H={H40} · t3_freeze_manifest={H64} · t3_fingerprint={H64} |\n"
+    assert sorted(PV.freeze_versions(base + "| p | t3_freeze v2 뒤 핀 · t3_prepared/bars_1m.parquet=zz · t3_note=x |")) == [1]
+    with pytest.raises(PV.ProvenanceError, match="형식"):
+        PV.freeze_versions(base + "| q | 인용 t3_freeze_H_v2=, |")
