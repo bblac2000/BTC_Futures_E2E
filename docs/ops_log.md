@@ -9120,3 +9120,20 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 나머지 감사(중단 아님): 봉 1,183,678 · mark 결손 2분(2024-08-12 · archive_mark_not_ok · 그날 불완전 → 항목 30으로 제외) · 펀딩 이벤트 2,378 수락 · kline 822일 · OI 822일 · 1,644 원시 파일 · 사용 불가 OI 0 / IS 슬롯 210,528(0.5% 상한 통과 — 단 빌드가 멈춰 oi_unusable.json·매니페스트는 쓰이지 않음).
 - 소비: `validate_inputs`는 mark가 비정상인 펀딩을 거부 · 엔진 `on_funding`은 mark로 지불 계산 · 포지션·판정 가능 구간 펀딩 검사(`t0 ≤ b ≤ t0+366분`)·P1 구간은 WINDOW_START 이후뿐 → 이 88행은 어디서도 소비되지 않는다.
 - 보존: var/t3/(522 MB · 원시 포함) 그대로 · 기록과 감사 사본 `docs/trials/trial_03/records/prepare_attempt1/`(prepare.json 8c13455d… · source_audit.json efa7f600…). 레지스트리 행은 사용자 결정(수정 경로)과 함께 쓴다 · 패치·재실행 없음.
+
+## 2026-09-30 — 트라이얼 #3 캡처 실패 수정 결정(사용자 · verbatim) → 레지스트리 #54
+> Decision: (a), in its narrowest form.
+>
+> Fix rule (goes verbatim into the fix registry row, since the conventions file is immutable after #52):
+> - In prepare_t3 only: a funding row with an empty markPrice is dropped IF AND ONLY IF funding_ms < WINDOW_START (2024-01-01 00:00Z). The audit records the dropped count (expected 88), their time range, and the SHA256 of the raw response they came from.
+> - Any empty-mark funding row with funding_ms ≥ WINDOW_START remains a hard stop (funding_malformed, rc 3). No fill-in, no interpolation.
+> - prepare_t2 and every other shared file untouched; assert that in the after-pass (diff of the freeze set minus prepare_t3 and the gate module must be empty).
+> - State in the row that the failure occurred at capture, before any strategy run, and that no P&L, trade, or funnel output existed when this decision was made (prepare.json rc 3 at 02:21:32Z; re-query at 02:24:42Z; both pushed in 90c91cc).
+>
+> Gate versioning: version the row keys (e.g. t3_freeze_H_v2=, t3_freeze_manifest_v2=, t3_fingerprint_v2=) and have the gate require exactly one row for the HIGHEST version present, with earlier versions kept as history. Codex reviews the gate change as part of the fix. Item 63's row-number note (#54 pins, #55 verdict) shifts; say so in the fix row.
+>
+> Process, in order: fix registry row → before-pass (advisor + Codex) → code the fix (prepare_t3 + gate versioning + tests: 88-row synthetic drop, a post-WINDOW_START empty mark still stops, count in audit) → after-pass → new freeze chain C1′→C2′=H′→C3′ checked locally with require_rows → push → then, and only then, delete var/t3/ and recapture from scratch. You have my go to delete var/t3/ once the new freeze is pushed and H′ is confirmed an ancestor of origin/main.
+>
+> After recapture: verify receipts + oi_unusable.json + cap → L_base → P1_L part 0 → the rest, as before. Same rules: counts only until the evaluator has run; stop on any failure.
+>
+> Noted for the report: 2024-08-12 has 2 missing mark minutes and is excluded as incomplete under item 30; include it in the report's excluded-days list.
