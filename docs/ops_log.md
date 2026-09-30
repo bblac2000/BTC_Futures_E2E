@@ -9143,3 +9143,248 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
   - funding.jsonl `41fe9bd88cf0fed52ed9891bbc1d1ae604def35b6b43374f08c887f71630f262`(3줄 = REST 페이지 3 · 줄 SHA256: 0 `5d16a0c352b8a8fc2db79730238e7de5f6eb12b57d384ead9c4fdfc8a674bb02`(1,000행 · 빈 mark 워밍업 88 전부) · 1 `5d12aefcf8d12147228fe6f926446e01b2f7e040a2a56d43e8cc971dc0762f08`(1,000 · 0) · 2 `1240304d5287254f9c2d8b27fa5858b4ce290f736b622f72a0939cd2b2cf7ff4`(466 · 0))
   - fill_ranges.json `d85f7ce213af1d881473533ead858234adb5021c6bdb37caa939550d44085807` · archive_rows.jsonl `93ba86d7694d97acbb35ee3e98a2dd23b12ffd45cdce54915232906c00c1ee58` · rest_klines.jsonl `91a1d3232a9a4f5b64f36e5eca1d4ea572ee1276f28cb597daf307d0db078bf6` · rest_mark.jsonl `e3b0c442…`(빈 파일)
   - oi/ 1,644개 `sha256sum` 정렬 목록의 SHA256 `911c44ba49c3c2c56e79d22590efd1c9a2737e8a77679a3a5d7717cac4215642`
+
+## 2026-09-30 — 트라이얼 #3 캡처 실패 수정 **before-pass**(advisor + Codex r1~r5 · 계획 r1 → r6)
+
+- 계획 r6 = r5 + Codex r5 지적: 이 before-pass 기록(원문 + 항목별 입장)을 푸시하고, after-pass A·B 모두 항목별 입장을 남긴다. r5 재확인 결과 남은 지적은 기록 절차뿐이라 r6으로 반영하고 구현을 시작했다(코드 커밋은 after-pass A 뒤).
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 1 | 삭제 전 시도 1 원시 해시 기록 | ✅ | baac8ea(ops_log) · #55에도 |
+| advisor 2 | 중단 경로에도 버림 감사 | ✅ | analyze 두 경로 |
+| advisor 3 | #55/#56 행 텍스트 위험(키=, 핀 경로, 칸 수) | ✅ | 행 추가 전 검사 · 실제 레지스트리 → 버전 {1} 테스트 |
+| advisor 4 | 좁힘은 편차 — Codex에 | ✅ | 버킷 예외 삭제(Codex r1) · 정확히 ""만 유지(#55에 명시) |
+| advisor 5 | 이력 행 결속 | ✅ | 모든 버전 목록 해시·H 트리 검사 |
+| advisor 6 | 픽스처 줄 모양 | ✅ | {"page": [...]} · markPrice 있음 확인 |
+| advisor 7 | 기계적 after-pass diff | ✅ | F5″ 문자 그대로 출력 |
+| Codex r1 BLOCKER 1 | 버킷 예외 = 규칙 변경 | ✅ | 삭제 · 공유 버킷은 보고만 |
+| Codex r1 BLOCKER 2 | 이력 K2′ 검사 없음 | ✅ | 버전마다 온전 검사 · 엄격 사슬 · 다음 H 트리에 그대로 |
+| Codex r1 MAJOR 1 | 새 버전 승인 없음 | ✅ | t3_freeze_auth_v<n> = 이전 H · H_n 트리에 |
+| Codex r1 MAJOR 2 | diff가 삭제된 파일을 놓칠 수 있음 | ✅ | 합집합 · -M |
+| Codex r1 MINOR | 두 번째 중단 시 감사 · line_sha256 정의 | ✅ | 두 경로 · 캡처 JSONL 줄 바이트 |
+| Codex r2 (d) PARTIAL | 옛 쪽 경로를 바뀐 코드가 계산 | ✅ | 옛 쪽 = #53 목록 키 |
+| Codex r2 MINOR | 승인 키 허용 목록 | ✅ | r3 허용 목록 |
+| Codex r3 MAJOR | after-pass 순서 | ✅ | A(코드) · B(로컬 사슬) 분리 |
+| Codex r4 MAJOR | B 기록을 재캡처 전에 푸시 | ✅ | r5 6′ |
+| Codex r5 MAJOR | before-pass 기록 · A 입장 | ✅ | 이 절 · A·B 입장표 |
+
+### 계획 원문(r1~r5)
+
+#### fix_plan_r1
+> # Trial #3 capture-failure fix — plan r1 (registry #54 · user decision (a) narrowest + gate versioning)
+> 
+> F1 FUNDING VIEW (backtest/prepare_t3.py only; prepare_t2 untouched):
+>   `_funding_view(raw) -> (filtered_jsonl_bytes, dropped_audit)` reads raw/funding.jsonl line by line (each line = one raw REST page).
+>   A row r is DROPPED iff ALL: r.get("markPrice") == "" (exact empty string; missing key / None / "NaN" are NOT "empty" → still T2 stop)
+>   ∧ fundingTime passes T2._int_ok ∧ int(fundingTime) < WINDOW_START_MS (2024-01-01 00:00Z) ∧ no other raw row shares its
+>   1-minute bucket (a shared bucket keeps the row → T2 funding_bucket_multiple/malformed stop as today). No rate condition (user's
+>   "IF AND ONLY IF" is literal; rate values are not read or reported). Kept rows/pages keep their order; the filtered file is written
+>   into a temporary VIEW directory whose other four price-raw files (fill_ranges.json, archive_rows.jsonl, rest_klines.jsonl,
+>   rest_mark.jsonl) are symlinks to raw/; prepare_t3.analyze calls T2.analyze(view, expect_range) unchanged. raw/ is never modified;
+>   manifest.raw still hashes the ORIGINAL raw/funding.jsonl.
+>   Any empty-mark row with funding_ms ≥ WINDOW_START stays → T2 funding_malformed stop → rc 3.
+>   Audit: audit["price"]["funding_warmup_empty_mark_dropped"] = {count, first_ms, last_ms, funding_ms[list], raw_file_sha256
+>   (= manifest.raw["funding.jsonl"]), pages: [{line: i, line_sha256: SHA256 of that exact raw line's bytes, dropped: k}]} — "the SHA256
+>   of the raw response they came from". Count is recorded, not asserted (expected 88 is compared in the report).
+>   verify_rebuild uses the same path (build → analyze), so rebuild equality is unchanged.
+> F2 GATE VERSIONING (backtest/t3_provenance.py):
+>   Freeze-row keys by version n: n = 1 → t3_freeze_H / t3_freeze_manifest / t3_fingerprint + manifest docs/trials/trial_03_freeze_manifest.json
+>   (unchanged, #53 history); n ≥ 2 → suffix _v{n} + manifest docs/trials/trial_03_freeze_manifest_v{n}.json.
+>   require_rows: versions present at origin/main = {n : some table row contains the version-n H key followed by "="}; must be exactly
+>   {1..N} (contiguous); for EVERY version exactly one row (history rows stay single); the checks of v1 today apply to version N only
+>   (H_N == H, manifest_N bytes/sha, fingerprint_N, files, path set) plus chain: H_{k} ⊂ H_{k+1} for all k < N. #52 checks unchanged
+>   (conventions file unchanged; C1 54b049a ⊂ H′). Result dict gains "freeze_version": N.
+>   Key-substring safety: "t3_freeze_H=" does not match "t3_freeze_H_v2=" (the "=" follows immediately) — test it.
+> F3 COMMIT CHAIN v2: #54 (done, 134b6b1) → code commits → after-pass → C1′ = final code commit → C2′ = H′ = docs commit, row #55
+>   "fix implemented · after-pass MERGE · conventions unchanged (t3_conventions still 937930b3…) · #54 correction: it has 9 cells, the
+>   header has 8 (content intact; renderers may hide the last cell)" → C3′ = trial_03_freeze_manifest_v2.json + row #56 with
+>   t3_freeze_H_v2 / t3_freeze_manifest_v2 / t3_fingerprint_v2 → local rehearsal require_rows(ref="HEAD") → push → gate-check rc 0 →
+>   H′ ⊂ origin/main → rm -rf var/t3/ (user's go) → recapture. Pins row #57, verdict #58 (shift stated in #54/#55).
+> F4 TESTS: synthetic 88 warm-up rows (8h grid from DATA_START) with markPrice "" dropped → audit count 88, first/last, line SHA256s,
+>   fundings exclude them, raw/funding.jsonl bytes unchanged, verify_rebuild equal; one empty-mark row at WINDOW_START (and one after)
+>   → SourceStop funding_malformed; warm-up row with missing markPrice key / None → stop; warm-up empty-mark row sharing a bucket → stop.
+>   Gate: v1-only still passes (existing chain tests); v2 row added (+ manifest v2) → passes with freeze_version 2 and uses H′; two v2
+>   rows → refuse; v2 without v1 / v3 without v2 → refuse; H_v2 not a descendant of H_v1 → refuse; v1 checks no longer bind H (old H
+>   passed as commit → refuse).
+> F5 AFTER-PASS ASSERTION: `git diff --name-only 305e664 H′ -- <freeze set>` == {backtest/prepare_t3.py, backtest/t3_provenance.py}.
+> Questions: is the view-dir approach acceptable vs any alternative that keeps prepare_t2 untouched? Is the shared-bucket exclusion a
+>   legitimate narrowing of the user's rule or a deviation to flag? Anything in the versioning that weakens K2′?
+
+#### fix_plan_r2
+> # Trial #3 capture-failure fix — plan r2 = r1 + Codex (01a0f036-91d4-7572-88db-d09cf83db976) + advisor
+> 
+> F1′ DROP RULE (exactly #54): a raw funding row is dropped iff markPrice == "" (exact empty string — the only reading of "empty";
+>   missing key / None / "NaN" are not empty → T2 stop as today) ∧ fundingTime passes T2._int_ok ∧ int(fundingTime) < WINDOW_START_MS.
+>   NO bucket exception, NO rate condition (Codex BLOCKER 1 · advisor 4). Report-only audit side facts (never stops, never change which
+>   rows drop): shared_bucket = dropped rows whose 1-minute bucket also holds another raw row; rate_not_ok = dropped rows whose
+>   fundingRate is not classify()=="ok". Both are counts + funding_ms lists.
+>   View: temporary directory created and removed inside prepare_t3.analyze around the single T2.analyze call only; the four other
+>   price-raw files are symlinks to raw/; OI still read from the original raw/oi; manifest/raw inventory/verify/pinned loaders hash
+>   the original raw/ (unchanged). Deterministic: filtered file = kept rows in original order, one line per original page (empty pages
+>   kept as "{"page": []}"-equivalent lines produced by json.dumps with the same settings capture uses).
+>   Audit key audit["price"]["funding_warmup_empty_mark_dropped"] = {count, first_ms, last_ms, funding_ms, raw_file_sha256,
+>   pages[{line, line_sha256, dropped}], shared_bucket{n, funding_ms}, rate_not_ok{n, funding_ms}, rule: "#54"} — attached on success
+>   AND on the _StopWithAudit path (advisor 2 · Codex MINOR). line_sha256 = SHA256 of the captured JSONL page line bytes (capture
+>   serializes each REST page; not the HTTP bytes — stated in #55). build() asserts raw_file_sha256 == manifest.raw["funding.jsonl"].
+> F2′ GATE VERSIONING (t3_provenance): versions discovered only from parsed tokens (strict _tokens) of table rows at the ref:
+>   canonical H keys `t3_freeze_H` (v1) and `t3_freeze_H_v<n>` (n ≥ 2, no leading zero); any key starting with `t3_freeze_` or
+>   `t3_fingerprint` or `t3_freeze_manifest` that is not canonical for some n → refuse. Versions must be exactly {1..N}.
+>   For EVERY k in 1..N: exactly one row holding exactly the triple {H_k, manifest_k, fingerprint_k} (no row holds a partial triple);
+>   manifest_k path = trial_03_freeze_manifest.json (k = 1) / trial_03_freeze_manifest_v<k>.json; its bytes now == at ref, SHA256 ==
+>   token, manifest.H == H_k, manifest.files == file_hashes_at(H_k) (all present), path set == freeze_set_at(H_k), manifest.fingerprint
+>   == token == fingerprint_at(H_k).
+>   Chain k < N: H_k is a STRICT ancestor of H_{k+1}; the row-k line and manifest_k bytes are present unchanged in H_{k+1}'s tree
+>   (so the prior freeze commit precedes the next H).
+>   Authorization (Codex MAJOR): for every k ≥ 2 exactly one row with token `t3_freeze_auth_v<k>=<H_{k-1}>`, and that row is already
+>   in H_k's tree (committed before/at H_k); value must equal H_{k-1}.
+>   Version N only: H_N == the evaluator commit passed in; files_now == file_hashes_at(H_N) == manifest_N.files.
+>   #52 checks unchanged (conventions untouched; C1 54b049a ⊂ H′; #52 row in H′ tree == at ref). Result gains freeze_version N.
+>   Test: the real docs/trial_registry.md today parses to versions {1} (#54 mentions v2 key names without "=").
+> F3′ CHAIN v2: code commits → after-pass → C1′ = final code commit → C2′ = H′ = row #55 (fix implemented · after-pass verdict ·
+>   `t3_freeze_auth_v2=305e664b15b93201ea0e5446a5df5f5e9b265fa8` · implementation reading "empty = exact ''" · line_sha256 definition
+>   · attempt-1 raw hashes (funding.jsonl 41fe9bd8… · fill_ranges d85f7ce2… · page line 0 5d16a0c3…) · #54 correction: 9 cells vs
+>   8-column header, content intact · numbering #56 freeze v2, #57 pins, #58 verdict) → C3′ = trial_03_freeze_manifest_v2.json + row
+>   #56 (`t3_freeze_H_v2` `t3_freeze_manifest_v2` `t3_fingerprint_v2` only) → pre-append checks on each row (tokens exactly as intended
+>   via regex t3_\w+=, no pins path, 9 pipes = 8 cells) → local require_rows(ref="HEAD") → push → gate-check rc 0 → H′ ⊂ origin/main →
+>   rm -rf var/t3/ → recapture.
+> F4′ TESTS (additions to r1): eligible row in a shared bucket is dropped and reported; malformed rate on an eligible row dropped and
+>   reported; multiple JSONL pages incl. an empty page; in-window empty mark stops AND the stop audit carries the drop audit;
+>   raw_file_sha256 == manifest.raw; gate: history row tamper, manifest_v1 tamper, v2 without auth row, auth value ≠ H_1, auth row not
+>   in H_2 tree, v3 without v2, v1 row missing from H_2 tree, H_2 == H_1 (not strict), partial triple, malformed key suffix
+>   (t3_freeze_H_v02=, t3_freeze_H_vx=), duplicate v2 row, v1-key substring vs v2 key, real registry → {1}.
+> F5′ AFTER-PASS DIFF: paths = freeze_set_at(305e664) ∪ freeze_set_at(H′); `git diff --name-status -M 305e664 H′ -- <paths>` must be
+>   exactly `M backtest/prepare_t3.py` and `M backtest/t3_provenance.py` (deletions/renames visible); literal output given to Codex.
+
+#### fix_plan_r3
+> # plan r3 = r2 + Codex re-check (01a0f03c-7732-7ce3-8265-0f5fed8de799)
+> F2″ KEY ALLOWLIST: reserved families (exact, n ≥ 2, no leading zero): `t3_freeze_H`, `t3_freeze_manifest`, `t3_fingerprint` (v1,
+>   unsuffixed); `t3_freeze_H_v<n>`, `t3_freeze_manifest_v<n>`, `t3_fingerprint_v<n>`; `t3_freeze_auth_v<n>`. Any other key starting
+>   with `t3_freeze` or `t3_fingerprint` → refuse. (`t3_conventions`, `t3_conventions_commit`, pins tokens unchanged.)
+> F5″ AFTER-PASS DIFF, old side independent of changed code: OLD = keys of docs/trials/trial_03_freeze_manifest.json.files as committed
+>   in 305e664's successor C3 956d403 (the #53 manifest — written by the pre-fix implementation); NEW = keys of
+>   trial_03_freeze_manifest_v2.json.files (C3′) and, independently, `git ls-tree -r --name-only H′` filtered by the literal r3 K2″
+>   specification in the shell (backtest/{17 names}.py, strategies/trial03/*.py, paper/*.py, sizing/*.py, exchange/*.py, pyproject.toml,
+>   uv.lock); require NEW(manifest) == NEW(ls-tree) and OLD == NEW; then `git diff --name-status -M 305e664 H′ -- <OLD ∪ NEW>` must be
+>   exactly `M backtest/prepare_t3.py` and `M backtest/t3_provenance.py`. Literal outputs go to Codex in the after-pass.
+> Everything else as r2.
+
+#### fix_plan_r4
+> # plan r4 = r3 + Codex re-check (01a0f03f-7cb3-7ef1-a123-59cdbaa0cc26) MAJOR: after-pass order
+> ORDER (replaces r2 F3′ ordering):
+>  1. code commits (prepare_t3 + t3_provenance + tests) — pushed like any code step (nothing frozen yet; H′ does not exist).
+>  2. AFTER-PASS A (code review · advisor + Codex): implementation vs r2/r3, tests, full suite; fixes → re-check until MERGE.
+>  3. C1′ = final code commit (the last code change after A) — LOCAL ONLY from here.
+>  4. C2′ = H′ = row #55 (local) · C3′ = trial_03_freeze_manifest_v2.json + row #56 (local) · row-text pre-checks · local
+>     require_rows(ref="HEAD") · the F5″ diff with literal outputs (OLD = #53 manifest keys at 956d403; NEW = v2 manifest keys ==
+>     literal-spec ls-tree of H′; `git diff --name-status -M 305e664 H′ -- OLD∪NEW` == exactly the two M lines).
+>  5. AFTER-PASS B (final · local · before push · advisor + Codex): reviews the actual C1′/H′/C3′ commits, both row texts, manifest v2,
+>     the require_rows result and the literal diff outputs. If anything must change: `git reset --hard` to the last pushed commit
+>     (nothing of C1′..C3′ was pushed), fix, repeat 2–5. Only on B = MERGE:
+>  6. push → fetch → H′ ⊂ origin/main → gate-check rc 0 (H′) and rc 6 (305e664 must now be refused: v1 is history) → rm -rf var/t3/
+>     (user's go) → recapture.
+>  Both A and B logged verbatim in ops_log with positions (A before C1′ in a pushed commit; B logged in a commit after the push).
+> Everything else as r3.
+
+#### fix_plan_r5
+> # plan r5 = r4 + Codex re-check (01a0f042-c73b-78b2-92b0-eedd2b4ac460) MAJOR: B log secured before recapture
+>  6′. push (C1′..C3′) → fetch → H′ ⊂ origin/main → gate-check rc 0 (H′) / rc 6 (305e664) → commit ops_log with after-pass B VERBATIM
+>      (advisor + Codex) and per-point agree/disagree + the gate-check outputs → secret scan → push → confirm that commit ⊂ origin/main →
+>      only then rm -rf var/t3/ (user's go) → recapture. (The ops_log commit is docs-only; H′ stays the freeze; gate reads origin/main.)
+> Everything else as r4.
+
+### advisor 원문(verbatim)
+> You're at the before-pass with a sound plan. Things r1 doesn't cover, in order of what bites:
+> 
+> **1. Evidence dies with `rm -rf var/t3` — log it before deletion.** The prepare record's `outputs` has only `source_audit.json`; the manifest was never written, so no hash of the raw funding response exists anywhere pushed. You already computed them: `raw/funding.jsonl` = `41fe9bd8…`, `fill_ranges.json` = `d85f7ce2…`. Put both in ops_log (and row #55) before the delete. Otherwise "the SHA256 of the raw response they came from" in the new audit can't be tied to attempt 1.
+> 
+> **2. Attach the drop-audit on the stop path too.** `prepare_t3.analyze` catches `T2._StopWithAudit` and takes `e.audit`; add `funding_warmup_empty_mark_dropped` there as well, not only on success. If the recapture stops for a different reason, the report must still show what was dropped.
+> 
+> **3. Row-text hazards for #55/#56 (same trap as #54's 9 cells, but this one is permanent).** Plan r1 has #55 saying "t3_conventions still 937930b3…". Any `t3_<key>=` substring in #55 creates a second `t3_conventions=` row → `_one_row` refuses forever, and `load_pins` counts rows containing the pins path. Before appending each row: (a) `re.findall(r"t3_\w+=")` must be empty for #55 and exactly the three versioned tokens for #56; (b) `strategies/trial03/data_pins.json` must not appear; (c) `row.count("|") == 9`. Add a test that runs the version-detection regex over the *real* `docs/trial_registry.md` and asserts versions == {1} today — #54 mentions the v2 key names in backticks, and this pins down that they're not read as keys.
+> 
+> **4. The narrowings are deviations from the anchored row, not implementation details.** "Exact `""` only" is a reading of "empty markPrice" (defensible); "shared-bucket rows not dropped" is an extra condition the row doesn't have. Both are moot for today's 88 (all exact `""`, 8h apart) but if either fires on recapture the trial halts for a third cycle. Don't implement silently: put both to Codex now, and whatever survives goes verbatim into #55 as "implementation narrowings". If Codex rejects the shared-bucket one, drop it.
+> 
+> **5. History rows are unbound in r1 — cheap to bind.** For k < N you require "exactly one row" but not that `trial_03_freeze_manifest[_vk].json` still hashes to its token. Add it (file exists in repo, one `sha_file` each); it's the same guarantee #53 had yesterday and costs nothing. Optional but say so in the plan.
+> 
+> **6. Verify the test fixtures match the raw line shape.** `_funding_view` assumes each line is `{"page": [...]}` (true for real raw). Check `tests/test_prepare_t3.py`'s `FakeRest`/`fund()` produce the same structure and include `markPrice`, so the 32 existing prepare tests keep passing and your new 88-row test uses the same helper.
+> 
+> **7. Keep the after-pass assertion mechanical.** `git diff --name-only 305e664 <H′> -- $(freeze set)` == `{backtest/prepare_t3.py, backtest/t3_provenance.py}` — run it yourself and give Codex the literal output; that's the user's stated acceptance test.
+> 
+> Wait for the Codex before-pass verdict before writing code (your own rule and the user's order). Points 1–3 and 7 are process, not design — they go in regardless of what Codex says; 4–5 are for Codex to weigh.
+
+### Codex 원문 1(verbatim)
+> **Codex session/thread ID:** `01a0f036-91d4-7572-88db-d09cf83db976`
+> 
+> ### Findings
+> 
+> - **BLOCKER — The shared-bucket exception changes the user's rule.** [Plan F1, lines 5–7](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/fix_plan_r1.md:5) keeps an empty-mark warm-up row when another row shares its minute. [Registry #54](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:62) says that row is dropped **if and only if** its funding time precedes `WINDOW_START`; it states no bucket exception. Exact `""` is a defensible reading of "narrowest," given the recorded REST defect. The bucket exception is a deviation. **Fix:** drop every qualifying row, including one in a shared bucket. If the original conflict must remain a stop, detect and report that conflict separately from the unfiltered raw rows; do not redefine which rows are dropped.
+> 
+> - **BLOCKER — Versioning does not preserve the historical K2′ checks.** [Plan F2, lines 20–23](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/fix_plan_r1.md:20) validates the manifest, hashes, and fingerprint only for the newest version. The present gate validates those values for #53 ([t3_provenance.py:178](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:178)); [H item 65](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:88) binds that row to the freeze. Under the plan, an older row or manifest could be changed while retaining one row per version and a valid newest freeze. **Fix:** validate each version's complete token triple and manifest against its own H, and require each prior row and manifest to be present unchanged in the next H's tree. Require a *strict* H ancestry step and the prior freeze-row commit before the next H.
+> 
+> - **MAJOR — A later version needs an authorization gate.** F2 accepts every contiguous `n ≥ 2` ([plan:18](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/fix_plan_r1.md:18)). Thus a newly appended, otherwise valid v3 row could become authoritative without a recorded decision for that change. This is a **hypothetical future bypass**, not a claim that v3 exists. [Registry #54](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:62) authorizes v2; the [research protocol](/home/cms/project/BTC_Futures_E2E/.claude/skills/quant-bot-constitution/references/research-protocol.md:37) requires append-only decision records. **Fix:** require a version-specific decision row committed before each new H. Discover versions from parsed, canonical `t3_freeze_H_vN` tokens, with exact key matching; test embedded-key substrings, malformed suffixes, and duplicate rows as well as v1/v2 substrings.
+> 
+> - **MAJOR — The after-pass diff can miss a removed freeze file.** [Plan F5, line 36](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/fix_plan_r1.md:36) leaves `<freeze set>` unspecified. The gate builds globbed paths from the tree being examined ([t3_provenance.py:54](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:54)); using only the new set would omit a file deleted since `305e664`. **Fix:** compare the union of paths in both freeze trees, including deletions and renames, and assert that only `prepare_t3.py` and `t3_provenance.py` changed. Keep the old freeze-set definition as the comparison baseline.
+> 
+> - **MINOR — Specify audit behavior on a second quality stop.** The plan promises dropped-row audit fields ([F1, lines 13–16](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/fix_plan_r1.md:13)), while `T3.analyze` receives T2's audit through its exception path ([prepare_t3.py:226](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:226)). **Fix:** attach the drop audit on both success and `_StopWithAudit`, and assert its `raw_file_sha256` equals `manifest.raw["funding.jsonl"]` on success. Define `line_sha256` as the bytes of the *captured JSONL page line*: capture serializes the REST page before writing it ([prepare_t3.py:130](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:130)), so that hash is not demonstrably a hash of the original HTTP response bytes.
+> 
+> ### Design and verification
+> 
+> The temporary view is sound **if it is passed only to `T2.analyze`**. T2 reads the five price files ([prepare_t2.py:55](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:55)); T3 must still read OI from the original `raw/oi` ([prepare_t3.py:232](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:232)). T3's manifest and raw inventory hash the original raw directory, and verify rebuilds from a copy of it ([prepare_t3.py:267](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:267), [prepare_t3.py:284](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:284)). The pinned loaders then check that manifest and its raw files ([prepare_t3.py:304](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:304)). Make view creation deterministic and confined to the T2 call.
+> 
+> Add tests for an eligible row sharing a bucket, empty pages and multiple JSONL pages, a nonempty funding rate that is malformed on a dropped row, audit retention when an in-window row stops capture, and raw-line hash versus manifest equality. For the gate, test historical-row or manifest tampering, a v3 row without a prior decision, and a previous freeze row absent from the next H. The proposed 88-row, boundary, and rebuild tests cover the central path ([plan F4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/fix_plan_r1.md:30)).
+> 
+> The **C1′ → H′ → C3′** order and #55 implementation, #56 freeze, #57 pins, #58 verdict numbering are consistent with [#54's procedure](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:62), provided the after-pass is completed before H′ and the local row rehearsal precedes the push. The planned #55 correction is needed: #54 has nine table cells under an eight-cell header. The preserved [prepare record](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03/records/prepare_attempt1/prepare.json) establishes rc 3 before any strategy run; I found no P&L in the supplied attempt records. I made no edits and ran no tests. The captured raw funding file was unavailable in this checkout, so the 88-row source contents were not independently rechecked.
+> 
+> VERDICT: FIX-PLAN-FIRST
+
+### Codex 원문 2(verbatim)
+> **Read-only re-check — Codex session/thread ID:** `01a0f03c-7732-7ce3-8265-0f5fed8de799`. These statuses assess the **plan**; the [current gate](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:164) and [prepare path](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:222) still contain the pre-fix code.
+> 
+> | r1 finding | Status | Grounding |
+> |---|---|---|
+> | (a) Bucket exception and #54 rule | **RESOLVED** | [r2 lines 3–7](fix_plan_r2.md:3) drop every qualifying empty-string warm-up row, including shared-bucket and malformed-rate rows, as required by [registry #54](docs/trial_registry.md:62). |
+> | (b) Full historical K2′ and strict chain | **RESOLVED** | [r2 lines 19–24](fix_plan_r2.md:19) require each version's triple and manifest to match its own H, strict ancestry, and unchanged prior row and manifest in the next H tree. This restores the historical checks represented by the [current v1 gate](backtest/t3_provenance.py:178). |
+> | (c) Authorization and exact keys | **RESOLVED**, subject to the wording issue below | [r2 lines 16–26](fix_plan_r2.md:16) specify parsed canonical version keys, one authorization row per later version, the prior H as its value, and presence in that version's H tree. The [r2 tests](fix_plan_r2.md:37) cover malformed suffixes, duplicates, and substring confusion that the [current substring lookup](backtest/t3_provenance.py:150) would permit. |
+> | (d) After-pass freeze diff | **PARTIAL** | [r2 lines 42–43](fix_plan_r2.md:42) add the union and `-M`, and require exactly the two intended modifications. But [`freeze_set_at`](backtest/t3_provenance.py:61) uses the *currently running* `FREEZE_FILES` and `FREEZE_GLOBS` even for `305e664`. Because this same module is allowed to change, an altered selector could omit an old path from both sides. Fix the old-side path list from the committed [#53 manifest](docs/trials/trial_03_freeze_manifest.json:1) or the old implementation. |
+> | (e) Drop audit and raw hashes | **RESOLVED** | [r2 lines 12–15](fix_plan_r2.md:12) attach the audit on success and stop, define the hash as the captured JSONL line, and compare the raw-file hash with `manifest.raw["funding.jsonl"]`. That matches [capture serialization](backtest/prepare_t3.py:130), [stop audit handling](backtest/prepare_t3.py:226), and [manifest construction](backtest/prepare_t3.py:267). |
+> 
+> **New issue — MINOR:** [r2 lines 17–18](fix_plan_r2.md:17) say to reject noncanonical `t3_freeze_` keys, but do not explicitly include the required `t3_freeze_auth_v<n>` family from [line 25](fix_plan_r2.md:25) in that allowlist. State that family explicitly so the planned #55 row cannot be rejected by a literal implementation.
+> 
+> No files were edited or written.
+> 
+> VERDICT: FIX-PLAN-FIRST
+
+### Codex 원문 3(verbatim)
+> **Plan r3 re-check — Codex session/thread ID:** `01a0f03f-7cb3-7ef1-a123-59cdbaa0cc26`
+> 
+> - **(d) Selector could omit a path from both sides — RESOLVED in the plan.** R3 takes OLD from the committed #53 manifest and checks NEW against a separate literal K2″ `git ls-tree` filter before diffing their union ([r3:5](fix_plan_r3.md:5), [conventions:87](docs/trials/trial_03_conventions.md:87)). That avoids relying on the currently running selectors used by `freeze_set_at` ([t3_provenance.py:61](backtest/t3_provenance.py:61)). A read-only comparison found all 51 committed manifest keys in the literal `305e664` tree filter, with no difference ([manifest:2](docs/trials/trial_03_freeze_manifest.json:2)).
+> 
+> - **Missing `t3_freeze_auth_v<n>` allowlist family — RESOLVED in the plan.** R3 explicitly permits that exact family ([r3:2](fix_plan_r3.md:2)); r2 requires its row and prior-H value for each later version ([r2:25](fix_plan_r2.md:25)).
+> 
+> **Earlier findings:** R2/r3 still specify removal of the bucket exception ([r2:3](fix_plan_r2.md:3), [registry #54](docs/trial_registry.md:62)), per-version K2′ validation, strict ancestry and preserved historical rows/manifests, and an authorization row ([r2:16](fix_plan_r2.md:16)). The drop audit remains specified for success and `_StopWithAudit` ([r2:12](fix_plan_r2.md:12)); those are the two paths in the current `prepare_t3` flow ([prepare_t3.py:222](backtest/prepare_t3.py:222), [prepare_t3.py:254](backtest/prepare_t3.py:254)). These are **plan resolutions**; the current code still has the pre-fix behavior.
+> 
+> **New issue**
+> 
+> - **MAJOR — After-pass order is inconsistent.** R3 requires the v2 manifest *at C3′* and a tree diff against H′ for the after-pass ([r3:5](fix_plan_r3.md:5)). R2, which r3 retains, orders **after-pass → C1′ → H′ → C3′** ([r2:30](fix_plan_r2.md:30)). The specified after-pass cannot inspect those artifacts at its stated point. Specify a final local after-pass after C3′ exists and before push, with any earlier code review identified separately.
+> 
+> VERDICT: FIX-PLAN-FIRST
+
+### Codex 원문 4(verbatim)
+> **Prior MAJOR: RESOLVED.** r4 puts code review A before C1′, then keeps C1′, H′, and C3′ local through the manifest check, literal freeze diff, and final review B. A failed B resets to the last pushed commit, so that path cannot leave a pushed bad v2 freeze. The push occurs only after B says MERGE. [r4:3] [r4:6] [r4:9]
+> 
+> **New issue — MAJOR:** The B log is assigned to a commit *after* the freeze push, but step 6 allows deletion and recapture immediately after gate checks. The plan does not require that log commit to be pushed before recapture, or specify the standing rule's per-point agree/disagree. Thus A+B supplies the two reviews, but the required record is not secured before the next dependent stage. Place B's verbatim log and per-point responses in a committed, pushed ops-log update before deletion and recapture. [r4:12] [r4:14] [CLAUDE.md:40] [conventions:97]
+> 
+> No other plan regression found: r4 retains r2's removal of the bucket exception, every-version manifest checks, strict chain and authorization row, and r3's key allowlist and independent old-manifest union diff. Audit attachment on success and stop remains specified. [r2:3] [r2:12] [r2:16] [r3:2] [r3:5] [r4:15]
+> 
+> Codex thread ID: `01a0f042-c73b-78b2-92b0-eedd2b4ac460`. Read-only plan check; no edits or tests.
+> 
+> VERDICT: FIX-PLAN-FIRST
+
+### Codex 원문 5(verbatim)
+> **Prior MAJOR — RESOLVED in the plan.** R5 requires the verbatim B reviews, Claude Code's per-point agree/disagree, and the gate outputs to be committed and pushed, with that commit confirmed on `origin/main`, **before** deletion or recapture ([r5:2]). The full order is code review A → local C1′/H′/C3′ → local review B → freeze push and gate checks → B-log push → deletion ([r4:3], [r4:9], [r5:2]). B rejection still resets the *local* freeze commits before any freeze push ([r4:10]). A docs-only log commit is outside the specified freeze set, while the gate binds frozen files to H′ and reads the registry and manifest at the selected ref ([t3_provenance.py:30], [t3_provenance.py:111], [r2:19]). The r2/r3 safeguards remain incorporated by r4 and r5 ([r3:2], [r4:15]).
+> 
+> **New issue — MAJOR:** The standing rule also requires the **before-pass** verbatim and Claude Code's per-point responses in `docs/ops_log.md` ([CLAUDE.md:40]). R4 specifies verbatim logging for A and B, which are both *after* reviews; r5 adds per-point responses only for B ([r4:4], [r4:14], [r5:2]). The current log ends with the decision and raw hashes, without the fix before-pass ([ops_log.md:9124]). Add a committed, pushed before-pass record with per-point responses, and specify per-point responses for A as well. This is a **plan gap**, not a claim that the future B-log step has run.
+> 
+> Read-only plan check; no edits or tests. **Codex session/thread ID:** `01a0f045-0b83-7be1-a67f-47c09e3d04b2`.
+> 
+> VERDICT: FIX-PLAN-FIRST
