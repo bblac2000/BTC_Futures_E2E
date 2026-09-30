@@ -93,7 +93,7 @@ def prints() -> list[tuple[int, float]]:
 
 
 def run(pr, mk, atr, arm: str, q_lo: float, q_hi: float, sign: bool, hold: int = HOLD, hyst: bool = True,
-        band_top: float = 0.22, fund: set[int] | None = None) -> dict:
+        band_top: float = 0.22, fund: set[int] | None = None, extra: int = 0) -> dict:
     t0, o, h, lo = mk
     ts = [t for t, _ in pr]
     ps = [p for _, p in pr]
@@ -128,7 +128,8 @@ def run(pr, mk, atr, arm: str, q_lo: float, q_hi: float, sign: bool, hold: int =
         a = atr.get(d)
         fi = (fill - t0) // MIN
         end = fi + hold
-        if a is None or end >= len(o) or np.isnan(o[fi]):
+        cover = end + extra                                                # r3 결정 16: 표본 = 체결 + 7,200분 + 24h(P2 +3 인쇄)
+        if a is None or cover >= len(o) or np.isnan(o[fi]):
             cnt["abort_no_data"] += 1
             continue
         sl_dist = 2.0 * a
@@ -136,12 +137,12 @@ def run(pr, mk, atr, arm: str, q_lo: float, q_hi: float, sign: bool, hold: int =
             cnt["abort_sl_dist_out_of_range"] += 1
             continue
         seg_h, seg_l = h[fi:end], lo[fi:end]
-        if np.isnan(seg_h).any() or np.isnan(o[end]):
+        if np.isnan(seg_h).any() or np.isnan(o[end]) or (extra and np.isnan(h[end:cover + 1]).any()):
             cnt["abort_data_gap"] += 1
             continue
         if fund is not None:                                               # r3 결정 7: 15개 경계마다 검증된 확정 펀딩
-            bs = [b for b in range(T + H8, fill + hold * MIN + 1, H8)]
-            if len(bs) != hold * MIN // H8 or any(b not in fund for b in bs):
+            bs = [b for b in range(T + H8, fill + (hold + extra) * MIN + 1, H8)]
+            if len(bs) != (hold + extra) * MIN // H8 or any(b not in fund for b in bs):
                 cnt["abort_funding_unvalidated"] += 1
                 continue
         e = o[fi]
@@ -185,6 +186,8 @@ def main() -> int:
     fund = funding_buckets()
     r3 = {arm: run(pr, mk, atr, arm, 0.10, 0.90, False, band_top=0.20, fund=fund) for arm in ("S", "L")}
     res["r3_decisions(Q.10/.90 · band 1–20% · 15 funding validated)"] = r3
+    res["r3_final(+ admissibility fill+7200min+24h)"] = {arm: run(pr, mk, atr, arm, 0.10, 0.90, False, band_top=0.20, fund=fund, extra=1440)
+                                                         for arm in ("S", "L")}
     one_knob = {"hold_3d": dict(hold=3 * 1440), "no_hysteresis": dict(hyst=False), "hold_3d_no_hysteresis": dict(hold=3 * 1440, hyst=False)}
     for name, kw in one_knob.items():
         res[name] = {arm: run(pr, mk, atr, arm, 0.05, 0.95, False, **kw) for arm in ("S", "L")}

@@ -363,6 +363,58 @@
    }
   }
  },
+ "r3_final(+ admissibility fill+7200min+24h)": {
+  "L": {
+   "L_bins": {
+    "3–4": 6,
+    "5–7": 22,
+    "8–9": 9,
+    "≥10": 19
+   },
+   "counts": {
+    "extreme_absorbed_hysteresis": 26,
+    "extreme_absorbed_position_busy": 188,
+    "extreme_qualified": 56
+   },
+   "exit_reasons": {
+    "sl": 6,
+    "time": 50
+   },
+   "median_days_entry_to_entry": 8.0,
+   "median_days_exit_to_next_entry": 3.33,
+   "median_sl_dist_pct": 8.01,
+   "trades": 56,
+   "trades_per_year": {
+    "2022": 32,
+    "2023": 24
+   }
+  },
+  "S": {
+   "L_bins": {
+    "3–4": 2,
+    "5–7": 16,
+    "8–9": 10,
+    "≥10": 15
+   },
+   "counts": {
+    "extreme_absorbed_hysteresis": 79,
+    "extreme_absorbed_position_busy": 165,
+    "extreme_qualified": 43
+   },
+   "exit_reasons": {
+    "sl": 7,
+    "time": 36
+   },
+   "median_days_entry_to_entry": 10.83,
+   "median_days_exit_to_next_entry": 6.52,
+   "median_sl_dist_pct": 7.35,
+   "trades": 43,
+   "trades_per_year": {
+    "2022": 22,
+    "2023": 21
+   }
+  }
+ },
  "with_sign(S p>0 · L p<0)": {
   "L": {
    "L_bins": {
