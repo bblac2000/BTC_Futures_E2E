@@ -9137,3 +9137,9 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > After recapture: verify receipts + oi_unusable.json + cap → L_base → P1_L part 0 → the rest, as before. Same rules: counts only until the evaluator has run; stop on any failure.
 >
 > Noted for the report: 2024-08-12 has 2 missing mark minutes and is excluded as incomplete under item 30; include it in the report's excluded-days list.
+
+## 2026-09-30 — 캡처 시도 1 원시 해시(삭제 전 기록 · advisor 수정 before #1)
+- var/t3/IS/prepared/raw/(시도 1 · 02:17~02:21Z 캡처 · 1,644 OI 파일 + 가격 원시 5):
+  - funding.jsonl `41fe9bd88cf0fed52ed9891bbc1d1ae604def35b6b43374f08c887f71630f262`(3줄 = REST 페이지 3 · 줄 SHA256: 0 `5d16a0c352b8a8fc2db79730238e7de5f6eb12b57d384ead9c4fdfc8a674bb02`(1,000행 · 빈 mark 워밍업 88 전부) · 1 `5d12aefcf8d12147228fe6f926446e01b2f7e040a2a56d43e8cc971dc0762f08`(1,000 · 0) · 2 `1240304d5287254f9c2d8b27fa5858b4ce290f736b622f72a0939cd2b2cf7ff4`(466 · 0))
+  - fill_ranges.json `d85f7ce213af1d881473533ead858234adb5021c6bdb37caa939550d44085807` · archive_rows.jsonl `93ba86d7694d97acbb35ee3e98a2dd23b12ffd45cdce54915232906c00c1ee58` · rest_klines.jsonl `91a1d3232a9a4f5b64f36e5eca1d4ea572ee1276f28cb597daf307d0db078bf6` · rest_mark.jsonl `e3b0c442…`(빈 파일)
+  - oi/ 1,644개 `sha256sum` 정렬 목록의 SHA256 `911c44ba49c3c2c56e79d22590efd1c9a2737e8a77679a3a5d7717cac4215642`
