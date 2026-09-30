@@ -196,14 +196,14 @@ def test_capture_build_verify_roundtrip(tmp_path):
         data = pzip(day_rows())
         return data, chk(data)
     rest = TP.FakeRest()
-    out = tmp_path / "var" / "t4" / "IS"
-    P.capture(out / "raw", rest, arch, fetch, DAY0, END)
+    out = tmp_path / "var" / "t4" / "IS" / "prepared"
+    P.capture(out / "raw", rest, arch, fetch, DAY0, END, root=tmp_path)
     assert asked == ["2025-12"] and all(e <= END for _, _, e in rest.calls)
-    m = P.build(out, (DAY0, END))
+    m = P.build(out, (DAY0, END), root=tmp_path)
     assert set(P.PREPARED) <= set(m) and "premium/BTCUSDT-1m-2025-12.zip" in m["raw"]
     prints = json.loads((out / "premium_prints.json").read_text())
     assert [p["T"] for p in prints] == [DAY0 + H8, DAY0 + 2 * H8] and all(p["valid"] for p in prints)
-    assert P.verify_rebuild(out, (DAY0, END)) == m
+    assert P.verify_rebuild(out, (DAY0, END), root=tmp_path) == m
     (out / "raw" / "premium" / "BTCUSDT-1m-2025-12.zip").write_bytes(b"x")
     with pytest.raises(ValueError):
         P.verify_manifest(out)
@@ -222,3 +222,39 @@ def test_no_other_trial_import_in_any_trial04_file():
         bad = [m for m in mods if m not in allowed and any(k in m for k in ("trial01", "trial02", "trial03", "_t3", "_t2"))]
         bad += [f"{m}.{a}" for m, a in froms if a in {"prepare_t3", "prepare_t2"} and m == "backtest" and a != "prepare_t2"]
         assert not bad, (f.name, bad)
+
+
+def test_capture_build_verify_refuse_paths_outside_var_t4(tmp_path):
+    arch = TP.write_archive(tmp_path / "arch", [], [])
+    for bad in ("var/t4_calib/prepared", "var/t3/IS/prepared", "elsewhere/prepared"):
+        with pytest.raises(P.OOSGuard):
+            P.capture(tmp_path / bad / "raw", TP.FakeRest(), arch, lambda mo: (b"", ""), DAY0, END, root=tmp_path)
+        assert not (tmp_path / bad).exists()
+        with pytest.raises(P.OOSGuard):
+            P.build(tmp_path / bad, (DAY0, END), root=tmp_path)
+        with pytest.raises(P.OOSGuard):
+            P.verify_rebuild(tmp_path / bad, (DAY0, END), root=tmp_path)
+
+
+def test_funding_response_past_the_range_stops_before_persisting(tmp_path):
+    arch = TP.write_archive(tmp_path / "arch", [], [])
+    over = TP.FakeRest([{"symbol": "BTCUSDT", "fundingTime": END + 1, "fundingRate": "BOOM", "markPrice": "x"}])
+    over.get = (lambda orig: (lambda path, params=None, *, signed=False:                 # 창 밖 행을 되돌려 주는 끝점
+                TP.Response(200, [{"symbol": "BTCUSDT", "fundingTime": END + 1, "fundingRate": "BOOM", "markPrice": "x"}], {})
+                if path.endswith("fundingRate") else orig(path, params, signed=signed)))(over.get)
+    raw = tmp_path / "var" / "t4" / "IS" / "prepared" / "raw"
+    with pytest.raises(P.OOSGuard):
+        P.capture(raw, over, arch, lambda mo: (b"", ""), DAY0, END, root=tmp_path)
+    assert not (raw / "funding.jsonl").exists()
+
+
+def test_single_non_csv_member_stops(tmp_path):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("BTCUSDT-1m-2025-12.txt", "\n".join(day_rows()) + "\n")
+    assert P.analyze_premium(pdir_with(tmp_path / "t", {"2025-12": buf.getvalue()}), DAY0, END)[2][0]["kind"] \
+        == "premium_zip_members"
+
+
+def test_oos_bootstrap_streams_mapping():
+    assert A.BOOTSTRAP_STREAMS["OOS"] == {"gross_S": 4, "net_S": 5, "gross_L": 6, "net_L": 7}

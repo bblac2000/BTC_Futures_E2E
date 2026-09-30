@@ -118,8 +118,11 @@ def fetch_premium_http(month: str) -> tuple[bytes, str]:  # pragma: no cover —
     return data, chk
 
 
-def capture(raw: Path, client: Any, archive: Path, fetch_premium: PremiumFetch, start_ms: int, end_ms: int) -> None:
+def capture(raw: Path, client: Any, archive: Path, fetch_premium: PremiumFetch, start_ms: int, end_ms: int, *,
+            root: Path = ROOT) -> None:
+    """`raw` = `<var/t4/…>/prepared/raw`(배치 규약 A11) — 쓰기 전에 경로·범위 관문."""
     check_is_bounds(start_ms, end_ms)
+    check_out_dir(raw.parent, root)
     raw.mkdir(parents=True, exist_ok=True)
     rows = read_archive_rows_bounded(archive, start_ms, end_ms)
     (raw / "archive_rows.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n" for x in rows))
@@ -133,9 +136,14 @@ def capture(raw: Path, client: Any, archive: Path, fetch_premium: PremiumFetch, 
                 fk.write(json.dumps({"range": [a, b], "page": page}) + "\n")
             for page in T2._pages(client, BD.MARK_KLINES_PATH, kl, a, b, ts_key=0, step=MIN, limit=BD.REST_KLINES_LIMIT):
                 fm.write(json.dumps({"range": [a, b], "page": page}) + "\n")
+    fpages = T2._pages(client, BD.FUNDING_PATH, {"symbol": BD.SYMBOL}, start_ms, end_ms, ts_key="fundingTime",
+                       step=1, limit=BD.REST_FUNDING_LIMIT)
+    over = [r.get("fundingTime") for pg in fpages for r in pg
+            if isinstance(r.get("fundingTime"), int) and not start_ms <= r["fundingTime"] <= end_ms]
+    if over:                                                       # 응답이 창 밖 행을 돌려줬다 — 값을 읽기 전에 멈춘다(저장하지 않음)
+        raise OOSGuard(f"펀딩 응답에 범위 밖 fundingTime {len(over)}개(첫 {over[0]}) — 값은 읽지 않았다")
     with (raw / "funding.jsonl").open("w") as ff:
-        for page in T2._pages(client, BD.FUNDING_PATH, {"symbol": BD.SYMBOL}, start_ms, end_ms, ts_key="fundingTime",
-                              step=1, limit=BD.REST_FUNDING_LIMIT):
+        for page in fpages:
             ff.write(json.dumps({"page": page}) + "\n")
     pdir = raw / "premium"
     pdir.mkdir(exist_ok=True)
@@ -178,11 +186,11 @@ def analyze_premium(pdir: Path, start_ms: int, end_ms: int
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
                 names = z.namelist()
-                if len(names) != 1:
+                if len(names) != 1 or not names[0].endswith(".csv") or names[0].endswith("/"):
                     stops.append({"kind": "premium_zip_members", "month": mo, "n": len(names), "stop": True})
                     continue
                 text = z.read(names[0]).decode("utf-8")
-        except (zipfile.BadZipFile, ValueError, UnicodeDecodeError, EOFError):
+        except (zipfile.BadZipFile, ValueError, UnicodeDecodeError, EOFError, RuntimeError, NotImplementedError):
             stops.append({"kind": "premium_zip_unreadable", "month": mo, "stop": True})
             continue
         for i, line in enumerate(text.splitlines()):
@@ -310,7 +318,10 @@ def raw_files(raw: Path) -> list[str]:
     return list(PRICE_RAW) + sorted(f"premium/{p.name}" for p in (raw / "premium").iterdir())
 
 
-def build(out: Path, expect_range: tuple[int, int]) -> dict[str, Any]:
+def build(out: Path, expect_range: tuple[int, int], *, root: Path | None = ROOT) -> dict[str, Any]:
+    """`out` = `<var/t4/…>/prepared`(원시는 `out/raw`) · root=None은 verify의 임시 디렉터리 전용(내부)."""
+    if root is not None:
+        check_out_dir(out, root)
     raw = out / "raw"
     try:
         bars, fundings, audit, kline_daily, prints = analyze(raw, expect_range)
@@ -341,14 +352,15 @@ def verify_manifest(out: Path) -> dict[str, Any]:
     return m
 
 
-def verify_rebuild(out: Path, expect_range: tuple[int, int]) -> dict[str, Any]:
+def verify_rebuild(out: Path, expect_range: tuple[int, int], *, root: Path = ROOT) -> dict[str, Any]:
     """원시에서 **다시 빌드**해 산출물 해시가 매니페스트와 같은지(덮어쓰지 않는다 · 임시 디렉터리)."""
     import shutil
+    check_out_dir(out, root)
     m = verify_manifest(out)
     with tempfile.TemporaryDirectory() as td:
         t = Path(td)
         shutil.copytree(out / "raw", t / "raw")
-        m2 = build(t, expect_range)
+        m2 = build(t, expect_range, root=None)
     bad = [n for n in PREPARED if m2[n] != m[n]]
     if bad:
         raise ValueError(f"원시에서 다시 빌드한 산출물이 다르다: {bad}")
