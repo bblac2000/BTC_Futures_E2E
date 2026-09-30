@@ -8655,3 +8655,22 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef96-4a43-79f2-b2d3-4d3c35a26424
 > Resume in Codex: codex resume 01a0ef96-4a43-79f2-b2d3-4d3c35a26424
+
+## 2026-09-30 — 트라이얼 #3 (f) after-pass 확인(Codex task-muncd7je-nld7zg FIX-FIRST: P1 요약 타입) → 수정
+- 입장: ✅ — P1 요약·조각의 정수 필드에 bool 불가(`True == 1` 우회) · 범위·키 검사 · 변조 테스트 3종(lo = false · n_source = true · computable = 1). 나머지 CLOSED.
+
+### Codex 원문(verbatim · task-muncd7je-nld7zg)
+> **VERDICT: FIX-FIRST.** HEAD closes most of the requested findings, but finding 3 remains open: malformed P1 summary values can pass validation.
+> 
+> | Check | Status |
+> | --- | --- |
+> | 1. Freeze set | **CLOSED** for the file set pinned in convention 58. The evaluator compares membership and contents with the committed version; a later `anchor.py` change has a refusal test. |
+> | 2. Trade ↔ event ties | **CLOSED.** Sequential IDs, entry and exit times, entry reference, leverage, reason, and intent direction are checked before statistics are computed. |
+> | 3. Rules SHA, P1 manifest, nested schema | **OPEN in part.** Rules hashes and P1 file hashes are checked. Run-summary types are checked. But [read_p1_merged](/home/cms/project/BTC_Futures_E2E/backtest/t3_outputs.py:140) does not validate P1 summary value types, and the comparisons in [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:267) accept Python’s `True == 1` and `False == 0`. For example, `parts[0].lo = false` can match `lo = 0`; with one source trade, `n_source = true` can match `1`. Convention 57 requires schema mismatches to be refused. Add explicit types and ranges for the P1 summary and manifest, with a tamper test. |
+> | 4. Exit-reason shares | **CLOSED.** Counts, shares, and a zero-trade representation are present. |
+> | Advisor fixes | **CLOSED.** V uses window days with a bar; boundary exits are split by open versus intrabar time; the requested report fields are present; the `draws_total` keyword scan is added. |
+> 
+> I confirmed the P1 type bypass with a read-only equality check. I did not run pytest: these fixture tests create files, and this review workspace is read-only.
+> 
+> Codex session ID: 01a0ef9f-1112-7ec0-becf-5070d62bf947
+> Resume in Codex: codex resume 01a0ef9f-1112-7ec0-becf-5070d62bf947

@@ -117,6 +117,9 @@ def read_p1_parts(base: Path, arm: str) -> list[P1.P1Part]:
             raise ContractError(f"{d}: 조각 파일 집합 불일치")
         x = json.loads((d / P1_PART_FILE).read_text())
         if set(x) != {"arm", "lo", "hi", "n_source", "computable", "draws_json", "null"} or x["arm"] != arm \
+                or not (_is_int(x["lo"]) and _is_int(x["hi"]) and 0 <= x["lo"] <= x["hi"] and _is_int(x["n_source"])
+                        and x["n_source"] >= 0 and isinstance(x["computable"], bool) and isinstance(x["draws_json"], str)
+                        and isinstance(x["null"], list)) \
                 or d.name != f"part_{x['lo']:03d}_{x['hi']:03d}":
             raise ContractError(f"{d}: 조각 스키마 불일치")
         out.append(P1.P1Part(x["arm"], x["lo"], x["hi"], x["n_source"], x["computable"], x["draws_json"], x["null"]))
@@ -145,6 +148,12 @@ def read_p1_merged(base: Path, arm: str) -> tuple[list[dict[str, Any]], list[dic
     summ = json.loads((d / "p1_summary.json").read_text())
     if set(summ) != P1_SUMMARY_KEYS or summ["arm"] != arm:
         raise ContractError(f"{d}: p1_summary 스키마 불일치")
+    ok = (_is_int(summ["n_source"]) and summ["n_source"] >= 0 and isinstance(summ["computable"], bool)
+          and _is_int(summ["failed"]) and summ["failed"] >= 0 and isinstance(summ["evaluable"], bool) and isinstance(summ["parts"], list)
+          and all(isinstance(q, dict) and set(q) == {"lo", "hi", "sha256"} and _is_int(q["lo"]) and _is_int(q["hi"])
+                  and 0 <= q["lo"] <= q["hi"] and isinstance(q["sha256"], str) and len(q["sha256"]) == 64 for q in summ["parts"]))
+    if not ok:
+        raise ContractError(f"{d}: p1_summary 중첩 스키마 불일치(bool은 정수가 아니다)")
     return json.loads((d / "p1_draws.json").read_text()), read_jsonl(d / "p1_null.jsonl"), summ
 
 

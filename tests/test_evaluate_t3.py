@@ -295,3 +295,19 @@ def test_exit_reason_shares(built):
     _, report = F.compute(*built)
     t = report["arms"]["L"]["trades"]
     assert t["exit_reasons"] == {"time_exit": {"n": 1, "share": 1.0}} and t["n_trades"] == 1
+
+
+@pytest.mark.parametrize("edit", ["lo_false", "n_source_true", "computable_one"])
+def test_p1_summary_bool_int_confusion_refused(built, tmp_path, edit):
+    base = fresh(built, tmp_path)
+    p = O.p1_merged_dir(base, "L") / "p1_summary.json"
+    s = json.loads(p.read_text())
+    if edit == "lo_false":
+        s["parts"][0]["lo"] = False
+    elif edit == "n_source_true":
+        s["n_source"] = True
+    else:
+        s["computable"] = 1
+    p.write_text(json.dumps(s))
+    with pytest.raises(O.ContractError, match="중첩"):
+        F.compute(base, built[1], built[2])
