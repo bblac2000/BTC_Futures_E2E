@@ -9988,3 +9988,4 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > - **Registry #68 is historical draft evidence.** Its `6523…` document hash and `[PROPOSED]` description predate the current confirmed §3-3 text. An append-only anchor row must identify the current document hash and resolved decisions; #68 should remain intact. [registry #68](docs/trial_registry.md:76), [r3 §3-3](docs/trials/trial_04_preregistration_r3.md:78), [r3 §12-13](docs/trials/trial_04_preregistration_r3.md:163).
 > 
 > VERDICT: FIX-FIRST
+- **정정(Claude Code · 2026-09-30)**: 트라이얼 #4 r1 before-pass 입장표에서 Codex (xi) "P1은 방향도 무작위"에 ⚠️ 부분 반대("이 저장소 P1 규약은 원 방향 유지")로 적었으나 **틀렸다** — 트라이얼 #3 §4 P1은 슬롯마다 `dir_k = integers(0, 2)`로 **방향을 무작위화**한다(트라이얼 #1 규약 (c)). r2·r3 §4의 "원 방향"은 그 규약과 다르며, 앵커 전 사용자 결정 사항이다.
