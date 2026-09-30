@@ -9584,3 +9584,8 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 나머지 여섯 실행 `--stage runs --jobs 2` 전부 rc 0 · 개수만: L 기본 257/적격 269 · L P2_delay1 257 · L P2_delay5 255 · L P3_invert 257 · S 기본 233/적격 245 · S P2_delay1 233 · S P2_delay5 233 · S P3_invert 233 · 창 봉 1,052,640 · RSS 최대 2,152,936 kB. 기록 `docs/trials/trial_03/records/runs/`.
 - P1 나머지 15조각 `--stage p1 --parts 8 --jobs 2` 전부 rc 0 · L 원판 257 · S 원판 233 · 조각마다 추출 125 · 성공 125(양 암 1,000/1,000). 기록 `docs/trials/trial_03/records/p1/`.
 - P1 병합 `--stage p1-merge` rc 0(P1_merge_L · P1_merge_S · 출력 세 파일씩). **단계 6 완료.** 다음: 판정기 한 번(`--stage evaluate`).
+
+## 2026-09-30 — 트라이얼 #3 HALF 2 단계 7 · **판정기 한 번**(H′ f087611) rc 0
+- `--stage evaluate` 04:31:14→04:31:29Z rc 0 · 표준오류 0바이트 · 시도 기록 _records/evaluation_attempt.json(e07da017…) · evaluation/ = report.json(41f789fc…) · verdict.txt(aff0b06d…) · record.json(dcef3e94…).
+- **판정 쌍: `L: REJECT(§7-2: 검정력 부족) · 생존 통과 | S: REJECT(§7-2: 검정력 부족) · 생존 통과`** · 청산 0/257 · 0/233 · v_cross_check 8실행 일치 · V 731일 = 창 731일(제외 날 없음 · 봉 0개 창 날 0).
+- 사본 `docs/trials/trial_03/records/evaluation/`. 트라이얼 #3은 이 판정으로 닫힌다(OOS는 닫힌 채).

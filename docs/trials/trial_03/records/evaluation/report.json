@@ -1,0 +1,337 @@
+{
+ "arms": {
+  "L": {
+   "P1": {
+    "computable": true,
+    "exits": {
+     "liquidation": 3854,
+     "time_exit": 253146
+    },
+    "failed": 0,
+    "p95": -15.767308373716649,
+    "successful": 1000
+   },
+   "P2": {
+    "delay1": -30.704667442226697,
+    "delay5": -29.756531787729152
+   },
+   "P3_invert": -24.037810130449333,
+   "bh_beats_arm": true,
+   "classification": "검정력 부족",
+   "daily_sharpe": -0.13296600831590655,
+   "entry_funnel": {
+    "exit.sl": 141,
+    "exit.time_exit": 116,
+    "filled": 257,
+    "sl_dist_out_of_range": 12
+   },
+   "event_funnel": {
+    "in_cooldown": 5268,
+    "no_tail": 1046189,
+    "oi_missing": 4,
+    "oi_not_decreasing": 910,
+    "qualified": 269
+   },
+   "gates": {
+    "G-B": false,
+    "G0": true,
+    "G1": false,
+    "G2": false,
+    "flat": false
+   },
+   "inputs": {
+    "gross_ci_lo": -27.521512846230348,
+    "liquidations": 0,
+    "mean_gross": -7.052666533869538,
+    "mean_net": -29.477890479754084,
+    "n": 257,
+    "net_ci_hi": -8.024859428590807,
+    "net_ci_lo": -49.72140625069845,
+    "p1_computable": true,
+    "p1_failures": 0,
+    "p1_p95": -15.767308373716649,
+    "p2_d1": -30.704667442226697,
+    "p2_d5": -29.756531787729152,
+    "p3_inv": -24.037810130449333,
+    "psr0": 0.0013060417950290781,
+    "rho": 0.027122822330198103,
+    "sd_net": 124.43335802694078,
+    "sr": -0.23689701015198752,
+    "v_empty": false
+   },
+   "mde": 31.767659308786413,
+   "oi_missing_unusable": 0,
+   "placebo_rejects": {},
+   "priority": 3,
+   "sr_star": 0.14936822033244856,
+   "sr_undefined": [],
+   "stats": {
+    "degenerate_resamples": [
+     0,
+     0
+    ],
+    "gross_ci": [
+     -27.521512846230348,
+     14.219468251530634
+    ],
+    "liquidations": 0,
+    "mean_gross": -7.052666533869538,
+    "mean_net": -29.477890479754084,
+    "n": 257,
+    "net_ci": [
+     -49.72140625069845,
+     -8.024859428590807
+    ],
+    "psr0": 0.0013060417950290781,
+    "rho": 0.027122822330198103,
+    "sd_net": 124.43335802694078,
+    "sr": -0.23689701015198752
+   },
+   "sub_reasons": {
+    "oi_missing.absent": 4,
+    "sl_dist_out_of_range.floor": 12
+   },
+   "survival": "청산 0 / 체결 257",
+   "trades": {
+    "cost_grid_mean_net_bps": {
+     "0.5": -18.481918480191855,
+     "1.0": -29.477890479754087,
+     "1.5": -40.47386247931631
+    },
+    "exit_at_funding_boundary": {
+     "funding_paid_bps_of_e_ref": "1.6227275669007900000",
+     "funding_paid_usdt": "0.1622727566900790000",
+     "n": 1,
+     "symmetric_intrabar_n": 0
+    },
+    "exit_reasons": {
+     "sl": {
+      "n": 141,
+      "share": 0.5486381322957199
+     },
+     "time_exit": {
+      "n": 116,
+      "share": 0.45136186770428016
+     }
+    },
+    "holding_min_quantiles": [
+     17.599983333333334,
+     41.99998333333333,
+     156.99998333333335,
+     240.0,
+     240.0
+    ],
+    "n_trades": 257,
+    "per_year": {
+     "2024": {
+      "mean_net_bps": -37.14227723594028,
+      "n": 145
+     },
+     "2025": {
+      "mean_net_bps": -19.555246911477322,
+      "n": 112
+     }
+    },
+    "x9_time_exit_open_past_sl": 0
+   },
+   "variants": {
+    "P2_delay1": {
+     "mean_net_bps": -30.704667442226697,
+     "n": 257
+    },
+    "P2_delay5": {
+     "mean_net_bps": -29.756531787729152,
+     "n": 255
+    },
+    "P3_invert": {
+     "mean_net_bps": -24.037810130449333,
+     "n": 257
+    },
+    "base": {
+     "mean_net_bps": -29.477890479754087,
+     "n": 257
+    }
+   },
+   "verdict": "REJECT(§7-2: 검정력 부족) · 생존 통과",
+   "window_bars": 1052640
+  },
+  "S": {
+   "P1": {
+    "computable": true,
+    "exits": {
+     "liquidation": 4079,
+     "time_exit": 228921
+    },
+    "failed": 0,
+    "p95": -14.52625435491747,
+    "successful": 1000
+   },
+   "P2": {
+    "delay1": -23.2393327622212,
+    "delay5": -24.998620004445083
+   },
+   "P3_invert": -9.897215400758242,
+   "bh_beats_arm": true,
+   "classification": "검정력 부족",
+   "daily_sharpe": -0.10783842772822227,
+   "entry_funnel": {
+    "exit.sl": 111,
+    "exit.time_exit": 122,
+    "filled": 233,
+    "sl_dist_out_of_range": 12
+   },
+   "event_funnel": {
+    "in_cooldown": 4634,
+    "no_tail": 1046578,
+    "oi_not_decreasing": 1183,
+    "qualified": 245
+   },
+   "gates": {
+    "G-B": false,
+    "G0": true,
+    "G1": false,
+    "G2": false,
+    "flat": false
+   },
+   "inputs": {
+    "gross_ci_lo": -20.658555219621963,
+    "liquidations": 0,
+    "mean_gross": -1.0850107935688753,
+    "mean_net": -22.79331122721918,
+    "n": 233,
+    "net_ci_hi": -2.7782087695658375,
+    "net_ci_lo": -42.252705859031096,
+    "p1_computable": true,
+    "p1_failures": 0,
+    "p1_p95": -14.52625435491747,
+    "p2_d1": -23.2393327622212,
+    "p2_d5": -24.998620004445083,
+    "p3_inv": -9.897215400758242,
+    "psr0": 0.0062586429237332375,
+    "rho": -0.019914152115155206,
+    "sd_net": 118.9299053793997,
+    "sr": -0.19165332011747566,
+    "v_empty": false
+   },
+   "mde": 31.888057878450788,
+   "oi_missing_unusable": 0,
+   "placebo_rejects": {},
+   "priority": 3,
+   "sr_star": 0.14936822033244856,
+   "sr_undefined": [],
+   "stats": {
+    "degenerate_resamples": [
+     0,
+     0
+    ],
+    "gross_ci": [
+     -20.658555219621963,
+     20.082026466068772
+    ],
+    "liquidations": 0,
+    "mean_gross": -1.0850107935688753,
+    "mean_net": -22.79331122721918,
+    "n": 233,
+    "net_ci": [
+     -42.252705859031096,
+     -2.7782087695658375
+    ],
+    "psr0": 0.0062586429237332375,
+    "rho": -0.019914152115155206,
+    "sd_net": 118.9299053793997,
+    "sr": -0.19165332011747566
+   },
+   "sub_reasons": {
+    "sl_dist_out_of_range.floor": 12
+   },
+   "survival": "청산 0 / 체결 233",
+   "trades": {
+    "cost_grid_mean_net_bps": {
+     "0.5": -11.779014992636624,
+     "1.0": -22.79331122721918,
+     "1.5": -33.80760746180175
+    },
+    "exit_at_funding_boundary": {
+     "funding_paid_bps_of_e_ref": "0",
+     "funding_paid_usdt": "0",
+     "n": 0,
+     "symmetric_intrabar_n": 1
+    },
+    "exit_reasons": {
+     "sl": {
+      "n": 111,
+      "share": 0.47639484978540775
+     },
+     "time_exit": {
+      "n": 122,
+      "share": 0.5236051502145923
+     }
+    },
+    "holding_min_quantiles": [
+     21.199983333333336,
+     59.99998333333333,
+     240.0,
+     240.0,
+     240.0
+    ],
+    "n_trades": 233,
+    "per_year": {
+     "2024": {
+      "mean_net_bps": -31.680635633754264,
+      "n": 128
+     },
+     "2025": {
+      "mean_net_bps": -11.9592395697288,
+      "n": 105
+     }
+    },
+    "x9_time_exit_open_past_sl": 0
+   },
+   "variants": {
+    "P2_delay1": {
+     "mean_net_bps": -23.2393327622212,
+     "n": 233
+    },
+    "P2_delay5": {
+     "mean_net_bps": -24.998620004445083,
+     "n": 233
+    },
+    "P3_invert": {
+     "mean_net_bps": -9.897215400758242,
+     "n": 233
+    },
+    "base": {
+     "mean_net_bps": -22.79331122721918,
+     "n": 233
+    }
+   },
+   "verdict": "REJECT(§7-2: 검정력 부족) · 생존 통과",
+   "window_bars": 1052640
+  }
+ },
+ "buy_and_hold": {
+  "daily_sharpe": 0.04987256769816369,
+  "days": 731,
+  "window_return": 0.9807326216024346
+ },
+ "constants": {
+  "alpha": 0.008333333333333333,
+  "bootstrap_resamples": 10000,
+  "bootstrap_seed": [
+   20260929,
+   1
+  ],
+  "ci_quantiles": [
+   0.004166666666666667,
+   0.9958333333333333
+  ],
+  "n_trials": 6
+ },
+ "trial_verdict": "L: REJECT(§7-2: 검정력 부족) · 생존 통과 | S: REJECT(§7-2: 검정력 부족) · 생존 통과",
+ "v_cross_check": {
+  "match": true,
+  "runs_compared": 8
+ },
+ "v_days": 731,
+ "zero_bar_window_days": 0
+}
