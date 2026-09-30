@@ -9901,3 +9901,34 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > **Review rationale:** the present pre-IS count misses the constitution's 48-per-arm planning check, and executable-count and timing rules remain material open design choices. That calls for resolving and documenting a coherent candidate before drafting an anchorable r2; it is not a choice of threshold, hold rule, or arm.
 > 
 > VERDICT: REDESIGN-FIRST
+
+## 2026-09-30 — 트라이얼 #4 r3(사용자 결정 1~12) · 재계수 · Codex 좁은 재확인 FIX-FIRST(10b RESULT-MOTIVATED → 0.15 되돌림)
+
+> 사용자(원문 요지): "r2 reviewed. Decisions for r3 (all made before any IS content; record in §12 as user decisions 2026-09-30)" · 1~12 전문은 r3 §12 · 10b 조건 원문: "Ask Codex to challenge (b) explicitly in the re-check; if Codex judges the floor change to be result-motivated rather than structural, revert to 0.15 and register with the shortfall disclosed (option ② in your list) — I would rather register an honest expected G0 fail than bend the rule."
+
+- 재계수(r3 결정 · `count_r2.py` → count_r2.json cafaa6b0… · 커밋 d70f11a · 475 기준 수정 뒤 재실행 해시 동일): S 43(22/21) · L 56(32/24).
+- r3 = 새 파일 `docs/trials/trial_04_preregistration_r3.md`(r1·r2 보존) · 커밋 a31379e → 재확인 반영.
+
+### 입장표
+| Codex | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| 1 | 재현이 475가 아니라 476 · 완전성 검사 범위 | ✅ | 475로 고쳐 재실행(결과·해시 동일) · §5-1에 한계 명시 |
+| 2 | 10b RESULT-MOTIVATED | ✅(사용자 사전 약속 적용) | G0·MDE 0.15(48) · S 43 < 48 예상 미달 공시 · §3-2·§12-10 기록 |
+| 3 | 10a 개수 동기 · 투명한 재설계라 유지 가능 | ✅ | 개수 근거 명시 · 유지 |
+| 4 | 20% 천장 수량 내림 · 수신 기한 · 전진 결손 · P1 사이징 | ✅ | §1 밴드 문구 · §3-3 [PROPOSED](T + 5분 기한 · 전진 결손 = G-F 결손 · P1 sl_dist = 원 트레이드 결정 시점) — 앵커 전 사용자 확인 |
+| 5 | 앵커 검토 전 정리 | ✅ | 위 전부 |
+
+### Codex 원문(verbatim)
+> **Codex session id:** 01a0f180-b720-7d02-893a-7cfaf4795977 (turn 01a0f180-b9a8-7e93-9907-0747bae1cbbe)
+> 
+> 1. **Decisions 1–12 are mostly reflected in §§0–11.** The operative trigger is Q0.10/Q0.90, the band is [1%, 20%], and the G0 floor is 0.05; the older 5% tails and 0.15 floor appear only as history or the stated fallback. The draft also carries the fixed hold, timing, hysteresis, per-arm N, print, and P1 choices. The exception is its claim that the cited count replay implements decisions 7 and 9 exactly. The artifact hash matches, but the script's `len(xs) >= 0.99 * 480` admits **476**, not 475, minutes; its completeness check tests future mark highs and the exit open, not every mark field and minute claimed in §5-1. Thus **43 S / 56 L are observed outputs of a simplified 2022–2023 replay**, not certified counts under every r3 rule. [r3 §§1, 5-1, 12](docs/trials/trial_04_preregistration_r3.md:15) · [count script](docs/trials/trial_04_calibration/count_r2.py:84) · [count output](docs/trials/trial_04_calibration/count_r2.json:314)
+> 
+> 2. **Decision 10b — RESULT-MOTIVATED.** One position per arm prevents overlapping trade exposure, but it does not establish low correlation between successive *returns*. Regimes can persist beyond the observed 8–11-day median entry gaps; the draft's "10–12 days" rationale is itself inaccurate for L, whose median is 8.0 days. Using measured ρ̂ when higher does not supply a pre-IS basis for the *planning* floor of exactly 0.05. The change lowers the minimum from 48 to 36 precisely where the S replay has 43; the counterfactual that it would have been proposed had S projected 60 is unsupported. This is an inference about the decision's motivation, **not** an observed IS result. The constitution fixes the formula, while 0.15 was trial #3's chosen floor. Apply the user's committed fallback: restore 0.15 consistently, including G0 and MDE, and disclose S's expected shortfall against 48 without calling it an IS failure. [r3 §§3, 3-2, 5-1, 12-10](docs/trials/trial_04_preregistration_r3.md:55) · [protocol §1](.claude/skills/quant-bot-constitution/references/research-protocol.md:17) · [trial #3 G0](docs/trials/trial_03_preregistration.md:68) · [r2 before-pass](docs/ops_log.md:9858)
+> 
+> 3. **Decision 10a — RESULT-MOTIVATED by pre-IS *opportunity counts*, not by returns.** Q0.10/Q0.90 was a counted r2 alternative that raised the replay from S 30/L 42 to S 43/L 56. The record supplies no independent reason that a decile, specifically, marks the economic boundary of crowding; if the original tails had supplied ample trades, the stated count reason for broadening them would disappear. This transparent, pre-anchor redesign is distinguishable from tuning on sealed IS performance and need not itself be reversed. Keep its count-based rationale explicit. [r2 §5-1](docs/trials/trial_04_preregistration_r2.md:90) · [r3 §§0, 12-10](docs/trials/trial_04_preregistration_r3.md:7) · [protocol §1](.claude/skills/quant-bot-constitution/references/research-protocol.md:17)
+> 
+> 4. **Decisions 3, 4, 7, 9, and 11 need three clarifications.** At the inclusive 20% endpoint, `10/sl_dist` is exactly 50 USDT **before** quantity is rounded down; the execution code can then reject it below `MIN_NOTIONAL`. The claim that the entire band passes *all* execution constraints is too strong. The T-window and T-funding ordering are internally consistent, but a historical close at T+1 and fill at that same instant remains an execution assumption: §3's forward receipt check does not define the latest usable receipt and earliest executable order. Finally, §1 says that **at entry** the *future* five-day mark and funding span must already be complete. That can be a precommitted retrospective sample filter, as in the earlier before-pass, but cannot be known at a live entry; forward gap handling is unspecified. P1 applies the same stated eligibility rule and exit clock, while its random-start sizing/leverage remains unstated despite possible liquidation. [r3 §§1, 3, 4](docs/trials/trial_04_preregistration_r3.md:24) · [quantity normalization](exchange/normalize.py:78) · [r2 before-pass](docs/ops_log.md:9883)
+> 
+> 5. **Before anchor review:** record this re-check in §12-10; make the user-committed 0.15 fallback consistent wherever G0 or `n_eff` is used; qualify or reconcile the §5-1 replay with decisions 7 and 9; and state the execution, forward-gap, band-feasibility, and P1-sizing conventions before they can affect a result. These are specification and evidence corrections; the 43/56 replay does **not** predict actual IS G0. No files were edited and no market data dated 2024-01-01 or later was opened. [r3 §§3–5, 12](docs/trials/trial_04_preregistration_r3.md:55) · [count script](docs/trials/trial_04_calibration/count_r2.py:125)
+> 
+> VERDICT: FIX-FIRST

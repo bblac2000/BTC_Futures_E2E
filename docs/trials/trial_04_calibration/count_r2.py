@@ -87,7 +87,7 @@ def prints() -> list[tuple[int, float]]:
     out = []
     for T in range(first, C.PRE_IS_END + 1, H8):
         xs = [pm[t] for t in range(T - H8, T, MIN) if t in pm]             # 시작 T−8h … T−1분 = 종료 (T−8h, T]
-        if len(xs) >= 0.99 * 480:
+        if len(xs) >= 475:                                                 # r3 결정 9: ≥ 475/480(Codex r3 재확인: 0.99×480은 476을 요구했다)
             out.append((T, statistics.fmean(xs)))
     return out
 
