@@ -9573,3 +9573,5 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - OI 사용 불가 0 / IS 슬롯 210,528(0.5% 상한 통과) · 822일.
 - **시도 1과 다른 점**: 2024-08-12 10:02·10:03 두 분(아카이브 mark 비정상 · 채움 범위)에 REST `markPriceKlines`가 이번엔 2행을 돌려줬다(시도 1 rest_mark.jsonl = 빈 파일 e3b0c442…) → 봉 1,183,680 · 결손 0 · 그날은 이제 완전(항목 30 제외 목록에 없음). 다른 원시(funding · archive_rows · rest_klines · fill_ranges)는 시도 1과 바이트 동일. rest_mark.jsonl c154c1b3….
 - 기록 사본 `docs/trials/trial_03/records/prepare/`.
+- 핀: `--stage pins` → data_pins.json + 레지스트리 #57(사용자 결정 K8 · rc 8 원문) 같은 커밋 77d5e24 · load_pins 통과 · 매니페스트 7d267f98… · 원시 목록 a82ea925….
+- verify: 04:15:17→04:16:09Z rc 0(원시에서 다시 빌드 = 매니페스트) · 영수증 = H′ · 지문 v2 8554df6d… · 핀 커밋 77d5e24 · 기록 사본 `docs/trials/trial_03/records/prepare/`. **단계 5 완료.**
