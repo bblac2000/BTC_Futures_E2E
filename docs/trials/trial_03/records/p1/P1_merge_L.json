@@ -1,0 +1,17 @@
+{
+ "outputs": {
+  "p1_draws.json": "aae1ad81473bf070f34253842666719060f8367f82bcf5101c53ba0ca8e00f09",
+  "p1_null.jsonl": "5e2d830e7dbdfb46c00c9cd5e05eb4829fad1b94479cc9b35c5a78e4198f3e61",
+  "p1_summary.json": "ab5ace7a80b17d57a274b30c97e53a4fad8b87e87c31b55082b2045c28d25a8a"
+ },
+ "provenance": {
+  "evaluator_commit": "f087611fa2367a4eb0b709e89059cac626cfa909",
+  "fetched_at": "2026-09-30T04:29:03+00:00",
+  "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+  "manifest_sha256": "7d267f9864e2f8f0f42b2c209363918978c07e36d9a0c97cf10b349b429977df",
+  "origin": "cec6f8ac1eeffa646d13442e3b20f61f48af16cf",
+  "pins_commit": "77d5e247bdfa9f54a46fe31d8392dc3c461a9839",
+  "variant": "P1_merge_L"
+ },
+ "returncode": 0
+}

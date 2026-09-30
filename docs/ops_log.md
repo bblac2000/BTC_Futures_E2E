@@ -9583,3 +9583,4 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - P1_L_000_124 단독(--parts 8 · 분할 기록 [[0,124]…[875,999]]) 04:19:22→04:19:56Z rc 0 · wall 33.7 s · RSS 2,060,196 kB · 원판 257 · 추출 125 · 성공 125. 여유 메모리 ≈ 8 GB < 11 GB → 나머지는 --jobs 2(사용자 규칙).
 - 나머지 여섯 실행 `--stage runs --jobs 2` 전부 rc 0 · 개수만: L 기본 257/적격 269 · L P2_delay1 257 · L P2_delay5 255 · L P3_invert 257 · S 기본 233/적격 245 · S P2_delay1 233 · S P2_delay5 233 · S P3_invert 233 · 창 봉 1,052,640 · RSS 최대 2,152,936 kB. 기록 `docs/trials/trial_03/records/runs/`.
 - P1 나머지 15조각 `--stage p1 --parts 8 --jobs 2` 전부 rc 0 · L 원판 257 · S 원판 233 · 조각마다 추출 125 · 성공 125(양 암 1,000/1,000). 기록 `docs/trials/trial_03/records/p1/`.
+- P1 병합 `--stage p1-merge` rc 0(P1_merge_L · P1_merge_S · 출력 세 파일씩). **단계 6 완료.** 다음: 판정기 한 번(`--stage evaluate`).
