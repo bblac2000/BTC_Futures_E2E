@@ -33,3 +33,14 @@
 ### 다음 트라이얼 판정기 요구(트라이얼 #2 산출물은 바꾸지 않는다 · 사용자 2026-09-29)
 - **매수보유 접미어는 ACCEPT 판정일 때만** 보고에 붙인다 — 트라이얼 #2 report.json의 `buy_and_hold.is_label`은 판정과 무관하게 "ACCEPT — …"를 적었다(뜻은 "ACCEPT였다면 붙었을 접미어").
 - **비용 민감도 격자(보고 전용)**: 원판 트레이드당 net 엣지를 비용 ×0.5 · ×1.0 · ×1.5로 — "gross ≈ cost" 경우를 한눈에.
+
+## 트라이얼 #3 — T-FLUSH(tf_v1 · 암 L 하락 플러시 → 롱 · 암 S 상승 플러시 → 숏) · IS REJECT(두 암 · 검정력 부족 · 생존 통과 · 2026-09-30 · 레지스트리 #58·#59·#60)
+| # | 발견(구조) | 근거(IS · L 257 · S 233 트레이드 · report 41f789fc…) |
+|---|---|---|
+| L11 | T-FLUSH (trial #3): 30-min flush + OI decrease → cooled counter-entry, 4h hold, 1m decision cadence. Gross ≈ 0 (L −7.1 / S −1.1 bp); exposure-matched random timing beat the signal (P1 p95 −15.8 / −14.5 vs −29.5 / −22.8); sign flip also negative (−24.0 / −9.9); 0 liquidations of 490 at 10–30x. Third consecutive REJECT of a multi-hour-hold / 1m-cadence hypothesis at 22 bp round-trip cost. | net L −29.48 [−49.72, −8.02] · S −22.79 [−42.25, −2.78] bps · MDE 31.8/31.9 · P1 1,000/1,000 성공 · 청산 0/257 · 0/233 |
+| L12 | (측정) REST mark endpoint is not reproducible between calls (2024-08-12: 2 empty minutes in capture 1, present in capture 2). Raw response hashes must be pinned at capture time; a recapture is a new dataset. | 캡처 1 rest_mark.jsonl e3b0c442…(빈 파일) · 캡처 2 c154c1b3…(2행) · 나머지 원시 바이트 동일 · 핀 #57 |
+
+### 헌법 v1.4 정정 목록(제안 · 사용자 2026-09-30 · 저장소 스킬 사본은 수정하지 않는다 · 레지스트리 #61·#62)
+1. **SKILL.md 77행**: 청산 거리식을 레지스트리 #4 정확식(진입 taker 항 포함)으로 — 롱 `(1/L − taker − MMR_eff)/(1 − MMR)` · 숏 `(1/L − taker − MMR_eff)/(1 + MMR)`(사용자 결정 2026-09-30 (A)).
+2. **§7-2 부호 우선 분기**(트라이얼 #4부터 · 소급 없음): MDE 검사 **전에** 평가 — 순 CI가 전부 0 아래면 분류 = **효과 부재(음의 효과)**, 검정력 부족 아님. r3와 트라이얼 #3 산출물은 바꾸지 않는다.
+3. **vps-ops 실패 유형(L12)**: REST mark 응답은 호출마다 재현되지 않을 수 있다 — 원시 응답 해시는 캡처 시점에 핀으로 고정하고, 재캡처는 새 데이터셋으로 다룬다.

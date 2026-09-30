@@ -9655,3 +9655,7 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Nothing found invalidates the published `L: REJECT | S: REJECT` verdict. This review verifies the committed records and hashes, not an independent P&L recomputation from `var/`.
 > 
 > VERDICT: ACCEPT-RECORD
+
+## 2026-09-30 — 트라이얼 #3 마무리(문서만 · 사용자 지시)
+- 사용자: 판정(#58) 수락 · Codex ACCEPT-RECORD 확인 · 트라이얼 #3 코드 변경 없음 · OOS 영구 폐쇄 · VPS 봇은 전략 없이 유지(손대지 않음) · 트라이얼 #4 사전등록은 헌법 v1.4 뒤.
+- learnings L11(T-FLUSH) · L12(REST mark 비재현) 원문 추가 · 헌법 v1.4 정정 목록(learnings 절) · 레지스트리 #60(발견) · #61(§7-2 부호 우선 분기 제안) · #62(v1.4 정정 목록).
