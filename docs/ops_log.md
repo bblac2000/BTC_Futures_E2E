@@ -8943,3 +8943,157 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0efbe-38ac-7c52-b3ed-14038a086fa6
 > Resume in Codex: codex resume 01a0efbe-38ac-7c52-b3ed-14038a086fa6
+
+## 2026-09-30 — 트라이얼 #3 (g) HALF 1 **after-pass**(advisor + Codex FIX-FIRST → 재확인 FIX-FIRST(MINOR 2) → 재확인 **MERGE**)
+
+- 실제로 한 일(계획 r3 대비): K1′~K12 구현 커밋 8b8f103 · 006db8b · 9a752eb(규약 H 초안) · after-pass 수정 ec701ed · 재확인 수정 54b049a. 실데이터 읽기 없음.
+- 테스트: tests/test_t3_stages.py 29개(임시 저장소에 r3 커밋 사슬 · 실제 run_isolated 자식 포함) · 전체 1,485 통과 · ruff · pyright 0.
+- 계획과 다른 점: (1) 시간 초과·실행 예외 = rc −1 기록(계획엔 없음 · Codex #2) (2) 기록 없는 빈 작업 디렉터리도 거부 (3) P1 자식이 원판 기록을 읽기 전·쓰기 전 대조 (4) 원격 핀 대조 (5) 실행 중 코드 = 검사 저장소 코드(부모·판정기) (6) children_max_rss_kb · p1 --only (7) 행 토큰 엄격 파싱.
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 1 | #52/#53 한 번뿐 · 로컬 리허설 | ✅ 동의 | C1~C3 푸시 전 require_rows(ref=HEAD) · 항목 65 |
+| advisor 2 | 단계 중 저장소 손대기 → rc 8 · rc 8 관문 실패 재시작 질문 | ✅ 동의 | 항목 74 · 사용자 질문(보고) |
+| advisor 3 | var/ 미추적 → 기록 복사처 | ✅ 동의 | 항목 74 docs/trials/trial_03/records/ |
+| advisor 4 | RSS가 기록에 없다 | ✅ 동의 | children_max_rss_kb · p1 --only |
+| advisor 5 | 실제 자식 계약 미검증 | ✅ 동의 | test_real_isolated_child_meets_the_runner_contract |
+| advisor 6 | 머리말 DRAFT | ✅ 동의 | 확정본 머리말 · 보고에 H 원문 |
+| advisor 7 | MERGE 전 C1 금지 | ✅ 동의 | 지켰다 |
+| Codex 1 BLOCKER | 실행 코드 ≠ 검사 저장소 | ✅ 동의 | require_running_code |
+| Codex 2 BLOCKER | 시간 초과 기록 없음 · 빈 디렉터리 재실행 | ✅ 동의 | rc −1 기록 · 빈 디렉터리 거부 |
+| Codex 3 MAJOR | P1 자식이 원판 기록 미확인 | ✅ 동의 | 전·후 check_record |
+| Codex 4 MAJOR | 원격 핀 갱신 미탐지 | ✅ 동의 | origin/main 바이트·커밋 대조 |
+| Codex 5 MINOR | 같은 값 중복 토큰 | ✅ 동의 | 재확인에서 한 번 더(키 먼저 · 형식) |
+| Codex 병합 기록 MINOR | rc·출력 목록 없음 | ✅ 동의 | returncode 0 + 세 파일 |
+| Codex prepare 충돌 MAJOR | 부분 raw 뒤 재실행 | ✅ 동의 | 비어 있지 않은 prepared/ 거부 |
+| Codex verify stdout MINOR | raw 목록 출력 | ✅ 동의 | 개수만 |
+| Codex 디렉터리 fsync | 제안 | ✅ 동의 | 시도 기록 디렉터리 fsync |
+| Codex K10 | 운영 단계일 뿐 | ✅ 동의 | 항목 74 절차 |
+| Codex 재확인 MINOR 1 | 형식 틀린 중복 키 통과 | ✅ 동의 | 54b049a |
+| Codex 재확인 MINOR 2 | 항목 74 과장(시작 시 검사) · pins 쓰기 예외 | ✅ 동의 | 54b049a |
+
+### 레지스트리에 남길 것
+- #52 규약 확정(t3_conventions · t3_conventions_commit) · #53 코드 동결(H · 목록 · 지문) · HALF 2: #54 데이터 핀 · #55 판정 · K8 편집 방식·rc 8 재시작은 사용자 결정 후 행.
+
+### advisor 원문(verbatim)
+> You're at the after-pass. The build matches plan r3 and the tests are real. Below is what your checks don't cover, ordered by what can actually hurt you.
+> 
+> **1. Rows #52/#53 are one-shot — a typo is unrecoverable. Dress-rehearse locally before any push.**
+> `_one_row` requires *exactly one* row containing `t3_conventions=` / `t3_freeze_H=` in the whole registry; the registry is append-only. A malformed #53 (e.g. `**t3_freeze_H=…**`, a trailing `)` or `.` glued to the hex, a wrapped column) still contains the substring, so a corrected #53′ makes two rows → permanent refusal. Same for #52, and #52 must already be in H's tree.
+> - Before C2: `grep -c "t3_conventions=" docs/trial_registry.md` and `grep -c "t3_freeze_H=" …` and `grep -c "strategies/trial03/data_pins.json" …` — all must be 0. Do not mention the pins path in #52/#53 text (`load_pins` counts rows containing it).
+> - Run `PV._tokens(row_text)` on the exact row strings before committing.
+> - Commit C1, C2, C3 **locally without pushing**, then run `PV.require_rows(ROOT, H, ref="HEAD")` and `PV.freeze_manifest(ROOT, H)` consistency. If anything fails, `git reset --hard` to pre-C1 (nothing pushed) and redo. Only then push and run `require_frozen` / `--gate-check`.
+> - Report consequence: because of exactly-one, any HALF 2 fix that needs "a new freeze row" necessarily changes `require_rows` (new H). State that in item 74 or the report so the user isn't surprised.
+> 
+> **2. HALF 2 hazard your tests can't see: touching the repo while a stage runs kills the trial by design.**
+> Each child runs `require_frozen` → `git status --porcelain`, and `child_gate` compares `git rev-parse origin/main` to `T3_STAGE_ORIGIN`. Editing `ops_log.md` (uncommitted), copying records into the repo, or a `git push` (which updates `refs/remotes/origin/main`) during a running `runs`/`p1` stage → next child rc 8 → record with rc≠0 → K6 refuses resume → HALF 2 rules say stop. Add to item 74: *단계가 도는 동안 저장소를 만지지 않는다(편집·커밋·푸시·fetch 금지) — 메모는 scratchpad에*. And put a question to the user next to K8: should an rc-8 **gate** failure with no data read and no strategy run be restartable after a registry note, or is it a full-restart failure like the rules say? Recommend the former, but it's their call; decide before "go capture".
+> 
+> **3. `var/` is gitignored, so "push after steps 5/6/7" pushes nothing that matters.**
+> `_records/*.json`, `verify_receipt.json`, `p1_partition.json`, `evaluation/{report.json,verdict.txt,record.json}` all live in var/. The user's standing rule is "nothing stays local-only", and row #55 needs the report bytes. Decide now (item 74, before C1) a committed destination — e.g. `docs/trials/trial_03/records/` — and that the copy happens *after* each stage exits and is committed before the next stage starts (see point 2). Copying into docs/ doesn't touch the freeze set.
+> 
+> **4. K10 promised max RSS "from the record"; `RunRecord` has none.**
+> `run_isolated` uses `subprocess.run` with no rusage. Cheapest fix before freeze: in `t3_stages.run_one`, add `"max_rss_kb": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss` to the record body — exact for the L_base-alone run (`--jobs 1 --only`), and don't forget to measure a P1 child the same way before setting `--jobs` for p1. Alternatively declare `/usr/bin/time -v` externally in item 74. Pick one and say which in the report.
+> 
+> **5. The runner→child subprocess contract is untested.**
+> FakeRunner replaces every child; the real `run_isolated` (appends `--out`, cwd=ROOT, env) meeting `run.py`/`p1_t3_run.py` argparse and the receipt path `prepared.parent/_records/verify_receipt.json` never executes. One test closes it: in the `chain` repo, `Stages(…, runner=run_isolated).run_one("L_base", run_job("L","base"), prov)` — child passes `stage_repo`/`child_gate`/`require_rows` (the copied tree is byte-identical), fails at `load_pins` → rc 8, record written, `_records/failures/L_base/_failure_error.txt` copied. Caveat: `assert_not_imported("strategies.trial03.run")` — this test must run before any test does `from strategies.trial03 import run`, or spawn via `subprocess.run` directly.
+> 
+> **6. Conventions header still says 초안(DRAFT).** C1 is the final file; replace the draft line with a "확정 · 행 #52 · 이후 불변" note in C1. The header also promised additions are shown to the user first — include section H verbatim in the step-4 report.
+> 
+> **7. Do not start C1 until the Codex verdict lands and is MERGE**; log both passes verbatim with agree/disagree. Points 1–4 and 6 are edits before C1 (docs + `t3_stages.py` + one test); none of them is optional if you want HALF 2 to survive its first operator slip.
+
+### Codex 원문 1(verbatim · 세션 01a0efe4-0f1d-7cf3-ac22-97465d678534 · 스레드 01a0efe4-126e-7f62-be56-0ab3a790dbee — 출력의 Task ID `/root`는 실제 ID가 아님)
+> Task ID: `/root`
+> 
+> **VERDICT: FIX-FIRST.** The committed code covers most of plan r3, but two paths can break the promised execution chain, and section H currently describes checks the code does not perform.
+> 
+> ## 1. Implemented versus plan r3
+> 
+> K1–K2's freeze set, fingerprint, C1/C2/C3 row checks, and K4's pinned loaders are substantially implemented. The verify receipt, eight-run and P1 record checks, partition coverage, failure files, and evaluator attempt record are also present. The following differences need correction before C1.
+> 
+> - **BLOCKER: running code can differ from the code checked at H.** [Stages.begin](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:72) validates `self.repo`, while the stage runner and its in-process P1 merge use modules loaded from `ROOT`. Direct [evaluate()](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:429) has the same issue when passed another clean repo. The child CLIs have a code-byte comparison in [stage_repo](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:190), but these parent paths do not. **Fix:** apply that comparison at the runner and evaluator entry points before any in-process work.
+> 
+> - **BLOCKER: a child timeout can leave no failure record and permit a rerun.** [run_isolated](/home/cms/project/BTC_Futures_E2E/backtest/replay.py:53) raises on its 48-hour timeout. [run_one](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:122) then never writes a record. [done](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:113) permits an existing *empty* output directory to run again. This violates K6's stop and no-silent-rerun rule. **Fix:** record timeout and launch exceptions durably as failed attempts, and refuse any existing job directory without a successful matching record.
+> 
+> - **MAJOR: the P1 child does not enforce its base-run record.** [p1_t3_run.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3_run.py:35) reads `L_base` or `S_base` through `read_run`, without checking its successful stage record and hashes. [stage_p1](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:239) checks before launching children, leaving a gap, and a standalone child has no such check. **Fix:** validate the matching base record and file hashes inside the child, including a check after the P1 calculation before publishing its part.
+> 
+> - **MAJOR: remote pin updates are not detected.** [pins_commit/load_pins](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:246) find the last pins change in local `HEAD` and require only that it is an ancestor of `origin/main`. If `origin/main` has a newer pins change, the older local pins and row still pass. **Fix:** require the pins bytes and the last pins-touching commit at `origin/main` to equal the local ones.
+> 
+> - **MINOR: duplicate identical row tokens pass.** [_tokens](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:134) rejects a repeated key only when its values differ. [Section H item 65](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:88) says duplicate keys are refused. **Fix:** reject every repeated key.
+> 
+> ## 2. Gate bypass assessment
+> 
+> The first and fourth findings are provenance bypasses. The parent can execute different module bytes from the repo it validates, and a checkout behind `origin/main` can use superseded pins. The P1 finding permits a part to be calculated from base output that lacks a verified run record. The evaluator does validate the recorded runs, parts, merge files, receipt, and pinned loaders before computation ([evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:435)). That is a meaningful gate, but it does not establish which base bytes a P1 child consumed earlier.
+> 
+> **MINOR: merge records are weaker than section H says.** [stage_p1_merge/check_merge_record](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:267) record provenance and hashes, but no `rc 0` field or required merged-file inventory. **Fix:** record explicit success and require the three merged output names on verification.
+> 
+> ## 3. HALF 2 operational hazards
+> 
+> - **MAJOR: prepare crash handling contradicts the partial-output rule.** [done](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:113) exempts `prepare`. [stage_prepare](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:196) can launch it again without a record. The capture CLI refuses when `raw/` or `manifest.json` exists ([prepare_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:393)), so a crashed capture becomes a second child execution and an rc-5 record instead of an immediate preserved partial-output refusal. **Fix:** refuse a nonempty prepared directory before relaunching prepare. Keep verify's shared-directory handling separate.
+> 
+> - **MAJOR: the 48-hour timeout has no controlled failure artifact.** The timeout exception from [run_isolated](/home/cms/project/BTC_Futures_E2E/backtest/replay.py:59) also prevents `run_many` from completing its normal failure accounting. **Fix:** convert it to a recorded failure with any existing `_failure` files preserved.
+> 
+> `run_isolated` deliberately uses `cwd=ROOT` ([replay.py](/home/cms/project/BTC_Futures_E2E/backtest/replay.py:59)). That works for the production checkout because the stage CLI also uses `ROOT`. It makes the temporary-repo tests less representative, because their end-to-end stage test uses [FakeRunner](/home/cms/project/BTC_Futures_E2E/tests/test_t3_stages.py:161). The evaluator hashes base inputs before computation and again before publication ([evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:366), [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:393)). The attempt file uses exclusive creation and file `fsync` ([evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:378)). A directory `fsync` would strengthen the stated crash-durability guarantee.
+> 
+> K10's L_base-first memory decision remains an **operating step**, not an enforced scheduler rule. [The CLI](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:314) accepts any positive effective job count. Use the measured RSS before choosing `--jobs`.
+> 
+> ## 4. P&L on stdout before evaluation
+> 
+> I found no explicit P&L output in the run or P1 CLI success and failure prints ([run.py](/home/cms/project/BTC_Futures_E2E/strategies/trial03/run.py:50), [p1_t3_run.py](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3_run.py:53)). Their stdout tests cover the forbidden terms ([test_t3_stages.py](/home/cms/project/BTC_Futures_E2E/tests/test_t3_stages.py:399)). The runner prints those child results, and the verdict print occurs in the evaluate stage. Full failure events remain on disk and can contain P&L fields, so the planned K8 redaction decision still matters when reporting a failure.
+> 
+> **MINOR: verify prints the full raw manifest, despite item 73's count-only description.** [prepare_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:389) prints `m`, which includes `raw`. Capture filters it at line 404. This is an inventory and log-size issue, not a P&L leak. **Fix:** use the same filtered count summary for verify.
+> 
+> ## 5. Test gaps
+> 
+> The most consequential missing tests are:
+> - a real isolated subprocess through the temporary-repo chain;
+> - an expired child timeout and the subsequent resume refusal;
+> - prepare with partial `raw/` and no record;
+> - a P1 child with a missing or changed base-run record;
+> - a later `origin/main` pins update;
+> - alternate-repo execution-code drift in the parent and evaluator;
+> - duplicate identical row tokens.
+> 
+> The existing end-to-end test patches the pinned evaluator loaders and computation ([test_t3_stages.py](/home/cms/project/BTC_Futures_E2E/tests/test_t3_stages.py:309)), so it cannot close those gaps.
+> 
+> `.venv/bin/pytest` is available. I did not run it: the requested pass is read-only, and these tests create Git repositories and output files. The working tree was clean during review.
+> 
+> ## 6. Section H readiness
+> 
+> [Section H](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:85) is **not ready to freeze as C1**.
+> - Item 69 overstates partial-output refusal and merge-record success checks.
+> - Item 65 overstates duplicate-token rejection.
+> - Item 73 overstates verify stdout hygiene.
+> - Items 66 and 71 should state the parent/evaluator running-code check once implemented.
+> - Item 74 should settle the planned K8 redaction rule before "go capture."
+> 
+> C1 and its row #52 are still future steps, as intended. No real-data claim was needed for this review.
+> 
+> VERDICT: FIX-FIRST
+
+### Codex 원문 2(verbatim · 재확인 ec701ed)
+> Codex session ID: 01a0eff2-06cf-7031-ac24-55adf1988dc4
+> 
+> **BLOCKER:** None.
+> **MAJOR:** None. The claimed running-code, timeout, base-record, remote-pin, merge-record, and attempt-record fixes are present in the paths reviewed.
+> 
+> **MINOR: repeated registry keys can still be accepted.** [t3_provenance.py:134](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:134) checks for duplicates only after a token matches the hex-value pattern. A row with a valid `t3_conventions=` token and a second `t3_conventions=oops` token can therefore pass. Parse reserved keys before validating their values. Reject malformed values and every repeated key. This leaves the claimed `_tokens` fix incomplete.
+> 
+> **MINOR: Section H overstates the stage guard.** [trial_03_conventions.md:97](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:97) says touching the repo while a stage runs *will* produce an rc 8 failure record. The child gate checks only at entry, so a later change is not guaranteed to do that. The `pins` stage also writes a repo file itself. Keep the no-external-changes rule, but describe the gate as an entry check and exempt the intended pins write.
+> 
+> Section H is **not yet accurate enough to freeze as C1**. This was a read-only code review, and Codex did not rerun the reported tests.
+> 
+> VERDICT: FIX-FIRST
+> 
+> The earlier AFTER-pass (task `01a0efe4-0f1d-7cf3-ac22-97465d678534`, thread `01a0efe4-126e-7f62-be56-0ab3a790dbee`) also ended in FIX-FIRST. Its output printed the task ID as `/root`, which is not a real ID, so the thread ID above is the correct reference.
+
+### Codex 원문 3(verbatim · 재확인 54b049a)
+> Codex session: `01a0effe-d558-7a60-86e6-cb5a8ba04291`
+> 
+> **Findings:** BLOCKER none · MAJOR none · MINOR none. No fix needed.
+> 
+> Both findings are closed. The parser rejects repeated keys and malformed values, while accepting the planned #52–#54 token shapes ([t3_provenance.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:134), [test_t3_stages.py](/home/cms/project/BTC_Futures_E2E/tests/test_t3_stages.py:555)). The current registry ends at #51 and contains no `t3_...=` tokens, so no existing row would fail ([trial_registry.md](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:59)).
+> 
+> Section H is accurate enough to freeze as C1. Item 74's child-start gate timing and pins write exception match the stage code ([conventions.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:97), [t3_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:76)). Verification was a read-only parser probe and code review; the working tree remained clean.
+> 
+> VERDICT: MERGE
