@@ -9932,3 +9932,59 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 5. **Before anchor review:** record this re-check in §12-10; make the user-committed 0.15 fallback consistent wherever G0 or `n_eff` is used; qualify or reconcile the §5-1 replay with decisions 7 and 9; and state the execution, forward-gap, band-feasibility, and P1-sizing conventions before they can affect a result. These are specification and evidence corrections; the 43/56 replay does **not** predict actual IS G0. No files were edited and no market data dated 2024-01-01 or later was opened. [r3 §§3–5, 12](docs/trials/trial_04_preregistration_r3.md:55) · [count script](docs/trials/trial_04_calibration/count_r2.py:125)
 > 
 > VERDICT: FIX-FIRST
+
+## 2026-09-30 — 트라이얼 #4 r3 **최종 확인 패스**(advisor + Codex) → **FIX-FIRST · 앵커 보류**
+
+> 사용자(원문 요지): "r3 accepted with Codex's correction. ... §3-3 conventions confirmed as written ... Run the final confirmation pass now (advisor + Codex) on the revised r3 as a whole — the anchor is irreversible, so it needs both. If MERGE/PROCEED with no substantive change: proceed with the anchor sequence exactly as for #50, today ... If the confirmation pass returns FIX-FIRST on anything substantive, stop and send me the findings instead of anchoring."
+
+- 검토 대상: r3 커밋 a4aa37c · SHA256 4a7f15e45c09dd3fb2f22fe419766c527348710b23b866d1a0cffe648a6dae60 · 23,899 bytes(사용자 수락 기록 · §3-3 확인 반영).
+- 결과: advisor = 실질 MERGE이나 §7-2 [PROPOSED]는 업로드 전 사용자 확인 필요 · Codex = **FIX-FIRST**(실질 3건: §7-2 확인 · P1 무작위화 재현 절차 · P2 지연의 창 경계) → **앵커 없음 · Drive 업로드 없음 · 규칙 스냅샷 캡처 없음**.
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor | §7-2 [PROPOSED] 확인 전 앵커 금지(초안 쪽 누락) | ✅ | 사용자에게 확인 요청 |
+| advisor | 바이트 변경 시 새 해시·한 줄 diff | ✅ | 수정본에서 |
+| advisor | 스냅샷은 main() 전체 순서(권한 실측·TakerMismatch) | ✅ | 앵커 때 |
+| advisor | tc_v3 = §1 표 범위 해시 · 마지막에 | ✅ | Codex 계산값 기록(16~39행 8c6d5306…) · 최종 바이트에서 다시 |
+| Codex 1 | §7-2 확인 | ✅ | 사용자 결정 필요 |
+| Codex 2 | P1 무작위화 절차 미정(sl_dist 원천 선택·후보 시작 추출·겹침 없는 배치·RNG 호출 순서·시도 계산) | ✅ | 트라이얼 #3 §4 절차를 5일 고정으로 옮긴 안을 제안 — 사용자 결정 |
+| Codex 3 | P2 +3 인쇄 지연이 창 끝을 넘을 수 있음 | ✅ | 선택지 제안(공통 적격 집합에서 제외 대 지연 변형만 제외) — 사용자 결정 |
+| Codex 비차단 | 일관성 통과 · tc_v3 선언 문장 · #68은 역사 기록 | ✅ | 수정본에 선언 문장 |
+
+### advisor 원문(verbatim)
+> You're at the last gate before an irreversible step. Here is the advisor half of the confirmation pass.
+> 
+> **Verdict: MERGE on substance, with one item that must be resolved before upload — the live `[PROPOSED]` at §7-2 line 119.** The document's own convention says `[PROPOSED]` means "the user confirms in §12," and trial #3's anchored r3 had every `[PROPOSED]` resolved in §12 first. §7-2's multipliers (2θ = 20 bps → 검정력 부족; < 0.5θ ∧ CI upper < θ → 효과 부재; CI undefined → rule ① not applied) decide the REJECT *label* the trial will carry. They were carried from trial #3 and shown in r1, r2 and r3 without ever being listed as a §12 decision — that's an omission on the drafting side, not a design flaw. Don't anchor a document that still labels a threshold as awaiting confirmation. Send the user one line: "§7-2 thresholds as written (trial #3's values) — confirm or change," note that a reply after ~22:30 UTC pushes the anchor to 2026-10-01 and OOS_end to 2026-09-30T23:59:59.999Z, and hold the upload. If Codex independently returns MERGE, this is still the one thing that stops today's anchor — say so plainly rather than treating it as a footnote.
+> 
+> **When confirmed, the tag change alters the bytes.** Codex reviewed `4a7f15e4…` (23,899 bytes). Replacing `[PROPOSED]` with `(사용자 확인 2026-09-30)` at line 119 produces new final bytes; the anchor row must cite *that* commit, and ops_log should show the one-line diff against the Codex-reviewed hash so a reader can verify nothing else moved.
+> 
+> **Mechanical sequence — the parts your self-checks haven't exercised:**
+> 1. **Rules snapshot before upload** (#48 precedent: "앵커 날 · Drive 업로드 직전"). Read `capture_trial03_rules.py`'s `main()` and mirror its full sequence — `check_permissions` first, `TakerMismatch` check, write-nothing-on-failure — with `OUT_DIR` pointed at `docs/trials/trial_04_rules_snapshot/`. Don't call `capture()` alone and skip the permission gate. Snapshot row (#69) comes before the anchor row (#70), as #48 preceded #50. No key values in any output.
+> 2. **tc_v3 hash:** identify the §1 table span exactly (first `| 항목 |` header row through the last `|` row before the blank line; exclude §1-1), record "lines a–b, N lines, LF, trailing newline included" as #50 did, and compute it from the *final committed* bytes — last, after every edit.
+> 3. **Upload:** `rclone copyto` to the same remote/folder as #50 (`gdrive:BTC_Futures_E2E/trials/`, unchanged); createdTime from `rclone lsjson --metadata` (btime) **and** the Drive connector's `get_file_metadata` (load it via ToolSearch first — it's deferred); download to scratchpad and `cmp` byte-for-byte. OOS_end = latest fully closed UTC day strictly before createdTime, not "anchor day − 1" typed independently.
+> 4. **Anchor row** needs: doc SHA256 + MD5 + size + commit, Drive file ID + parent, both createdTimes, OOS_end, N = 8, α 0.00625, CI 0.3125/99.6875, seeds (20260930, 1|2|3), tc_v3 hash + line range, snapshot pins — through the pre-append gate (9 pipes, no `t[34]_…=` shapes, no pins path, `freeze_versions` still `[1, 2]`).
+> 5. **After upload, r3 is immutable.** No further edits for any reason; a correction is a new file and a new row.
+> 
+> **Non-blocking notes** for §12-13 or ops_log, not the anchored text: the hysteresis row doesn't state that the band (Q0.10, Q0.90) is evaluated on *that* print's own trailing window (the count script did this; say it in the conventions row later, not now); the §5-1 citation of commit `d70f11a` for `count_r2.json` is fine since the bytes are identical, but the 475 fix lives in `f8efa76`.
+> 
+> If Codex returns FIX-FIRST on anything beyond the §7-2 tag, stop and send both verdicts. If it returns MERGE, you still have one message to send before uploading.
+
+### Codex 원문(verbatim)
+> **Final confirmation pass — Codex session `01a0f193-b4ac-7023-af79-88eae35d574b`.** The 23,899-byte r3 file's SHA256 is exactly `4a7f15e45c09dd3fb2f22fe419766c527348710b23b866d1a0cffe648a6dae60`. `HEAD` equals `origin/main`, and the working tree is clean. This pass made no edits or file writes and opened no market data dated on or after 2024-01-01.
+> 
+> ## Substantive findings
+> 
+> 1. **§7-2 still needs user confirmation before anchor.** The numeric classification rule remains marked `[PROPOSED]`, and decisions 1–13 do not confirm it. It changes the reported REJECT classification, even though it does not change the performance gates. The numbers match trial #3's `2θ` and `0.5θ` thresholds, but trial #4 adds the constitution's CI-sign-first branch. Confirm the exact §7-2 text as operative before fixing an irreversible anchor. [r3 §7-2](docs/trials/trial_04_preregistration_r3.md:116), [r3 §12](docs/trials/trial_04_preregistration_r3.md:150), [constitution §4](.claude/skills/quant-bot-constitution/references/research-protocol.md:35), [trial #3 §7-2](docs/trials/trial_03_preregistration.md:145).
+> 
+> 2. **P1's randomization is not yet reproducible from r3.** It fixes the direction, five-day duration, seed family, sizing basis and failure threshold, but does not fix how source `sl_dist` values are selected for each draw, candidate starts are sampled and placed without overlap, RNG calls are ordered, or placement attempts are counted. Those choices can change the P1 p95 gate. The constitution expressly requires precommitted P1 sampling and RNG conventions sufficient for two implementations to produce the same null distribution; trial #3 spells out such a procedure. Specify trial #4's adapted procedure before anchor. [r3 §§3-3, 4](docs/trials/trial_04_preregistration_r3.md:78), [constitution §5](.claude/skills/quant-bot-constitution/references/research-protocol.md:52), [trial #3 §4](docs/trials/trial_03_preregistration.md:89).
+> 
+> 3. **P2's delayed hold can cross a window boundary.** The base event is admitted when its fill plus 7,200 minutes fits in the window, while P2 delays that fill by up to 24 hours and keeps a five-day clock. For a base event near the end, P2 would need values beyond the window, which §1 forbids reading. R3 does not say whether to exclude that event from the common admissible set or how to score the delayed variant. Fix the boundary and common-sample rule before anchor; either choice can change P2 and its rejection gate. [r3 §1, window boundary](docs/trials/trial_04_preregistration_r3.md:35), [r3 §4, P2](docs/trials/trial_04_preregistration_r3.md:83), [trial #3's explicit P2 coverage](docs/trials/trial_03_preregistration.md:35).
+> 
+> ## Non-blocking notes
+> 
+> - **Consistency checks passed.** The operative trigger is Q0.10/Q0.90; the band is [1%, 20%]; G0 and MDE use the restored 0.15 floor; N is 8, α is 0.00625, the central CI is 99.375%, and the seeds use `20260930` with assigned streams. The 0.05 *G0 floor* and Q0.05/Q0.95 appear as withdrawn history. The separate `±0.05%` funding clamp is a different quantity. The S 43/L 56 figures match the hashed count output and are disclosed as simplified pre-IS observations, not certified IS counts. [r3 §§0–5](docs/trials/trial_04_preregistration_r3.md:7), [r3 §12](docs/trials/trial_04_preregistration_r3.md:150), [count output](docs/trials/trial_04_calibration/count_r2.json:314).
+> - **The table has a clear byte span, but its binding should be recorded.** The §1 Markdown table is lines 16–39 inclusive. With LF and the final newline, its SHA256 is `8c6d53067c1d53be7c6a0f83dce69425ca4fd8c6f233ade796eec4eabb4bdd9c`. R3 names `tc_v3` but lacks trial #3's explicit sentence equating the version with the table hash. Record the exact span and digest in the anchor evidence, or add that declaration to the corrected candidate. [r3 §1](docs/trials/trial_04_preregistration_r3.md:15), [trial #3 §1](docs/trials/trial_03_preregistration.md:41), [registry #50](docs/trial_registry.md:58).
+> - **Registry #68 is historical draft evidence.** Its `6523…` document hash and `[PROPOSED]` description predate the current confirmed §3-3 text. An append-only anchor row must identify the current document hash and resolved decisions; #68 should remain intact. [registry #68](docs/trial_registry.md:76), [r3 §3-3](docs/trials/trial_04_preregistration_r3.md:78), [r3 §12-13](docs/trials/trial_04_preregistration_r3.md:163).
+> 
+> VERDICT: FIX-FIRST
