@@ -9497,3 +9497,72 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Codex session/thread id: `01a0f072-00f4-72c0-b8bd-43b5548c8d61`.
 > 
 > VERDICT: MERGE
+
+## 2026-09-30 — 트라이얼 #3 캡처 실패 수정 **after-pass B**(로컬 사슬 · advisor + Codex MERGE) → 동결 v2 푸시
+
+- 사슬: C1′ 26591fa → (A 기록 e243787) → C2′ = **H′ f087611fa2367a4eb0b709e89059cac626cfa909**(#55) → C3′ 439cd25(목록 v2 `5828120e2616b08eecdb00f31a3149f59cad27b2871629d3f9c9b20a188c0ebb` · 지문 v2 `8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af` · #56) · 푸시 전 로컬 require_rows(ref=HEAD) = freeze_version 2.
+- 푸시 뒤: HEAD = origin/main = 439cd25 · H′ ⊂ origin/main · `prepare_t3 --gate-check --evaluator-commit H′` → "gate ok" rc 0 · 305e664 → rc 6("동결 파일 backtest/prepare_t3.py가 판정기 커밋 305e664… 뒤에 바뀌었다") · require_frozen(H′) 통과 · require_rows(H′) = v2 값 · 전체 테스트 **1,536 통과**(푸시된 트리).
+- 이제부터 HALF 2 명령은 모두 `--evaluator-commit f087611fa2367a4eb0b709e89059cac626cfa909`.
+
+### F5″ 동결 diff(문자 그대로)
+> OLD (#53 manifest @956d403): 51 paths
+> NEW (v2 manifest @439cd25): 51 paths
+> NEW (literal-spec ls-tree @H'): 51 paths
+> diff NEW(manifest) vs NEW(ls-tree):
+> (identical)
+> diff OLD vs NEW:
+> (identical)
+> git diff --name-status -M 305e664 H' -- OLD∪NEW:
+> M	backtest/prepare_t3.py
+> M	backtest/t3_provenance.py
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor B1 | 핀 행(#57)에 사용자 두 결정(K8 편집 · rc 8 한 번 재시작) 원문 · ops_log의 "#54 핀 행"은 이제 #57 | ✅ | #57에 원문 · 핀 행 검사(경로 한 행 · 토큰 형식 · 같은 커밋) |
+| advisor B2 | 모든 HALF 2 명령 = H′ · 메모리 갱신 | ✅ | 메모리 갱신 완료 · 위 줄 |
+| advisor B3 | 푸시 트리 전체 테스트 수 · require_frozen(H′) | ✅ | 1,536 · 통과 |
+| advisor B4 | 재캡처 기대값(88 · 2023-10-02~10-31 · 2,378 · 1,183,678 · OI 0/210,528 · 2024-08-12) | ✅ | 단계 5 보고에서 대조 |
+| advisor B5 | #56의 "after-pass B(로컬 · 푸시 전)" 문구 | ✅ | 절차 서술 · 이 기록으로 결과 확정 |
+| advisor B6 | 순서 압축 금지 | ✅ | 이 기록 푸시 뒤에 var/t3 삭제·재캡처 |
+| Codex B | 결함 없음 · 푸시 뒤 rc 0 관찰 필요 | ✅ | 관찰: rc 0 |
+
+### advisor B 원문(verbatim)
+> You're at after-pass B with the chain built correctly; the local `require_rows`, the F5″ literal (51 = 51 = 51, two `M` lines) and the row pre-checks are the right evidence. What your checks don't cover:
+> 
+> **1. The renumbered pins row must carry the user's two decisions — this promise is easy to lose.** Your ops_log entry for "go capture" says the K8 redaction rule and the rc-8 once-per-job restart rule go "into the #54 pins row." #54 is now the fix row; the pins row is #57. Put both decisions verbatim in #57 (with a note that the ops_log's "#54" meant the pins row), and apply the same pre-append gate as #55/#56 plus the pins-specific ones: `strategies/trial03/data_pins.json` appears in exactly one registry row total, every `t3_…=` token in that row is well-formed (`load_pins` runs strict `_tokens` on it), no freeze-family assignment, 9 pipes, and `data_pins.json` + #57 land in the **same commit** (`pins_commit` is the last commit touching the file, and the row must be in that commit's registry).
+> 
+> **2. Every HALF 2 command uses `--evaluator-commit f087611fa2367a4eb0b709e89059cac626cfa909`, not 305e664.** The frozen item 74 says "H"; per #54/#55 that now means H′. Gate-check with 305e664 → rc 6 is your proof. Update `trial03-status` memory with H′ and the v2 fingerprint `8554df6d…` before starting the capture, so a compaction can't reintroduce the old hash.
+> 
+> **3. After the push and before the B log: run the full suite once on the pushed tree and cite the count in the B log.** #53 recorded "1,485 통과"; #56 cites none. The B log is where the number for the v2 freeze must live. Also run `PV.require_frozen(ROOT, H′)` explicitly — it's the one check that couldn't run locally (needs H′ ⊂ origin/main).
+> 
+> **4. Recapture expectations to verify before you declare step 5 clean** (counts and hashes only — none of this is P&L):
+> - `funding_warmup_empty_mark_dropped`: count 88, first 2023-10-02 00:00Z, last 2023-10-31 00:00Z, `shared_bucket.n` 0, `rate_not_ok.n` 0.
+> - If `raw/funding.jsonl` hashes to attempt-1's `41fe9bd8…`, then `pages` must be exactly `[{line 0, 5d16a0c3…, 88}]` — that's the tie the audit was designed for. If the API paginates differently the line hash may differ; count and range must not.
+> - `funding_events` 2,378; bars 1,183,678; OI 0 / 210,528 unusable; 2 missing mark minutes on 2024-08-12 (still non-stop; that day goes in the report's excluded-days list per the user's note).
+> - Then `manifest.json` and `oi_unusable.json` exist for the first time — check `check_pins_against_prepared` before writing #57.
+> 
+> **5. Row #56 asserts "after-pass B(로컬 · 푸시 전)" before B's verdict exists.** It reads as process, not result, and the pushed B log settles it. Don't rewrite it unprompted; if Codex B objects to the wording, a `git reset --hard e243787` costs nothing — nothing of C2′/C3′ is pushed.
+> 
+> **6. Order, unchanged from r5 — don't compress it:** Codex B = MERGE → push C2′/C3′ → `git fetch` → `merge-base --is-ancestor f087611 origin/main` → gate-check rc 0 (H′) / rc 6 (305e664) → item 3 → commit B log (advisor + Codex verbatim, per-point positions, gate outputs, the F5″ block verbatim, suite count) → secret scan → push → confirm that commit ⊂ origin/main → `rm -rf var/t3` → `--stage prepare --evaluator-commit f087611…`. From the moment the prepare stage starts until it exits: no repo writes.
+> 
+> Items 1 and 2 are the ones a second reviewer would catch you on later; 3–4 are what your step-5 report needs to contain.
+
+### Codex B 원문(verbatim)
+> Session `01a0f078-edaf-7f71-80fe-b381a4d8ff32`.
+> 
+> **Findings**
+> 
+> - **BLOCKER:** None.
+> - **MAJOR:** None.
+> - **MINOR:** None. No fixes are required before the planned push.
+> 
+> Rows [#55 and #56](docs/trial_registry.md:63) have the intended numbering, tokens and eight cells each. #55 correctly records that #54 has nine cells under an eight-cell header. #52 and #53, the original manifest, and the conventions file remain byte-identical. The commit chain is contiguous: `26591fa → e243787 → f087611 → 439cd25`; the older H is a strict ancestor of H′.
+> 
+> The [v2 manifest](docs/trials/trial_03_freeze_manifest_v2.json:1) binds to H′. Its 51 paths match both the old manifest's path set and the literal H′ tree selection; every listed SHA256 matches H′ file bytes, and the independently computed fingerprint and manifest hash match row #56. The frozen-file diff from `305e664` to H′ contains exactly `backtest/prepare_t3.py` and `backtest/t3_provenance.py`. I found no change to the frozen strategy, thresholds, windows, or P&L code. `require_rows(ROOT, H′, ref="HEAD")` returned the reported v2 values; its [version and chain checks](backtest/t3_provenance.py:167) accepted both freezes.
+> 
+> **Gate limit before push:** At the current C3′ checkout, `--gate-check --evaluator-commit H′` returned rc 6 because H′ is not yet an ancestor of `origin/main`; that is the intended [pre-push guard](backtest/t3_provenance.py:114), not a freeze defect. The old H also returned rc 6. Passing C3′ itself as the evaluator returned rc 6; after push, the [latest-H equality check](backtest/t3_provenance.py:195) still requires H′. The planned post-push rc 0 for H′ therefore remains to be observed.
+> 
+> Codex session/thread ID: `01a0f078-edaf-7f71-80fe-b381a4d8ff32`.
+> 
+> VERDICT: MERGE
