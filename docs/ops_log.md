@@ -9589,3 +9589,69 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - `--stage evaluate` 04:31:14→04:31:29Z rc 0 · 표준오류 0바이트 · 시도 기록 _records/evaluation_attempt.json(e07da017…) · evaluation/ = report.json(41f789fc…) · verdict.txt(aff0b06d…) · record.json(dcef3e94…).
 - **판정 쌍: `L: REJECT(§7-2: 검정력 부족) · 생존 통과 | S: REJECT(§7-2: 검정력 부족) · 생존 통과`** · 청산 0/257 · 0/233 · v_cross_check 8실행 일치 · V 731일 = 창 731일(제외 날 없음 · 봉 0개 창 날 0).
 - 사본 `docs/trials/trial_03/records/evaluation/`. 트라이얼 #3은 이 판정으로 닫힌다(OOS는 닫힌 채).
+
+## 2026-09-30 — 트라이얼 #3 **(g) 전체 after-pass**(advisor + Codex ACCEPT-RECORD) · 트라이얼 닫힘
+
+- 한 일 vs 계획: HALF 1(동결 v1) → 캡처 rc 3 → #54 수정(before r1~r5 · A ×5 · B) → 동결 v2(H′ f087611) → 재캡처 · 핀 #57 · verify → 8실행 · P1 16조각 · 병합 → 판정기 한 번(04:31:14→04:31:29Z) → #58 · 검토 메모 #59.
+- 편차(기록): (a) S_base를 P1_L 조각 0 앞에(동결 stage_p1 요구) · (b) 2024-08-12 제외 예상이 재캡처로 사라짐(rest_mark 시도 1 e3b0c442… 빈 파일 · 시도 2 c154c1b3…) — REST mark 응답의 재현성 문제로 기록.
+- record.json: 입력 해시 83 · 단계 기록 30 · report 41f789fc… · verdict aff0b06d… · record dcef3e94… · 시도 기록 e07da017….
+- 동결 diff(305e664 → f087611 · 동결 집합): `M backtest/prepare_t3.py` · `M backtest/t3_provenance.py`.
+- 자원: 실행 8개 wall 67.5~74.7 s · RSS 최대 2,152,936 kB · P1 조각 16개 wall 33.3~37.1 s · 준비 RSS 4,088,680 kB · --jobs 2.
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 1 | 두 편차를 편차로 명시 | ✅ | #59 · 보고 |
+| advisor 2 | §7-2 분류는 제안으로(판정 불변) | ✅ | 보고의 제안 · 헌법 정정 목록 |
+| advisor 3 | 실질 발견(총 엣지 ≈ 0 이하 · 무작위 타이밍이 신호보다 나음 · 반전도 음수) | ✅ | 보고 |
+| advisor 4 | 학습 목록·헌법 정정은 제안만 | ✅ | 보고에 제안 |
+| advisor 5 | 기록 위생 | ✅ | 이 절 |
+| advisor 6 | 최종 보고 형태 | ✅ | 보고 |
+| Codex MINOR 1 | §7-2 라벨 읽기 주석 | ✅ | #59 |
+| Codex MINOR 2 | 빈 placebo_rejects 설명 | ✅ | #59 |
+| Codex MINOR 3 | 2024-08-12 차이를 #58 옆에 | ✅ | #59 |
+
+### advisor 원문(verbatim)
+> The trial is closed, everything is pushed, and the after-pass is in flight. This is the record-and-report phase; nothing here changes the verdict. What your checks don't cover, ordered by what a second reviewer would raise:
+> 
+> **1. Two deviations from the anchored order/rules must be stated as deviations in the after-pass log and the report — not as narrative.** (a) S_base ran before P1_L part 0. The user's order was L_base → P1_L part 0 → the rest; the frozen `stage_p1` gate demanded both base records, so the deviation was forced by frozen code. Say exactly that and note it's a runner ordering constraint, not a data or verdict effect. (b) 2024-08-12: the user pre-committed it to the excluded-days list; the recapture made it complete. Report "excluded days: none — V 731 = window days 731" and, right beside it, that the pre-stated exclusion did not occur, with both `rest_mark.jsonl` hashes (attempt 1 `e3b0c442…` empty; attempt 2 `c154c1b3…`). That the REST mark endpoint returned nothing once and two rows later is a source-reproducibility fact worth a line in the report's data section.
+> 
+> **2. Write the classification finding as a proposal, not a defense.** The frozen §7-2 rule classifies by MDE alone (MDE 31.8/31.9 > 2θ = 20 → 검정력 부족). Both net CIs exclude zero on the negative side (L [−49.7, −8.0], S [−42.3, −2.8]), so the data speak to "harmful after cost", which §7-2 has no label for. Don't relitigate the verdict; the string stands. Put it in the report as a pre-registration proposal for trial #4+ (e.g. an "effect present, negative" branch, or ordering CI-sign before MDE) and in the constitution-corrections list. That's the honest reading, and it's what the after-pass's "what to record" question is for.
+> 
+> **3. Substantive findings the report should say plainly (all permitted now):**
+> - Gross edge is already ≈ 0 or negative (L −7.1, S −1.1 bps); costs (~22 bps) then dominate. This is the same shape as trial #2 (gross ≈ cost) and the standing learning "≤ 30-min signals: costs eat the edge" — half the L exits are SL, median hold 42 min (L) / 60 min (S).
+> - P1 p95 (−15.8 / −14.5) beats the arm means (−29.5 / −22.8): random timing with matched exposure did better than the signal. P3 invert did better too (−24.0 / −9.9) but is still negative — the flush signal carries no directional information either way. Say the first sentence in those words; it's the finding.
+> - Per-year: both arms less negative in 2025 than 2024, both still negative. B&H window return +98% with daily Sharpe 0.05; `bh_beats_arm` true for both.
+> - Boundary-exit asymmetry (user's (e) addition): L n=1, 0.16 USDT, 1.62 bps of E_ref; S n=0, symmetric intrabar 1 — negligible, as pre-assessed.
+> - G0 passed (n 257/233 ≥ 30) — this is the first trial with a healthy trade count; the REJECT is not sample-size-limited in the §7-2 sense despite the label (point 2).
+> 
+> **4. Registry beyond #58.** Nothing more is required by the rules; one thing is worth a row if the user agrees: the learnings list (constitution §2 "이미 기각된 것") should gain the T-FLUSH line, and the constitution corrections now number two (SKILL.md line 77 liquidation formula; §7-2 classification proposal). Propose, don't append — the user sequences these.
+> 
+> **5. Log hygiene before you reply.** The (g) after-pass log (advisor + Codex verbatim, per-point positions) goes in one commit + push before the final reply, per the standing rule. Include the `python -m tests.fixtures.t3_eval_fixture`-style proof isn't needed — but do include: `git diff --name-status 305e664 f087611 -- <freeze set>` output verbatim once more, the record.json fields (83 input hashes, 30 stage records), the four evaluation hashes, and the wall/RSS table. The pushed report bytes are `41f789fc…`; quote that hash next to every number you cite so the reader can tie the report to the file.
+> 
+> **6. Final reply shape.** English, sections: verdict pair verbatim → what it means (point 3, three sentences) → per-arm table (gates, n, mean gross/net + CI, PSR, SR̂/SR*, MDE/class, P1 p95, P2/P3, exits, survival) → data & provenance (H′, fingerprint v2, pins commit, receipt, 8+16+2 records rc 0, RSS, jobs) → deviations (point 1) → after-pass summary with Codex verdict → proposals (point 2, 4; constitution corrections) → memory updated. Then stop; trial #3 is closed and the user decides what's next.
+> 
+> None of this blocks anything — the verdict is in and immutable. Points 1–2 are the ones that, if missing, a reviewer would call an omission.
+
+### Codex 원문(verbatim)
+> Codex session/thread ID: `01a0f096-771f-7ad1-ae4d-9111192b3b50`. Read-only review at clean `origin/main` `ab2d371`; I did not run a stage, evaluator, or access `var/`.
+> 
+> ## Findings
+> 
+> **BLOCKER: None. MAJOR: None.** The recorded fix followed the authorized #54 decision and v2 freeze process. The diff between the two freeze commits changes only `prepare_t3.py` and `t3_provenance.py`; #57 pins the recapture, verify succeeded, and the evaluation record binds the stage inputs and report hashes. My read-only hash check found no mismatch among the 30 copied stage records or the report and verdict. [Registry #54–#58](docs/trial_registry.md:62), [record.json](docs/trials/trial_03/records/evaluation/record.json:1)
+> 
+> **MINOR — The §7-2 label needs an explicit reading note.** Both net CIs lie below zero: L `[−49.72, −8.02]` bps and S `[−42.25, −2.78]` bps. "Low power" is nevertheless the *frozen classification*, because MDE is 31.77 and 31.89 bps, both above `2θ = 20`; it does not mean the observed results lean positive. The IS(3) rejection and survival pass are correctly represented. [Preregistration §7-2](docs/trials/trial_03_preregistration.md:145), [verdict code](backtest/verdict_t3.py:54), [L report](docs/trials/trial_03/records/evaluation/report.json:62), [S report](docs/trials/trial_03/records/evaluation/report.json:216)
+> 
+> **MINOR — Empty `placebo_rejects` could be misread.** It is `{}` because both arms stopped at IS(3), before the IS(5) placebo decision. The report does show the values. Conditional arithmetic would reject P1 and P3 for each arm; P2 would pass. Those are explanatory comparisons, **not additional official verdicts**. [Priority code](backtest/verdict_t3.py:139), [L values](docs/trials/trial_03/records/evaluation/report.json:4), [S values](docs/trials/trial_03/records/evaluation/report.json:159)
+> 
+> **MINOR — Make the capture difference visible beside #58.** Attempt 1 had two missing mark minutes on 2024-08-12; the authorized recapture obtained both from REST, leaving zero missing minutes and V at all 731 window days. The funding response stayed byte identical. This is recorded in the ops log and audits, but #58 does not explain why the earlier instruction to list that day as excluded no longer applies. [Attempt 1 audit](docs/trials/trial_03/records/prepare_attempt1/source_audit.json:19), [recapture audit](docs/trials/trial_03/records/prepare/source_audit.json:19), [ops log](docs/ops_log.md:9570), [report](docs/trials/trial_03/records/evaluation/report.json:330)
+> 
+> The S_base insertion was a documented dependency accommodation: frozen `stage_p1` requires **both** base records, and S_base finished before the first P1 part. The accepted resource rule permitted `--jobs 2` with less than 11 GB free. Docs commits and pushes are prescribed *between* stages; the recorded child times and commit times show no overlap. Deletion and recapture followed the explicit #54 authorization and pushed B review. I find no HALF 2 rule breach in those actions. [Stage dependency](backtest/t3_stages.py:251), [user resource rule](docs/ops_log.md:9101), [step 6 record](docs/ops_log.md:9579), [deletion authorization](docs/ops_log.md:9135), [operating rule](docs/trials/trial_03_conventions.md:97)
+> 
+> ## Recommended records
+> 
+> Append a review note after #58, without changing the closed verdict: identify this session; state that no rerun occurred; explain the S_base ordering, REST mark change and zero excluded days; give both negative net CIs alongside the rule based MDE classification; and label the P1/P3 comparisons as conditional because IS(5) was not reached. Keep #58's report and record hashes as the authoritative result. [Registry #58](docs/trial_registry.md:66), [single attempt rule](docs/trials/trial_03_conventions.md:94)
+> 
+> Nothing found invalidates the published `L: REJECT | S: REJECT` verdict. This review verifies the committed records and hashes, not an independent P&L recomputation from `var/`.
+> 
+> VERDICT: ACCEPT-RECORD
