@@ -311,3 +311,23 @@ def test_prose_freeze_mention_does_not_expose_other_malformed_tokens():
     assert sorted(PV.freeze_versions(base + "| p | t3_freeze v2 뒤 핀 · t3_prepared/bars_1m.parquet=zz · t3_note=x |")) == [1]
     with pytest.raises(PV.ProvenanceError, match="형식"):
         PV.freeze_versions(base + "| q | 인용 t3_freeze_H_v2=, |")
+
+
+@pytest.mark.parametrize("dup", [
+    f"| d | t3_freeze_H_v2 ={'c' * 40} |", f"| d | t3_freeze_H_v2 = {'c' * 40} |", f"| d | T3_FREEZE_H_V2={'c' * 40} |",
+    f"| d | `t3_freeze_H_v2`={'c' * 40} |", f"| d | t3_freeze_H_v2 | ={'c' * 40} |", f"| d | t3_freeze_H_v2:={'c' * 40} |",
+    f"| d | t3_freeze_auth_v2 = {H40} |", f"| d | T3_Fingerprint_v2={H64} |",
+])
+def test_near_miss_freeze_assignments_are_refused_not_skipped(dup):
+    """Codex A 재확인 MAJOR: 둘째 v2·승인 행이 모양만 비틀려 조용히 건너뛰어지지 않는다."""
+    reg = (f"| a | t3_freeze_H={H40} · t3_freeze_manifest={H64} · t3_fingerprint={H64} |\n"
+           f"| b | t3_freeze_H_v2={'c' * 40} · t3_freeze_manifest_v2={H64} · t3_fingerprint_v2={H64} |\n"
+           f"| c | t3_freeze_auth_v2={H40} |\n{dup}")
+    with pytest.raises(PV.ProvenanceError, match="정규 토큰"):
+        PV.freeze_versions(reg)
+
+
+def test_prose_mentions_without_assignment_still_pass():
+    reg = (f"| a | t3_freeze_H={H40} · t3_freeze_manifest={H64} · t3_fingerprint={H64} |\n"
+           "| p | 키 이름 `t3_freeze_H_v2` · T3_FINGERPRINT 설명 · t3_freeze 절차 (등호 없는 산문) |")
+    assert sorted(PV.freeze_versions(reg)) == [1]

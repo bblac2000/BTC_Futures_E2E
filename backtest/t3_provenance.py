@@ -260,7 +260,14 @@ def _freeze_tokens(line: str) -> dict[str, str]:
         if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", v):
             raise ProvenanceError(f"행의 {k} 값 형식이 틀렸다")
         out[k] = v
+    near = _NEAR_FREEZE.findall(line)
+    if len(near) != len(out):                                      # 동결 키 모양의 할당은 모두 정규 토큰이어야 한다(Codex A 재확인 MAJOR)
+        raise ProvenanceError(f"동결 키 모양의 할당이 정규 토큰이 아니다(공백·대소문자·칸 나눔 등): {near}")
     return out
+
+
+# 대소문자 무시 · 키 뒤 비단어 문자(공백·백틱·칸 경계·구두점) 최대 8개 뒤 "=" — 산문 언급(등호 없음)은 걸리지 않는다
+_NEAR_FREEZE = re.compile(r"(?i)t3_(?:freeze|fingerprint)[\w./-]*[^\w=\n]{0,8}=")
 
 
 def _check_version(repo: Path, ref: str, v: dict[str, Any], k: int) -> None:
