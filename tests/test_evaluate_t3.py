@@ -147,11 +147,16 @@ def test_boundary_exit_report_counts_and_sums_funding():
                "exit_ref": "60000", "sl": "59700"},
               {"entry_ms": b16 - 300 * 60_000, "exit_ms": b16 - 60 * 60_000, "exit_reason": "time_exit", "direction": "LONG",
                "net_bps": "-21", "exit_ref": "59600", "sl": "59700"}]
-    ledger = [{"exit_ms": b16, "funding": D("0.12"), "grid": {"0.5": D(-9), "1.0": D(-20), "1.5": D(-31)}},
-              {"exit_ms": b16 - 3_600_000, "funding": D("0.5"), "grid": {"0.5": D(-10), "1.0": D(-21), "1.5": D(-32)}}]
+    trades.append({"entry_ms": b16 - 30 * 60_000, "exit_ms": b16 + 59_999, "exit_reason": "sl", "direction": "LONG", "net_bps": "-30",
+                   "exit_ref": "59700", "sl": "59700"})
+    g = {"0.5": D(-9), "1.0": D(-20), "1.5": D(-31)}
+    ledger = [{"exit_ms": b16, "funding": D("0.12"), "grid": g},
+              {"exit_ms": b16 - 3_600_000, "funding": D("0.5"), "grid": g},
+              {"exit_ms": b16 + 59_999, "funding": D("0.3"), "grid": g}]                # 경계 분 봉 안 SL — 대칭(P1도 냄)
     rep = E.trade_report(trades, ledger, D(1000))
     b = rep["exit_at_funding_boundary"]
     assert b["n"] == 1 and D(b["funding_paid_usdt"]) == D("0.12") and D(b["funding_paid_bps_of_e_ref"]) == D("1.2")
+    assert b["symmetric_intrabar_n"] == 1
     assert rep["x9_time_exit_open_past_sl"] == 1
 
 
@@ -182,7 +187,7 @@ def repo(tmp_path) -> tuple[Path, str]:
     _git(r, "init", "-q", "-b", "main")
     _git(r, "config", "user.email", "t@t")
     _git(r, "config", "user.name", "t")
-    for f in E.EVALUATOR_FILES:
+    for f in sorted(E.freeze_set(ROOT)):
         (r / f).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / f, r / f)
     _git(r, "add", "-A")
@@ -227,3 +232,66 @@ def test_dirty_tree_refused_and_nothing_written(built, tmp_path, repo):
     with pytest.raises(E.Refusal, match="깨끗"):
         _eval(base, r, commit, built)
     assert not (base / "evaluation").exists()
+
+
+def test_zero_bar_window_day_is_not_a_refusal(tmp_path):
+    """봉이 0개인 창 날은 V에서 빠질 뿐 거부 사유가 아니다(advisor (f) after #1)."""
+    drop = set(range(2 * 1440, 3 * 1440))                               # 날 2 전체(창 안)
+    scs = {"L": S.Scenario(arm="L", drop=drop), "S": S.Scenario(arm="S", drop=drop)}
+    bars, kd = F.build(tmp_path, scs)
+    _, report = F.compute(tmp_path, bars, kd)
+    assert report["zero_bar_window_days"] == 1 and report["v_days"] == 1 and report["v_cross_check"]["match"]
+
+
+def test_report_is_self_describing(built):
+    _, report = F.compute(*built)
+    c = report["constants"]
+    assert c["n_trials"] == 6 and c["ci_quantiles"] == [1 / 240, 1 - 1 / 240] and c["bootstrap_resamples"] == 10_000
+    assert all("bh_beats_arm" in report["arms"][a] for a in ("L", "S"))
+
+
+def test_later_pushed_anchor_change_is_refused(built, tmp_path, repo):
+    """동결 집합은 판정기 파일만이 아니다 — 앵커 문턱을 바꾼 뒤 푸시해도 거부(Codex (f) after #1)."""
+    r, commit = repo
+    a = r / "strategies" / "trial03" / "anchor.py"
+    a.write_text(a.read_text().replace("P1_FAIL_MAX = 10", "P1_FAIL_MAX = 11"))
+    _git(r, "commit", "-qam", "loosen")
+    _git(r, "push", "-q", "origin", "main")
+    with pytest.raises(E.Refusal, match="anchor.py"):
+        _eval(fresh(built, tmp_path), r, commit, built)
+
+
+def test_entry_moved_between_valid_v_days_is_refused(built, tmp_path):
+    base = fresh(built, tmp_path)
+    p = O.run_dir(base, "L", "base") / "trades_t3.jsonl"
+    t = json.loads(p.read_text().splitlines()[0])
+    t["entry_ms"] = int(t["entry_ms"]) + S.DAY                             # 날 1 → 날 2(둘 다 V)
+    p.write_text(json.dumps(t) + "\n")
+    with pytest.raises(E.Refusal, match="엔진 기록"):
+        F.compute(base, built[1], built[2])
+
+
+def test_rules_sha_and_p1_manifest_and_nested_schema_tampers_refused(built, tmp_path):
+    base = fresh(built, tmp_path)
+    _edit_summary(base, "L", "base", rules_sha256={"exchangeInfo": "0" * 64})
+    with pytest.raises(E.Refusal, match="#48"):
+        F.compute(base, built[1], built[2])
+    base2 = tmp_path / "b2"
+    shutil.copytree(built[0], base2)
+    p = O.p1_merged_dir(base2, "S") / "p1_summary.json"
+    s = json.loads(p.read_text())
+    s["parts"][0]["sha256"] = "0" * 64
+    p.write_text(json.dumps(s))
+    with pytest.raises(E.Refusal, match="조각 목록"):
+        F.compute(base2, built[1], built[2])
+    base3 = tmp_path / "b3"
+    shutil.copytree(built[0], base3)
+    _edit_summary(base3, "S", "base", funnel={"no_tail": -1})
+    with pytest.raises(O.ContractError, match="중첩"):
+        F.compute(base3, built[1], built[2])
+
+
+def test_exit_reason_shares(built):
+    _, report = F.compute(*built)
+    t = report["arms"]["L"]["trades"]
+    assert t["exit_reasons"] == {"time_exit": {"n": 1, "share": 1.0}} and t["n_trades"] == 1

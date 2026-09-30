@@ -8583,3 +8583,75 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > 
 > Codex session ID: 01a0ef8a-b173-7c63-b96b-ec364ea1a0e5
 > Resume in Codex: codex resume 01a0ef8a-b173-7c63-b96b-ec364ea1a0e5
+
+## 2026-09-30 — 트라이얼 #3 (f) 판정기 **after-pass**(advisor + Codex task-munc0vr0-0wztfu **FIX-FIRST**) → 수정
+| 출처 | # | 입장 | 반영 |
+|---|---|---|---|
+| advisor | 1 봉 0개 창 날 → 거부 위험 | ✅ | 분위수 유효 정의역 = 봉 ≥ 1인 창 날 · zero_bar_window_days 보고 · 테스트(날 전체 제거 → 거부 없음) |
+| advisor | 2 경계 청산 개수가 비대칭을 못 잼 | ✅ | 봉 시가 청산만(exit_ms % 60,000 = 0) 합산 · 봉 안 청산은 symmetric_intrabar_n · 테스트 |
+| advisor | 3 보고 줄 | ✅ | v_cross_check · bh_beats_arm · constants |
+| advisor | 4 (g)가 채울 것 | ✅ | 항목 58 · 보고 |
+| advisor | 5 예상 질문 | ✅ | draws_total 정적 검사(tests/ 밖 호출 금지) · evaluate_with_fixture는 _evaluate 공유 |
+| advisor | 6 보고 틀 | ✅ | 보고 |
+| Codex | 1 동결 범위(BLOCKER) | ✅ | FREEZE_FILES + FREEZE_GLOBS(판정을 바꿀 수 있는 코드 전부 · 파일 집합·바이트) · 푸시된 앵커 변경 거부 테스트 |
+| Codex | 2 트레이드↔이벤트 시각(BLOCKER) | ✅ | trade_id 순서 · entry_ms = fill_open · exit_ms = 청산 ts · entry_mark · 레버리지 · 사유 · 방향 · entry = decided+1 · V 안 이동 테스트 |
+| Codex | 3 계약 필드 미검증 | ✅ | rules_sha256 = #48 · P1 조각 목록·해시 · 중첩 스키마 · 변조 테스트 셋 |
+| Codex | 4 청산 사유 비율 | ✅ | 개수 + 비율 + n_trades |
+- 보고서 골든 재생성(보고 필드 추가) · 공유 코드: (e)의 placebo_exec 수정뿐(dc23273 대비).
+
+### 요약 원문
+> # Trial #3 (f) AFTER-PASS — built vs plan r3
+> Commits b4d1d8d (verdict_t3 + 63 tests; strategy ledger fields; harness.assert_entries_in_v; e2e golden digest regenerated — values unchanged)
+> and e69587a (backtest/t3_outputs.py frozen contract; backtest/evaluate_t3.py; tests/test_evaluate_t3.py 15; tests/fixtures/t3_eval_fixture.py;
+> golden_eval_trial03.json; conventions section G items 51–62). Shared diff since dc23273: only the (e) placebo_exec fix (regressed then).
+> Evaluator: _compute(base, bars, kline_daily, p, window, liq_fee, p1_draws): inventory (t3_outputs.check_run_inventory + read_run per
+> arm×variant) → recompute_v (complete days + defined-r30 counts) vs all 8 summaries + tf_v1 SHA + entry days ∈ V → ledger_check on every
+> run (34-digit wallet identities incl. liquidation, VWAP/pnl/exit_ref/commission, gross/net via trade_return at 28 digits, cost grid, ×1.0 ==
+> net, adverse entry slippage) → arm_stats (bootstrap streams per item 40) → P1 parts re-merged == merged files, n_source/computable checks,
+> p95 → ArmInputs → verdict_is (both arms; G-B shared SR*) → report (item 59). compute() pins TF_V1/window/1000 draws; compute_with_fixture and
+> evaluate_with_fixture are tests/-only (runtime guard). evaluate(): refuses if evaluation/ exists, commit not ancestor of HEAD and
+> origin/main, evaluator files changed since the commit, dirty tree; errors → Refusal; atomic write (report.json, verdict.txt, record.json).
+> Synthetic e2e: "L: REJECT(§7-2: 검정력 부족) · 생존 통과 | S: REJECT(§7-2: 검정력 부족) · 생존 통과"; report golden + two-process hash.
+> Verdict core tests reach every §7 IS row for both arms with the other arm at {0 trades, defined SR̂}, all §7-2 classes, G-B coupling,
+> OOS/forward incl. ACCEPT ± suffix. Suite 1446 passed; ruff; pyright 0.
+> Known open for (g): pinned loaders (prepare_t3.load_prepared_pinned + kline daily), fingerprint/data pins/verify receipt, stage runner
+> writing via t3_outputs, persisting strategy event logs on mid-run failure, CLI main.
+> Questions: objections; does the evaluator match r3 §3/§4/§7 and plan r3; conventions 51–62 accurate?
+
+### advisor 원문(verbatim)
+> This is the advisor half of the (f) after-pass. The evaluator matches r3 §3/§4/§7 and plan r3: per-arm verdicts with the shared SR*, the §7 priority order, strings per line 87, ledger identities at the two pinned precisions, frozen input contract, run-once with commit checks. The synthetic end-to-end verdict is the right one for a one-trade arm. Items your checks didn't cover, blocking first.
+> 
+> **1. MAJOR — `recompute_v` can refuse on real data for a condition known at prepare time.** The strategy records `q_valid` only for window days on which it saw at least one bar (the day-change branch fires on a bar). `recompute_v` builds `q_valid` for *every* window day. A window day with zero mark bars — possible in principle after a REST-fill gap — yields a key the run never recorded, and the equality check refuses after all eight runs have completed. Same class as the before-pass item 1. Fix: define the recomputed `q_valid` domain as window days with ≥ 1 bar (mirror the strategy), and add `zero_bar_window_days` to the report. Add a synthetic test that drops an entire window day and confirms the evaluator does *not* refuse on that alone (V simply excludes the day). Pin it in item 56.
+> 
+> **2. MAJOR — the boundary-exit count doesn't measure what item 47 says.** `trade_report` counts every trade whose exit minute is a 00/08/16 bucket. But the asymmetry exists only for exits *at the bar open* (time_exit, open-gap liquidation); an intrabar SL or liquidation at a boundary minute is charged on both sides (P1's `h = k+1` covers that bucket). Split the count: asymmetric = `exit_ms % 60_000 == 0` (exit at open) and only those trades' funding is summed for the "size of the asymmetry" figure; the rest reported separately as symmetric boundary exits. Update `test_boundary_exit_report_counts_and_sums_funding` with an SL-at-boundary row that must land in the symmetric bucket. Item 59 wording follows.
+> 
+> **3. MINOR — three report lines the user asked for implicitly:**
+> - An explicit V cross-check result (`"v_cross_check": {"runs_compared": 8, "match": true}`) — today it's implicit in "no refusal."
+> - `bh_beats_arm: bool | None` per arm (arm daily Sharpe < B&H daily Sharpe, strict) — this is the pre-committed input `verdict_forward` will need; compute it once at IS and record it.
+> - The pinned percentiles as numbers (`ci_quantiles: [1/240, 1 − 1/240]`, `alpha`, `n_trials: 6`) so the report is self-describing.
+> 
+> **4. State plainly what (g) still owes, so nobody reads `evaluate()` as complete.** `require_frozen` checks five evaluator files; trial #2's G1 checked the whole execution fingerprint. Until (g) lands: the fingerprint set (strategies/trial03/*, p1_t3, prepare_t3, t3_outputs, evaluate_t3, verdict_t3, engine_replay, placebo_exec, p1_core, paper/, sizing/, exchange/, pyproject, uv.lock), data pins, verify receipt, pinned loaders for bars/kline daily, and `record.json` carrying prepared-input hashes are absent. Put that list in item 58 as "(g)가 채운다" and in the report's carried-forward section.
+> 
+> **5. Two things Codex may raise — have the answer ready:**
+> - `write_p1_merged(draws_total=…)` is a writer-side override. It's harmless because the evaluator re-merges with its own `draws_total` and refuses on mismatch — say that, and add the assertion that the (g) CLI never passes it (extend the repo-wide static scan to the keyword).
+> - `evaluate_with_fixture` exists for the run-once tests. It shares `_evaluate` with production, so the one-shot and commit logic is the code under test, not a copy. Say that too.
+> 
+> **6. Report shape.** Lead with the anchored-wording flags quoted (line 87 string, no INCONCLUSIVE — §7-2's three classes, ACCEPT only at forward via line 143's exact suffix, "IS PASS · 생존 통과"). Then: every §7 IS row and §7-2 class is reached in tests for both arms with the other arm at 0 trades and at a defined SR̂; OOS/forward rows including ACCEPT ± suffix. Then item 1 as the one thing they don't know. Then the ledger identities in one paragraph: what is checked at 34 digits, what is re-derived at 28, and that a one-digit perturbation refuses. Then the section G diff (`git diff 6950070 HEAD -- docs/trials/trial_03_conventions.md`), and that the row is still not appended — it lands with the final SHA in (g) before the evaluator push.
+> 
+> **Sequence:** Codex lands → log both verbatim with positions → items 1–3 (+ any Codex fixes) → full suite → commit → push → memory (`(f) done, waiting before (g); conventions 51–62 pending user review`) → report → stop before (g). No shared-code change is expected from these fixes; confirm with the usual diff before the report.
+
+### Codex 원문(verbatim · task-munc0vr0-0wztfu)
+> 1. **BLOCKER — the evaluator freeze does not cover code that changes the verdict.** [evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:43) checks only five files, while its calculations also depend on `anchor.py`, `returns.py`, `p1_t3.py`, `harness.py`, and their imports. A clean, pushed change to an anchor threshold or return calculation after the evaluator commit would pass [require_frozen](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:311). **Fix:** pin and compare a manifest of every decision-dependent code file against the committed evaluator version; add a test that changes `anchor.py` in a later pushed commit and expects refusal. This closes a code-freeze gap in plan r3/item 58, separate from the data pins assigned to (g).
+> 
+> 2. **BLOCKER — trade timestamps are not tied to their execution events.** [ledger_check](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:101) pairs records by list position but never checks `trade.entry_ms == filled.fill_open` or `trade.exit_ms == exit.ts_ms`. Moving an entry to another valid V day passes the current [V membership check](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:233) and changes the day-block bootstrap and daily Sharpe without changing a fill or wallet. **Fix:** verify those timestamps, entry mark/reference, leverage, exit reason, and sequential trade IDs against the paired events before computing statistics. Test a move between two valid V days, as well as a move outside V.
+> 
+> 3. **MAJOR — committed output-contract fields are accepted without verification.** The evaluator checks `tf_v1_sha256` but never checks each run’s `rules_sha256` against the anchored snapshot; it also ignores `p1_summary.parts`, including every recorded part SHA256 ([evaluate_t3.py](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:228), [t3_outputs.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_outputs.py:117)). The readers check top-level keys, not nested value schemas. **Fix:** validate the anchored rules hashes, compare the P1 part manifest and hashes with the files read, and validate nested types and ranges. Add one tamper test for each.
+> 
+> 4. **MINOR — the report omits exit-reason proportions required by r3 §7-3.** [trade_report](/home/cms/project/BTC_Futures_E2E/backtest/evaluate_t3.py:199) reports counts only. **Fix:** report each reason’s count and fraction of filled trades, with a defined zero-trade representation.
+> 
+> The per-arm §7 priority, shared G-B SR*, P1 comparison, V recomputation, and precision split otherwise match plan r3 and conventions 51–62. Conventions 58 and 57 currently overstate the freeze and input validation; update them with the fixes. I could not run the two test files: `pytest` is unavailable, and `uv` could not create its cache lock in this read-only sandbox.
+> 
+> **VERDICT: FIX-FIRST.**
+> 
+> Codex session ID: 01a0ef96-4a43-79f2-b2d3-4d3c35a26424
+> Resume in Codex: codex resume 01a0ef96-4a43-79f2-b2d3-4d3c35a26424

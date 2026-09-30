@@ -66,10 +66,33 @@ def read_run(d: Path, arm: str, variant: str) -> tuple[list[dict[str, Any]], lis
     summary = json.loads((d / "summary.json").read_text())
     if set(summary) != SUMMARY_KEYS or summary["arm"] != arm or summary["variant"] != variant:
         raise ContractError(f"{d}: summary 스키마·arm·variant 불일치")
+    _check_summary_types(d, summary)
     trades = read_jsonl(d / "trades_t3.jsonl")
     if len(trades) != summary["n_trades"]:
         raise ContractError(f"{d}: 트레이드 {len(trades)} ≠ summary {summary['n_trades']}")
     return trades, read_jsonl(d / "events.jsonl"), summary
+
+
+def _is_int(x: Any) -> bool:
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def _check_summary_types(d: Path, s: dict[str, Any]) -> None:
+    """중첩 스키마(Codex (f) after #3): 깔때기·부사유·진입 = {str: int ≥ 0} · q_valid = {정수 문자열: bool} · v_days = 오름차순 정수 ·
+    window_bars·n_trades = 정수 ≥ 0 · 해시 = 64자리 소문자 16진."""
+    def counts(x: Any) -> bool:
+        return isinstance(x, dict) and all(isinstance(k, str) and _is_int(v) and v >= 0 for k, v in x.items())
+
+    def hexsha(x: Any) -> bool:
+        return isinstance(x, str) and len(x) == 64 and all(c in "0123456789abcdef" for c in x)
+
+    ok = (counts(s["funnel"]) and counts(s["sub"]) and counts(s["entry"]) and _is_int(s["window_bars"]) and s["window_bars"] >= 0
+          and _is_int(s["n_trades"]) and s["n_trades"] >= 0
+          and isinstance(s["q_valid"], dict) and all(k.lstrip("-").isdigit() and isinstance(v, bool) for k, v in s["q_valid"].items())
+          and isinstance(s["v_days"], list) and all(_is_int(x) for x in s["v_days"]) and s["v_days"] == sorted(set(s["v_days"]))
+          and hexsha(s["tf_v1_sha256"]) and isinstance(s["rules_sha256"], dict) and all(hexsha(v) for v in s["rules_sha256"].values()))
+    if not ok:
+        raise ContractError(f"{d}: summary 중첩 스키마 불일치")
 
 
 def _part_dict(p: P1.P1Part) -> dict[str, Any]:

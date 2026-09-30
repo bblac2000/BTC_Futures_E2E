@@ -44,6 +44,11 @@ ROOT = Path(__file__).resolve().parent.parent
 DAY = A.DAY_MS
 EVALUATOR_FILES = ("backtest/evaluate_t3.py", "backtest/verdict_t3.py", "backtest/t3_outputs.py", "backtest/stats.py",
                    "backtest/stats_t2.py")
+#  판정을 바꿀 수 있는 코드 전부(Codex (f) after #1) — 판정기 커밋과 지금이 바이트 동일해야 한다(파일 집합도 같아야 한다)
+FREEZE_FILES = EVALUATOR_FILES + tuple(f"backtest/{n}.py" for n in (
+    "p1_t3", "p1_core", "placebo_exec", "engine_replay", "returns", "data", "replay", "prepare_t3", "prepare_t2")) + (
+    "pyproject.toml", "uv.lock")
+FREEZE_GLOBS = ("strategies/trial03/*.py", "paper/*.py", "sizing/*.py", "exchange/*.py")
 BPS = Decimal(10_000)
 
 
@@ -90,8 +95,10 @@ def recompute_v(bars: Sequence[Bar1m], window: tuple[int, int], p: TfParams) -> 
         if closes[b.open_ms] and closes.get(b.open_ms - p.r30_ms, False):
             per_day[b.open_ms // DAY] += 1
     full = complete_days(bars)
+    #  정의역 = 봉이 1개 이상 있는 창 날(전략은 날의 첫 봉에서 분위수를 기록한다 — 봉 0개인 날은 기록이 없다 · advisor (f) after #1)
+    seen = sorted({b.open_ms // DAY for b in bars if window[0] <= b.open_ms <= window[1]})
     q_valid: dict[int, bool] = {}
-    for d in range(window[0] // DAY, (window[1] + 1 - MINUTE_MS) // DAY + 1):
+    for d in seen:
         q_valid[d] = sum(per_day[x] for x in range(d - p.w_ref_days, d)) >= p.quantile_min_defined
     v = {d for d, ok in q_valid.items() if ok and d in full}
     return v, q_valid
@@ -105,7 +112,11 @@ def ledger_check(trades: Sequence[dict[str, Any]], events: Sequence[dict[str, An
     if not (len(filled) == len(exits) == len(trades)):
         raise Refusal(f"체결·청산 기록 {len(filled)}/{len(exits)} ≠ 트레이드 {len(trades)}")
     out = []
-    for t, fi, ex in zip(trades, filled, exits, strict=True):
+    for k, (t, fi, ex) in enumerate(zip(trades, filled, exits, strict=True)):
+        if int(t["trade_id"]) != k or int(t["entry_ms"]) != int(fi["fill_open"]) or int(t["exit_ms"]) != int(ex["ts_ms"]) \
+                or t["entry_mark"] != fi["entry_ref"] or int(t["leverage"]) != int(fi["leverage"]) or t["exit_reason"] != ex["reason"] \
+                or t["direction"] != t["t3"]["intent_dir"] or int(t["entry_ms"]) != int(t["t3"]["decided_ms"]) + 1:
+            raise Refusal(f"트레이드 {t.get('trade_id')}: 시각·기준가·레버리지·사유·방향이 엔진 기록과 다르다(Codex (f) after #2)")
         d = Direction(t["direction"])
         sign = Decimal(1) if d is Direction.LONG else Decimal(-1)
         qty, fill_in, w0, w1 = Decimal(t["qty"]), Decimal(t["entry_fill"]), Decimal(t["wallet_before"]), Decimal(t["wallet_after"])
@@ -193,14 +204,18 @@ def trade_report(trades: Sequence[dict[str, Any]], ledger: Sequence[dict[str, An
     x9 = sum(1 for t in trades if t["exit_reason"] == "time_exit"
              and ((Decimal(t["exit_ref"]) <= Decimal(t["sl"])) if t["direction"] == "LONG" else (Decimal(t["exit_ref"]) >= Decimal(t["sl"]))))
     bnd = [lg for lg in ledger if (lg["exit_ms"] - lg["exit_ms"] % MINUTE_MS) % DAY in GRID]
-    fund_sum = sum((lg["funding"] for lg in bnd), Decimal(0))
+    asym = [lg for lg in bnd if lg["exit_ms"] % MINUTE_MS == 0]       # 봉 시가 청산(time_exit·시가 갭 청산) — 항목 47 비대칭
+    sym = [lg for lg in bnd if lg["exit_ms"] % MINUTE_MS != 0]        # 봉 안 청산 — P1도 같은 경계를 낸다(h = k+1)
+    fund_sum = sum((lg["funding"] for lg in asym), Decimal(0))
     grid = {k: float(np.mean([float(lg["grid"][k]) for lg in ledger])) if ledger else None for k in ("0.5", "1.0", "1.5")}
     return {"holding_min_quantiles": [float(q) for q in np.quantile(hold, [0.1, 0.25, 0.5, 0.75, 0.9])] if hold else None,
-            "exit_reasons": dict(sorted(Counter(t["exit_reason"] for t in trades).items())),
+            "exit_reasons": {r: {"n": c, "share": c / len(trades)} for r, c in sorted(Counter(t["exit_reason"] for t in trades).items())},
+            "n_trades": len(trades),
             "per_year": {y: {"n": len(v), "mean_net_bps": float(np.mean(v))} for y, v in sorted(years.items())},
             "x9_time_exit_open_past_sl": x9,
-            "exit_at_funding_boundary": {"n": len(bnd), "funding_paid_usdt": str(fund_sum),
-                                         "funding_paid_bps_of_e_ref": str(fund_sum / e_ref * BPS)},
+            "exit_at_funding_boundary": {"n": len(asym), "funding_paid_usdt": str(fund_sum),
+                                         "funding_paid_bps_of_e_ref": str(fund_sum / e_ref * BPS),
+                                         "symmetric_intrabar_n": len(sym)},
             "cost_grid_mean_net_bps": grid}
 
 
@@ -209,6 +224,11 @@ def bh_series(daily: Sequence[dict[str, Any]], first_day: int, last_day: int) ->
     c = [_f(r["close"]) for r in rows]
     rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))]
     return {"days": len(rows), "daily_sharpe": S2.sharpe_or_none(rets), "window_return": (c[-1] / c[0] - 1) if len(c) >= 2 else None}
+
+
+def _bh_beats(arm_sharpe: float | None, bh_sharpe: float | None) -> bool | None:
+    """`verdict_forward`의 사전확약 입력(암 일간 Sharpe < 매수보유 일간 Sharpe · 엄격) — 정의 안 되면 None(비교 불가)."""
+    return None if arm_sharpe is None or bh_sharpe is None else arm_sharpe < bh_sharpe
 
 
 def arm_daily_sharpe(trades: Sequence[dict[str, Any]], v: Sequence[int], n_stat: Decimal) -> float | None:
@@ -230,6 +250,8 @@ def _compute(base: Path, bars: Sequence[Bar1m], kline_daily: Sequence[dict[str, 
             raise Refusal(f"{a}_{var}: 실행이 기록한 V·분위수 유효 날이 판정기 재계산과 다르다")
         if summ["tf_v1_sha256"] != A.TF_V1_SHA256:
             raise Refusal(f"{a}_{var}: tf_v1 SHA256 불일치")
+        if summ["rules_sha256"] != A.RULES_SNAPSHOT_SHA256:
+            raise Refusal(f"{a}_{var}: 규칙 스냅샷 SHA256이 #48과 다르다")
         if any(int(t["entry_ms"]) // DAY not in v_set for t in trades):
             raise Refusal(f"{a}_{var}: 진입일이 V 밖인 트레이드(§3-1 83행)")
     streams = A.BOOTSTRAP_STREAMS["IS"]
@@ -242,6 +264,10 @@ def _compute(base: Path, bars: Sequence[Bar1m], kline_daily: Sequence[dict[str, 
         stats[a] = arm_stats(trades, v, streams[f"gross_{a}"], streams[f"net_{a}"])
         parts = O.read_p1_parts(base, a)
         draws, null, psum = O.read_p1_merged(base, a)
+        manifest = [{"lo": q.lo, "hi": q.hi, "sha256": O.sha(O.p1_parts_dir(base, a) / f"part_{q.lo:03d}_{q.hi:03d}" / O.P1_PART_FILE)}
+                    for q in sorted(parts, key=lambda q: q.lo)]
+        if psum["parts"] != manifest:
+            raise Refusal(f"{a}: P1 조각 목록·해시가 p1_summary와 다르다")
         m = P1.merge(parts, draws_total=p1_draws)
         if m["draws"] != draws or m["null"] != null or {k: psum[k] for k in ("n_source", "computable", "failed", "evaluable")} != \
                 {k: m[k] for k in ("n_source", "computable", "failed", "evaluable")}:
@@ -263,9 +289,14 @@ def _compute(base: Path, bars: Sequence[Bar1m], kline_daily: Sequence[dict[str, 
     verdicts = V.verdict_is(inputs)
     first, last = window[0] // DAY, (window[1] + 1 - MINUTE_MS) // DAY
     bh = bh_series(kline_daily, first, last)
+    window_days = list(range(window[0] // DAY, (window[1] + 1 - MINUTE_MS) // DAY + 1))
     report: dict[str, Any] = {
         "trial_verdict": V.trial_string(verdicts),
         "arms": {}, "v_days": len(v), "buy_and_hold": bh,
+        "v_cross_check": {"runs_compared": len(runs), "match": True},
+        "zero_bar_window_days": sum(1 for d in window_days if d not in q_valid),
+        "constants": {"n_trials": A.N_TRIALS, "alpha": A.ALPHA, "ci_quantiles": [A.CI_LO_Q, A.CI_HI_Q],
+                      "bootstrap_resamples": A.BOOTSTRAP_RESAMPLES, "bootstrap_seed": list(A.BOOTSTRAP_SEED)},
     }
     for a in O.ARMS:
         vd = verdicts[a]
@@ -279,6 +310,7 @@ def _compute(base: Path, bars: Sequence[Bar1m], kline_daily: Sequence[dict[str, 
             "oi_missing_unusable": summ["sub"].get("oi_missing.unusable", 0), "window_bars": summ["window_bars"],
             "trades": trade_report(trades, ledgers[a], p.e_ref),
             "daily_sharpe": arm_daily_sharpe(trades, v, p.n_stat),
+            "bh_beats_arm": _bh_beats(arm_daily_sharpe(trades, v, p.n_stat), bh["daily_sharpe"]),
             "variants": {var: {"n": runs[(a, var)][2]["n_trades"], "mean_net_bps": mean_net(runs[(a, var)][0])} for var in O.VARIANTS}}
     return verdicts, report
 
@@ -308,6 +340,13 @@ def _git(repo: Path, *a: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True)
 
 
+def freeze_set(repo: Path) -> set[str]:
+    out = set(FREEZE_FILES)
+    for g in FREEZE_GLOBS:
+        out |= {str(p.relative_to(repo)) for p in repo.glob(g)}
+    return out
+
+
 def require_frozen(repo: Path, commit: str, *, fetch: bool = True) -> None:
     if fetch and _git(repo, "fetch", "--quiet", "origin").returncode != 0:
         raise Refusal("git fetch 실패")
@@ -316,10 +355,18 @@ def require_frozen(repo: Path, commit: str, *, fetch: bool = True) -> None:
     for ref in ("HEAD", "origin/main"):
         if _git(repo, "merge-base", "--is-ancestor", commit, ref).returncode != 0:
             raise Refusal(f"판정기 커밋 {commit}가 {ref}의 조상이 아니다(푸시 전 판정 금지)")
-    for f in EVALUATOR_FILES:
+    now = freeze_set(repo)
+    then_set = set(FREEZE_FILES)
+    for g in FREEZE_GLOBS:
+        d, pat = g.rsplit("/", 1)
+        out = _git(repo, "ls-tree", "--name-only", f"{commit}:{d}").stdout.split()
+        then_set |= {f"{d}/{n}" for n in out if Path(n).match(pat)}
+    if now != then_set:
+        raise Refusal(f"동결 파일 집합이 커밋 {commit}와 다르다: {sorted(now ^ then_set)[:5]}")
+    for f in sorted(now):
         then = _git(repo, "show", f"{commit}:{f}")
         if then.returncode != 0 or then.stdout != (repo / f).read_text(encoding="utf-8"):
-            raise Refusal(f"판정기 파일 {f}가 커밋 {commit} 뒤에 바뀌었다")
+            raise Refusal(f"동결 파일 {f}가 판정기 커밋 {commit} 뒤에 바뀌었다")
 
 
 def _finite_json(o: Any) -> Any:

@@ -386,7 +386,8 @@ def test_run_arm_has_no_rules_or_params_override_and_fixture_path_is_test_only()
     skip = {".venv", "var", ".git", "tests", "node_modules"}
     for f in ROOT.rglob("*.py"):
         rel = f.relative_to(ROOT)
-        if rel.parts[0] in skip or rel in (Path("strategies/trial03/harness.py"), Path("backtest/p1_t3.py")):
+        if rel.parts[0] in skip or rel in (Path("strategies/trial03/harness.py"), Path("backtest/p1_t3.py"),
+                                           Path("backtest/evaluate_t3.py")):
             continue
         tree = ast.parse(f.read_text(encoding="utf-8"))
         for n in ast.walk(tree):
@@ -397,8 +398,11 @@ def test_run_arm_has_no_rules_or_params_override_and_fixture_path_is_test_only()
                 names += [a.name for a in n.names]
             elif isinstance(n, ast.Attribute):
                 names.append(n.attr)
-            if {"run_arm_with_fixture_rules", "run_range_with_fixture_rules"} & set(names):
+            if {"run_arm_with_fixture_rules", "run_range_with_fixture_rules", "compute_with_fixture",
+                    "evaluate_with_fixture"} & set(names):
                 offenders.append(str(rel))
+            if isinstance(n, ast.Call) and any(k.arg == "draws_total" for k in n.keywords) and rel != Path("backtest/t3_outputs.py"):
+                offenders.append(f"{rel}: draws_total")
     assert offenders == []
 
 

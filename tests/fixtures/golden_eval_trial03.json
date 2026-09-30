@@ -1,7 +1,8 @@
 {
  "_meta": {
   "created": "2026-09-30",
+  "regenerated": "2026-09-30 (f) after-pass r2: exit_reasons with shares + n_trades (and earlier: v_cross_check, zero_bar_window_days, constants, bh_beats_arm, symmetric boundary count)",
   "what": "trial #3 (f) evaluator report SHA256 on tests/fixtures/t3_eval_fixture.py build() \u2014 regenerate only with a registry note"
  },
- "report_sha256": "638e82bff4bf9b127d6793f8e87c854598fc32be1a132f16762e5e00795d8ee0"
+ "report_sha256": "920e685e012310c1508aa34fb0d500bddaff9fae8640747a59bc8e4963cbc835"
 }
