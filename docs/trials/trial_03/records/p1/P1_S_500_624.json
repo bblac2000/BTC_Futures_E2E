@@ -1,0 +1,46 @@
+{
+ "children_max_rss_kb": 2126332,
+ "provenance": {
+  "evaluator_commit": "f087611fa2367a4eb0b709e89059cac626cfa909",
+  "fetched_at": "2026-09-30T04:24:07+00:00",
+  "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+  "manifest_sha256": "7d267f9864e2f8f0f42b2c209363918978c07e36d9a0c97cf10b349b429977df",
+  "origin": "ebbcaa7f131789cb74d2c54855936131e5e3e2d9",
+  "pins_commit": "77d5e247bdfa9f54a46fe31d8392dc3c461a9839",
+  "rows": {
+   "conventions_commit": "54b049a99736054931a3974d05d38b0e1b16281a",
+   "conventions_sha256": "937930b3fba874015191fd8b8d930e26ba6da29ca17895150949d0e2b4884e6a",
+   "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+   "freeze_manifest_sha256": "5828120e2616b08eecdb00f31a3149f59cad27b2871629d3f9c9b20a188c0ebb",
+   "freeze_version": "2"
+  },
+  "variant": "P1_S_500_624"
+ },
+ "run": {
+  "args": [
+   "--arm",
+   "S",
+   "--lo",
+   "500",
+   "--hi",
+   "624",
+   "--prepared",
+   "/home/cms/project/BTC_Futures_E2E/var/t3/IS/prepared",
+   "--evaluator-commit",
+   "f087611fa2367a4eb0b709e89059cac626cfa909"
+  ],
+  "ended_utc": "2026-09-30T04:27:39.771698Z",
+  "git_head": "ebbcaa7f131789cb74d2c54855936131e5e3e2d9",
+  "module": "backtest.p1_t3_run",
+  "numpy": "2.5.3",
+  "outputs": {
+   "p1_part.json": "f0fb4f5b3e78fd91eff48879013ac30450eca7668436946179f51f0872b90fc0"
+  },
+  "python": "3.12.13",
+  "returncode": 0,
+  "started_utc": "2026-09-30T04:27:05.271069Z",
+  "stderr": "",
+  "stdout": "{\"arm\": \"S\", \"draws\": 125, \"hi\": 624, \"lo\": 500, \"n_source\": 233, \"ok\": 125}\n"
+ },
+ "wall_s": 34.5
+}
