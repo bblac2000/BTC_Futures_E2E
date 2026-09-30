@@ -1,0 +1,35 @@
+{
+ "children_max_rss_kb": 3771356,
+ "provenance": {
+  "evaluator_commit": "305e664b15b93201ea0e5446a5df5f5e9b265fa8",
+  "fetched_at": "2026-09-30T02:17:21+00:00",
+  "fingerprint": "daa17d0986557de0581dfc4194eb043c6aba14aee440804fb02ddad90003fd62",
+  "origin": "be8ceae10fdfaed76ae03d905c724fc848faf30a",
+  "rows": {
+   "conventions_commit": "54b049a99736054931a3974d05d38b0e1b16281a",
+   "conventions_sha256": "937930b3fba874015191fd8b8d930e26ba6da29ca17895150949d0e2b4884e6a",
+   "fingerprint": "daa17d0986557de0581dfc4194eb043c6aba14aee440804fb02ddad90003fd62",
+   "freeze_manifest_sha256": "4981fec1c84373696ebc443adc2423ab853ba45fc6bb66231da6134a5b151fad"
+  },
+  "variant": "prepare"
+ },
+ "run": {
+  "args": [
+   "--evaluator-commit",
+   "305e664b15b93201ea0e5446a5df5f5e9b265fa8"
+  ],
+  "ended_utc": "2026-09-30T02:21:32.257686Z",
+  "git_head": "be8ceae10fdfaed76ae03d905c724fc848faf30a",
+  "module": "backtest.prepare_t3",
+  "numpy": "2.5.3",
+  "outputs": {
+   "source_audit.json": "efa7f600aa10b89afd1b0c2a1e36dfa8896b7b95b92af4996d864a2c47a4aca3"
+  },
+  "python": "3.12.13",
+  "returncode": 3,
+  "started_utc": "2026-09-30T02:17:21.469395Z",
+  "stderr": "🚫 원시 출처 중단 조건 88건: [{'kind': 'funding_malformed', 'bucket_ms': 1696204800000, 'stop': True}, {'kind': 'funding_malformed', 'bucket_ms': 1696233600000, 'stop': True}, {'kind': 'funding_malformed', 'bucket_ms': 1696262400000, 'stop': True}, {'kind': 'funding_malformed', 'bucket_ms': 1696291200000, 'stop': True}, {'kind': 'funding_malformed', 'bucket_ms': 1696320000000, 'stop': True}]\n",
+  "stdout": ""
+ },
+ "wall_s": 250.9
+}

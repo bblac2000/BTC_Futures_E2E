@@ -1,0 +1,495 @@
+{
+ "oi": {
+  "days": 822,
+  "end_ms": 1767225599999,
+  "exact_duplicates": 0,
+  "is_grid_slots": 210528,
+  "rows_in_range": 236606,
+  "rows_outside_range": 0,
+  "series_rows": 236606,
+  "start_ms": 1696204800000,
+  "stops": [],
+  "unusable_cap": 0.005,
+  "unusable_is_slots": 0,
+  "unusable_per_day": {},
+  "unusable_slots": [],
+  "unusable_total": 0,
+  "value_not_ok": 0
+ },
+ "price": {
+  "bars": 1183678,
+  "bars_archive": 1183678,
+  "bars_kline_archive": 1183678,
+  "bars_kline_missing": 0,
+  "bars_kline_rest": 0,
+  "bars_rest": 0,
+  "end_ms": 1767225599999,
+  "fill_minutes": 2,
+  "finding_counts": {
+   "archive_mark_not_ok": 2,
+   "funding_malformed": 88
+  },
+  "findings_nonstop": [
+   {
+    "kind": "archive_mark_not_ok",
+    "stop": false,
+    "ts_ms": 1723456920000
+   },
+   {
+    "kind": "archive_mark_not_ok",
+    "stop": false,
+    "ts_ms": 1723456980000
+   }
+  ],
+  "funding_events": 2378,
+  "kline_archive": 1183680,
+  "kline_days": 822,
+  "kline_minutes": 1183680,
+  "kline_rest": 0,
+  "minutes_missing": 2,
+  "start_ms": 1696204800000,
+  "stops": [
+   {
+    "bucket_ms": 1696204800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696233600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696262400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696291200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696320000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696348800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696377600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696406400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696435200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696464000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696492800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696521600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696550400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696579200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696608000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696636800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696665600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696694400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696723200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696752000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696780800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696809600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696838400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696867200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696896000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696924800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696953600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1696982400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697011200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697040000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697068800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697097600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697126400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697155200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697184000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697212800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697241600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697270400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697299200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697328000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697356800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697385600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697414400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697443200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697472000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697500800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697529600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697558400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697587200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697616000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697644800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697673600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697702400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697731200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697760000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697788800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697817600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697846400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697875200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697904000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697932800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697961600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1697990400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698019200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698048000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698076800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698105600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698134400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698163200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698192000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698220800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698249600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698278400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698307200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698336000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698364800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698393600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698422400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698451200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698480000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698508800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698537600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698566400000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698595200000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698624000000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698652800000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698681600000,
+    "kind": "funding_malformed",
+    "stop": true
+   },
+   {
+    "bucket_ms": 1698710400000,
+    "kind": "funding_malformed",
+    "stop": true
+   }
+  ]
+ },
+ "window": "IS+warmup \u00b7 window B(#47) \u00b7 2023-10-02 \u2192 2025-12-31"
+}

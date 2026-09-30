@@ -9112,3 +9112,11 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Order: capture → verify receipts + oi_unusable.json + 0.5% cap → L_base → P1_L part 0 → remaining runs and P1 parts → merge → evaluator once → full report + verdict pair + (g) after-pass (advisor + Codex). Report only trade/funnel counts until the evaluator has run. If capture stops for a data-quality reason, report and wait.
 
 - 기록 위치: 규약 항목 74는 이 결정을 "레지스트리 행"에 적으라고 한다 · 항목 63은 #54 = 데이터 핀 · #55 = 판정으로 번호를 고정했으므로, 두 결정은 **#54 데이터 핀 행 안에** 함께 적는다(verify 전 · 어떤 실행보다도 먼저).
+
+## 2026-09-30 — 트라이얼 #3 HALF 2 단계 5 캡처 **데이터 품질 중단**(rc 3) · 보고하고 대기
+- 명령: `python -m backtest.t3_stages --evaluator-commit 305e664… --stage prepare` · 기록 `_records/prepare.json`(rc 3 · 02:17:21→02:21:32Z · children_max_rss_kb 3,771,356) · 실행기 rc 2 `StageFailed: prepare rc 3`.
+- 중단: `funding_malformed` 88건 = REST `/fapi/v1/fundingRate`가 **2023-10-02 00:00 → 2023-10-31 00:00**(8시간 간격 전부) 펀딩의 `markPrice`를 빈 문자열로 준다(`fundingRate`는 모두 있음) · 첫 비어 있지 않은 mark 2023-10-31 08:00 · 전부 워밍업(DATA_START 2023-10-02 ~ WINDOW_START 2024-01-01) · 판정 위치 = 공유 `prepare_t2._funding`(prepare_t3.analyze가 T2.analyze를 부른다).
+- 안정성: 같은 창을 읽기 전용 GET 한 번으로 다시 조회(2026-09-30T02:24:42Z) → 91행 중 빈 mark 88 · 같은 범위 → 일시적 아님(원천 속성). 트라이얼 #2 원시는 2023-12-11부터라 겹치지 않는다.
+- 나머지 감사(중단 아님): 봉 1,183,678 · mark 결손 2분(2024-08-12 · archive_mark_not_ok · 그날 불완전 → 항목 30으로 제외) · 펀딩 이벤트 2,378 수락 · kline 822일 · OI 822일 · 1,644 원시 파일 · 사용 불가 OI 0 / IS 슬롯 210,528(0.5% 상한 통과 — 단 빌드가 멈춰 oi_unusable.json·매니페스트는 쓰이지 않음).
+- 소비: `validate_inputs`는 mark가 비정상인 펀딩을 거부 · 엔진 `on_funding`은 mark로 지불 계산 · 포지션·판정 가능 구간 펀딩 검사(`t0 ≤ b ≤ t0+366분`)·P1 구간은 WINDOW_START 이후뿐 → 이 88행은 어디서도 소비되지 않는다.
+- 보존: var/t3/(522 MB · 원시 포함) 그대로 · 기록과 감사 사본 `docs/trials/trial_03/records/prepare_attempt1/`(prepare.json 8c13455d… · source_audit.json efa7f600…). 레지스트리 행은 사용자 결정(수정 경로)과 함께 쓴다 · 패치·재실행 없음.
