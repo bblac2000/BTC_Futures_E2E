@@ -9763,3 +9763,13 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > - Treat any choice among the inspected 90/180-day, quantile, and k variants as a **pre-IS design decision**, record it before IS, and keep the IS/OOS data sealed. The registry requires a new trial and higher N for rule changes after results. [Protocol](.claude/skills/quant-bot-constitution/references/research-protocol.md:38).
 > 
 > VERDICT: REDESIGN-FIRST
+
+## 2026-09-30 — 트라이얼 #4 r1 T-CARRY 철회(앵커 전) · 두 번째 IS 이전 보정(A·B·C)
+> 사용자(원문): "r1 reviewed. Verdict: T-CARRY as briefed is withdrawn before anchor. The calibration shows (1) funding clamps at 0.0001 so the Q0.95 rule fires on baseline prints, (2) normalization exits make it a sub-day hold, (3) the SL band at L ≥ 10 discards ~90% of events. This was a design error in my brief, not in the draft. Record a registry row: \"trial #4 r1 T-CARRY withdrawn pre-anchor (REDESIGN-FIRST); N unchanged (no judged arm)\". Do not anchor; do not delete the draft or the calibration (they are evidence). The §12 decisions are moot for r1; r2 will restate everything under v1.5 (L ∈ [3, 30], #65)."
+- 레지스트리 #66(철회 · N 6 유지). 초안 r1(#64 · 4e62c7d4…)과 1차 보정 보존.
+- 명령(읽기 전용 · IS 내용 미개봉):
+  - `uv run python docs/trials/trial_04_calibration/calibrate_r2.py --listing` → premium_listing.json(2022~2025 월 전부 · 2024+ 이름만)
+  - `uv run python docs/trials/trial_04_calibration/calibrate_r2.py --fetch` → 2021-10 … 2023-12 zip 27개 · CHECKSUM 대조 · 목록 SHA256 e447bcefb3b15966375d052c34f9637ff840304813ff38e741a44e45511780d1 · 파일 var/t4_calib/(git 밖)
+  - `uv run python docs/trials/trial_04_calibration/calibrate_r2.py` → calibration_r2.json(A·B)
+  - C: `uv run python <scratchpad>/calib_c_channel.py`(SHA256 0ff8c8eb4a39ca819a81b8808e53657a3d352d6630adfbc5ec2c82fc65338957) → calibration_r2_c.json — **CLAUDE.md 하드 규칙 "No Donchian code in this repo" 때문에 스크립트는 저장소 밖** · E2E #74와의 차이는 calibration_r2.md §C.
+- 표: docs/trials/trial_04_calibration/calibration_r2.md. Codex 검토 없음(사용자: 읽기 전용 보정).

@@ -1,0 +1,30 @@
+{
+ "listed_utc": "2026-09-30T08:18:32+00:00",
+ "prefix": "data/futures/um/monthly/premiumIndexKlines/BTCUSDT/1m/",
+ "zip_files": 80,
+ "first": "BTCUSDT-1m-2020-01.zip",
+ "last": "BTCUSDT-1m-2026-08.zip",
+ "availability": {
+  "2022": {
+   "months_present": 12,
+   "with_checksum": 12,
+   "missing": []
+  },
+  "2023": {
+   "months_present": 12,
+   "with_checksum": 12,
+   "missing": []
+  },
+  "2024": {
+   "months_present": 12,
+   "with_checksum": 12,
+   "missing": []
+  },
+  "2025": {
+   "months_present": 12,
+   "with_checksum": 12,
+   "missing": []
+  }
+ },
+ "note": "2024~2025\ub294 \ubaa9\ub85d(\uc774\ub984)\ub9cc \ud655\uc778 \u00b7 \ub0b4\uc6a9 \ubbf8\uac1c\ubd09"
+}

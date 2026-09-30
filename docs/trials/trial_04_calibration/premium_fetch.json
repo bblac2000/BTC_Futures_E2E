@@ -1,0 +1,141 @@
+{
+ "fetched_utc": "2026-09-30T08:18:41+00:00",
+ "files": [
+  {
+   "file": "BTCUSDT-1m-2021-10.zip",
+   "sha256": "19de0563cce5c15ba5bb65cf507802f26b550026d6fad071374d558f6f4e7b67",
+   "bytes": 897155
+  },
+  {
+   "file": "BTCUSDT-1m-2021-11.zip",
+   "sha256": "c59b4174844a290966ffae67abd307b979544190b50b9113e2f9c587dd9a272a",
+   "bytes": 867339
+  },
+  {
+   "file": "BTCUSDT-1m-2021-12.zip",
+   "sha256": "33da24a7a777dc7061e889079319144f70a883c8e491b1cb5651bdbb1080d003",
+   "bytes": 889520
+  },
+  {
+   "file": "BTCUSDT-1m-2022-01.zip",
+   "sha256": "377c726fc55cf1ad7d374149dff8d45271934fe7f5af77bfeb1a0822d0d52dc9",
+   "bytes": 891746
+  },
+  {
+   "file": "BTCUSDT-1m-2022-02.zip",
+   "sha256": "5bdc440a5460c51c61908f0a42fd52e5ad14173f33a3ffd029f0d163f1fd1d48",
+   "bytes": 806036
+  },
+  {
+   "file": "BTCUSDT-1m-2022-03.zip",
+   "sha256": "b01307b63028469c3e8c3c8aa04f5e58d0a30ff5e75fa5f4aba4d9d782a86265",
+   "bytes": 887429
+  },
+  {
+   "file": "BTCUSDT-1m-2022-04.zip",
+   "sha256": "536a7c061cec29a8fb1fd846f20ed1f2ea29a3a3f5133eca7311fcc29c3bb1fb",
+   "bytes": 852914
+  },
+  {
+   "file": "BTCUSDT-1m-2022-05.zip",
+   "sha256": "340cb505884f1213ba4bae12d839add01c5490d750f37f3e0456f367d367e028",
+   "bytes": 891252
+  },
+  {
+   "file": "BTCUSDT-1m-2022-06.zip",
+   "sha256": "16b11001905d2040899f1d64ff01b8911b84374b60e50c044181532d1c92d37c",
+   "bytes": 869263
+  },
+  {
+   "file": "BTCUSDT-1m-2022-07.zip",
+   "sha256": "e4e971f5148962105ebf767fa312fef16582bdde60bfd211eaba6a5a1db83984",
+   "bytes": 889744
+  },
+  {
+   "file": "BTCUSDT-1m-2022-08.zip",
+   "sha256": "01678c837c845a1ee2be6cd39a2c701723345159f8e5e94dbd020edf939c6a4d",
+   "bytes": 880679
+  },
+  {
+   "file": "BTCUSDT-1m-2022-09.zip",
+   "sha256": "26d4f8c5e109310e5bf00bdd1c35956c4828fc6be487ba73d07a362311d3c822",
+   "bytes": 854639
+  },
+  {
+   "file": "BTCUSDT-1m-2022-10.zip",
+   "sha256": "fd9958b22d0cf7772e456738a94ee8520c515ef3769ac83a40e468a6a5e861c0",
+   "bytes": 839049
+  },
+  {
+   "file": "BTCUSDT-1m-2022-11.zip",
+   "sha256": "dbbbd9eff3f1e5a71bd8a0b945c709dd834668703b0974d792699b32b5d8b0db",
+   "bytes": 849943
+  },
+  {
+   "file": "BTCUSDT-1m-2022-12.zip",
+   "sha256": "991c2b2f851d3ad7995bc9e0e4aafedf5955695eae4973da828980d6f2b10443",
+   "bytes": 854545
+  },
+  {
+   "file": "BTCUSDT-1m-2023-01.zip",
+   "sha256": "cdb0550fa814d723c74fce2a15f539320de37d5f116597ed6f1cff64b81e49f6",
+   "bytes": 866596
+  },
+  {
+   "file": "BTCUSDT-1m-2023-02.zip",
+   "sha256": "1257e28fa7388d9ede052f48b96ac1ce6af6b29edf6ae1d8cd11d4903868a26b",
+   "bytes": 758607
+  },
+  {
+   "file": "BTCUSDT-1m-2023-03.zip",
+   "sha256": "1b2b81cec798f2d237ca8bc1e3fa1c9907b15b589725d491b55bbdd5c9adc9ae",
+   "bytes": 882719
+  },
+  {
+   "file": "BTCUSDT-1m-2023-04.zip",
+   "sha256": "c7fb93a8d65854dedb7009c4136b8f697ea14ed0082f842358be8611e30942cb",
+   "bytes": 837719
+  },
+  {
+   "file": "BTCUSDT-1m-2023-05.zip",
+   "sha256": "a67a17f74f769ac055d39d2a7960243626ab38c6d8a7bc424e60ad7f8982d221",
+   "bytes": 862577
+  },
+  {
+   "file": "BTCUSDT-1m-2023-06.zip",
+   "sha256": "a6548500422c31901fce3faa24285c002b25cd6f1d8384d0ac254802a44c0ca1",
+   "bytes": 838962
+  },
+  {
+   "file": "BTCUSDT-1m-2023-07.zip",
+   "sha256": "7a5451650e882722038157ffa80af92eb58545fca989b75e546a0b02b81b76ce",
+   "bytes": 847570
+  },
+  {
+   "file": "BTCUSDT-1m-2023-08.zip",
+   "sha256": "2d58faa1af42a81d94977d4e24a56b7dbf03edf50546b277390f6792ca4cb1f6",
+   "bytes": 841112
+  },
+  {
+   "file": "BTCUSDT-1m-2023-09.zip",
+   "sha256": "07c1beb96474a7ee0576982cfcae52f2a364f5d6e4baf386dc6758fb17fcb220",
+   "bytes": 818770
+  },
+  {
+   "file": "BTCUSDT-1m-2023-10.zip",
+   "sha256": "e3a2d14f7065294a249675786ee474d4e2015b2669978dc60c43184995423080",
+   "bytes": 861119
+  },
+  {
+   "file": "BTCUSDT-1m-2023-11.zip",
+   "sha256": "38bb71968c652cd18850064b6ca194220dc94fbaec7f3f8e8b941072e4d8aed0",
+   "bytes": 843802
+  },
+  {
+   "file": "BTCUSDT-1m-2023-12.zip",
+   "sha256": "d246dba0425eb7c601366adda6539f9427f47b3744f0efb87ce2d59c27f7eb2b",
+   "bytes": 877059
+  }
+ ],
+ "inventory_sha256": "e447bcefb3b15966375d052c34f9637ff840304813ff38e741a44e45511780d1"
+}
