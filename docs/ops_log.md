@@ -10479,3 +10479,130 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > VERDICT: PROCEED
 > 
 > Real Codex thread/session id: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+## 2026-09-30 — 트라이얼 #4 단계 (a) **after-pass**(advisor MERGE + Codex FIX-FIRST → 재확인 FIX-FIRST → 재확인 **MERGE**)
+
+- 커밋: f7863e2(구현) → 0a1a9ee(advisor: Decimal 합 지역 문맥 · 복사 문구 · import 검사 확대) → 5b271ec(Codex: 경로 관문 연결 · 펀딩 과반환 중단 · .csv 구성원 · 배치 규약) → 9235ad8(Codex 재확인: raw 심볼릭 링크 · 공개 build 우회 제거). 시험 anchor 8 + prepare 24 · 전체 1,568 통과 · ruff · pyright 0.
+- Decimal 수정은 기본 문맥(prec 28)에서는 결과를 바꾸지 않는다(규약 정확성 수정) — 실데이터는 아직 없다.
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 1 · Codex 1 | 합이 주변 문맥 | ✅ | localcontext · 혼합 값 시험 |
+| advisor 2 · Codex 5 | 복사 문구 과장 | ✅ | 문구 수정 |
+| advisor 3 | A9는 r3 읽기 — 사용자 확인 필요 | ✅ | 보고에 질문 |
+| advisor 4 | import 검사 확대 | ✅ | 모든 trial04 파일 |
+| advisor 5 | 보고 내용 · (b) 회귀 계획 | ✅ | 보고 |
+| Codex 2 · 재확인 MAJOR | 경로 관문 미연결 · 심볼릭 링크 | ✅ | capture·build·verify 관문 · 해석 경로 |
+| Codex 3 | .csv 구성원 · 암호화 | ✅ | 코드 · 암호화는 시험 없음(표준 라이브러리 한계) 규약에 명시 |
+| Codex 4 | 펀딩 과반환 | ✅ | 저장 전 중단 · 시험 |
+| Codex 6 | 배치 규약 | ✅ | A11 |
+| Codex 재확인 MINOR | root=None 우회 | ✅ | 비공개 _build_unchecked |
+
+### advisor 원문(verbatim)
+> You're the advisor half of the (a) after-pass; Codex is running. Verdict: **MERGE, with one code fix and two wording fixes to land before the (a) report closes** (nothing here is frozen yet, so fixing now is free; after (g) it isn't).
+> 
+> **1. The Decimal mean is not context-local as conventions item 8 claims.** `build_prints` does `sum(use, Decimal(0))` and only the *division* uses `P_CONTEXT`. Python's `sum` adds with the thread's current context, so the running sum rounds under whatever ambient precision is set. Your locality test passed only because 480 × 0.00000003 never exceeds 5 significant digits. Fix: `with decimal.localcontext(P_CONTEXT): total = sum(use, Decimal(0)); p = str(total / Decimal(n))`. Strengthen the test with heterogeneous 8-dp closes under `prec = 5` (e.g. alternating `0.00012345` / `0.00067891` → sum `0.1925664`, 7 sig digits) and assert equality with the prec-28 result — that fails on the current code and passes after. Under the default context production output is unaffected, so this is a convention-accuracy fix, not a result change; say so in the log. While there: note in item 8 that `str()` may emit E-notation for tiny quotients (`float()` parses it) — deterministic, just surprising.
+> 
+> **2. Conventions item 4 and the module docstring overstate the copy.** They say `funding_view` is "unchanged except the anchor import"; you also dropped `shared_bucket`/`rate_not_ok` and relabeled the audit. Write what's true: "anchor import + audit label changed; two report-only fields removed." The copy itself is fine.
+> 
+> **3. Conventions item 9 is a reading of r3, not a §12 decision — the user must confirm it in the (a) report.** "Valid print with `T−1m` absent → enters the trailing distribution but yields no decision" determines which prints can trigger entries. Codex called it "a stated reading … to be recorded in conventions"; recording it isn't confirming it. Put it in the report as a question, same shape as the §7-2 thresholds were.
+> 
+> **4. Widen the static import test now, not later.** `test_no_trial03_import_in_trial04_data_path` checks `prepare_t4.py` only; glob `strategies/trial04/*.py` and `backtest/*_t4.py` so files added in (c)–(f) are covered automatically (allowlist `strategies.trial03.exit_schedule` for (c)).
+> 
+> **5. What the (a) report must carry:**
+> - The full section A text (first version, so the "diff" is the whole file), with items 1–12 and the item-9 question.
+> - The sizing-band finding with its consequence: appending `(3, 30)` changes `sizing/config.py`, which is in trial #3's frozen set — trial #3's gate will refuse from then on. That's by design (trial closed, run-once), the same way trial #2's gate was intentionally left refused after trial #3 (#51). Also flag that the (b) regressions need a plan: trial #3's byte targets exist (`docs/trials/trial_03/records/*` output hashes, `var/t3/IS/prepared` still local) but any rerun must bypass the provenance gate that refuses by design — a scratch-dir, test-style `run_arm` comparison, not the stage runner.
+> - Deliberately deferred to (g): pinned loaders, the capture CLI/gate-check, the conventions registry row.
+> - Registry #71 text; test counts (8 anchor + 18 prepare; suite 1562); both verdicts verbatim in ops_log with positions.
+> - Update `trial04-status` memory (step (a) done, sizing finding, H′ commands) before the report.
+> 
+> Sequence: apply 1, 2, 4 → tests → commit/push → reconcile with Codex's verdict (fixes 1–2 into its re-check if it hasn't cited them) → report → stop. Do not start (b); the band edit waits for the user's explicit go.
+
+### Codex 원문 1(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> # Trial #4 step (a) AFTER-pass
+> 
+> **Real session/thread ID:** `01a0f1fa-21ed-73b0-8a96-4c6b15c28016` (`CODEX_THREAD_ID`). Companion Claude session: `db9ba374-0a81-45cc-99f7-dab6bbef9b2c`.
+> 
+> This is Codex's output in full.
+> 
+> I reviewed the files at `HEAD = origin/main = f7863e24f4adc1738b31b69027683ec4179ce5be`. The worktree was clean. I made no edits, opened no market data dated 2024-01-01 or later, and did not rerun the reported 1,562-test suite, ruff, or pyright.
+> 
+> ## Findings
+> 
+> ### MAJOR
+> 
+> 1. **The premium mean does not use a local Decimal context for the sum.** [`build_prints`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:220) calls `sum(use, Decimal(0))` under the caller's ambient context, then uses `P_CONTEXT` only for division ([line 229](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:229)). This contradicts [conventions A8](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:16) and can change `p_T`. A read-only synthetic calculation with ambient precision 5 and 480 closes of `0.123456789` produced `0.1230833333333333333333333` by the current sequence, versus the correct mean `0.123456789`. The [current context test](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:96) uses equal tiny values whose sum happens to survive precision 5. **Fix:** perform both summation and division inside `decimal.localcontext(P_CONTEXT)` (or use context arithmetic for both), and test nontrivial closes under a deliberately low ambient precision against the exact expected string.
+> 
+> 2. **The declared output-directory guard is not connected to capture, build, or verify.** [`check_out_dir`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:354) exists, but [`capture`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:120), [`build`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:309), and [`verify_rebuild`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:340) never call it. The test calls only the guard itself, then successfully captures to a temporary `var/t4` path without passing a root ([test lines 153–163, 187–203](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:153)). Thus [conventions A5's](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:13) statement that outputs are restricted to `var/t4/` is not yet true for these public functions. **Fix:** enforce the path at the production capture/build/verify entry point before any write or raw read, with an injectable root for synthetic tests. If that entry point is intentionally deferred to (g), say so in A5 and make its guard a required test before capture.
+> 
+> 3. **A single non-CSV ZIP member passes the member check.** [`analyze_premium`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:177) checks `len(z.namelist()) == 1` but never checks that the sole member is a CSV file. A single `.txt` member containing parseable rows is accepted, contrary to the plan's and [conventions A7's](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:15) "exactly one CSV" rule. **Fix:** require exactly one regular `.csv` member, reject directories and other extensions, and add a one-member `.txt` synthetic test. Also catch a ZIP member read failure such as `RuntimeError` from an encrypted member as an audited `premium_zip_unreadable` stop; the [current exception list](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:184) does not cover it.
+> 
+> 4. **Hypothesis: an over-returned funding REST row can be read before the OOS guard fires.** Requests set `endTime ≤ end` ([capture lines 135–138](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:135)), but shared [`_pages`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:161) preserves a full returned page. Shared [`_funding`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t2.py:237) classifies its values before trial #4's [`assert_in_range`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:297). If the endpoint over-returns a row after `IS_END`, the row enters raw capture and its values are read before rejection. I did not observe such a response. **Fix:** on the trial #4 capture path, inspect returned funding timestamps before persisting each page; stop and audit on any out-of-range row without parsing its rate or mark. Add a synthetic over-return test. This enforces [r3's "do not read past the window" rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:36) independently of endpoint behavior.
+> 
+> ### MINOR
+> 
+> 5. **The "copy with only anchor and label changed" provenance statement is too strong.** Trial #4 [`funding_view`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:235) preserves the drop predicate, but its audit omits trial #3's `shared_bucket` and `rate_not_ok` diagnostics ([trial #3 source](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:225)). The dropped rows are the same under the stated predicate; the audit is not an exact copy. **Fix:** restore those two diagnostics or revise [conventions A4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:12) and the module header to say the rule was copied with a reduced audit schema.
+> 
+> 6. **Conventions A11 should state the actual raw location.** [`build(out)`](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:309) expects `out/raw`; the trial #3 stage pattern sets `out = base/prepared` ([stage lines 68–72](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:68)). Under that pattern trial #4 raw files will be `prepared/raw/*`, whereas [A11](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:19) presents `prepared/{…}` and `raw/{…}` as separate paths. **Fix:** choose and document one layout before (g), then test capture → build → verify using that exact stage layout.
+> 
+> ## Checklist
+> 
+> | Item | Assessment |
+> |---|---|
+> | **Anchor constants and #69/#70** | **Pass.** Full document SHA256, MD5, size, 16–39 table hash, six historical SR values and source hashes, four #69 hashes, N/α/CI, S-first bootstrap streams, S=`k2`/L=`k3` P1 seeds, timing offset, and mechanical 272-day OOS end match the [anchor](/home/cms/project/BTC_Futures_E2E/strategies/trial04/anchor.py:11), [tests](/home/cms/project/BTC_Futures_E2E/tests/test_trial04_anchor.py:22), and [registry #70](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:78). The test checks IS bootstrap mapping but not the OOS mapping explicitly; the constant itself is correct. |
+> | **Header, 12 columns, alignment, close time** | **Mostly pass.** The parser accepts the exact optional header, checks 12 fields, integer minute alignment and `close_time = open_time + 59,999` ([parser lines 187–206](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:187)). The ZIP member-type gap is finding 3. |
+> | **Duplicate and out-of-range order** | **Pass for premium.** It drops an out-of-range timestamp before close-value classification, then checks the global in-range duplicate set before classifying the close ([lines 199–213](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:199)). Same-file, cross-file and non-finite duplicate cases have synthetic tests ([test lines 113–150](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:113)). |
+> | **Non-finite close; missing month, checksum, members, unreadable ZIP** | **Partial.** Non-finite close becomes an audited absent minute, and missing month/checksum/multiple members/bad ZIP are tested ([analyzer lines 164–217](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:164)). A single non-CSV or encrypted member is not handled as specified; see finding 3. |
+> | **Print window, threshold, grid, IS end, final-minute flag** | **Pass except Decimal context.** The loop starts at the first 8-hour grid boundary with `T−8h ≥ start`, reads `[T−8h,T−1m]`, marks `n≥475` valid, emits no `T>IS_END`, and records `final_minute_present` ([lines 220–232](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:220)). The final-minute-missing flag test is present ([test lines 84–86](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:84)); the no-decision behavior belongs in step (d), as the user notes. Require that step's test before running a strategy. |
+> | **Funding-view copy** | **Predicate passes.** It is bound to `trial04.anchor`, drops only an exactly empty warm-up mark, keeps the raw file, and audits dropped timestamps and line/raw hashes ([lines 235–259](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:235)). The "exact copy" wording needs correction under finding 5. |
+> | **OOS guards** | **Partial.** Range checks and the separate OOS-opening registry gate exist ([lines 63–71, 361–367](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:63)); archive reading stops at the first row beyond end ([lines 86–107](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:86)); premium months stop at 2025-12 for IS ([test lines 153–170](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:153)). Output-path enforcement and over-returned funding protection remain findings 2 and 4. |
+> | **Manifest and verify** | **Pass for the implemented library flow.** The manifest hashes prepared outputs and the raw inventory, including ZIP and CHECKSUM files; verify checks hashes and inventory and rebuilds from copied raw bytes without overwriting prepared outputs ([lines 305–351](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:305)). The pinned loader and receipt are explicitly deferred to (g). |
+> | **#69 metadata correction and conventions A** | **Registry #71 passes.** It records the inherited `_meta.purpose` without changing pinned bytes ([registry #71](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:79)). Conventions A accurately describes most rules, but A4, A5, A8 and A11 need the corrections above. The [anchor test](/home/cms/project/BTC_Futures_E2E/tests/test_trial04_anchor.py:94) checks snapshot hashes and parses the generic loader; it does not yet test a trial #4 runtime loader rejecting a tampered snapshot. That loader is deferred with the strategy/harness, and its tamper test remains required before execution. |
+> | **Reported test and lint results** | The reported 1,562 passes and clean ruff/pyright results are not independently verified in this read-only pass. The Decimal context test gap shows why those results do not close finding 1. |
+> 
+> The Decimal mean and source/guard gaps can change or weaken the prepared input contract before raw capture. Fix them and update conventions before accepting step (a).
+> 
+> VERDICT: FIX-FIRST
+> 
+> Real Codex thread/session id: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+### Codex 원문 2(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> **Read-only re-check:** `origin/main` and HEAD are `5b271eccb855ce58c25abc3c0fb46de34b5813fa`. I reviewed the diff from `f7863e2`; the worktree is clean. I did not open market data or independently run the reported 1,566-test suite.
+> 
+> The session/thread ID is `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`. This is Codex's output, reproduced in full.
+> 
+> | Prior finding | Status | Evidence and residual fix |
+> |---|---|---|
+> | 1. Decimal mean | **RESOLVED** | Both sum and division now run inside `decimal.localcontext(P_CONTEXT)` in [prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:229). The mixed eight-decimal-place test compares normal and precision-5 ambient contexts in [test_prepare_t4.py](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:96). |
+> | 2. Output path guard | **PARTIAL** | `capture`, `build`, and `verify_rebuild` now call the guard before their normal work; refusal tests check that rejected paths create no output directory ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:121), [test_prepare_t4.py](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:227)). Two escape paths remain, detailed below. |
+> | 3. ZIP member and unreadable ZIP | **RESOLVED** | A sole member must have a `.csv` name and cannot end in `/`; `RuntimeError` and `NotImplementedError` become audited unreadable-ZIP stops ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:186)). The non-CSV case is tested ([test_prepare_t4.py](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:251)). The encrypted-member branch is code-only, as stated in [conventions §A.5](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:13). |
+> | 4. Funding over-return | **RESOLVED for integer `fundingTime`** | The response pages are checked before `funding.jsonl` is opened, and an out-of-range integer raises `OOSGuard` ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:139)). The test asserts the file was not written ([test_prepare_t4.py](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:239)). |
+> | 5. Copy note and audit schema | **RESOLVED** | The module note and [conventions §A.4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:12) now disclose removal of the two report-only audit fields. The funding drop predicate remains at [prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:258). |
+> | 6. A11 layout | **RESOLVED** | [Conventions §A.11](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_conventions.md:19) now specifies `var/t4/IS/prepared/raw`, matching the capture/build round trip in [test_prepare_t4.py](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:189). |
+> 
+> ### New findings
+> 
+> - **MAJOR — A `raw` symlink can escape the output guard.** `capture` checks `raw.parent`, then writes through `raw` ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:125)). If `prepared/raw` already points outside `var/t4`, its parent passes while the writes follow the symlink. `build` checks `out` but reads `out/raw` without checking its resolved destination ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:321)). **Fix:** validate the resolved `raw` path in both entry points before any read or write, and add a synthetic symlink refusal test.
+> 
+> - **MINOR — `root=None` is an exposed guard bypass.** `build(out, ..., root=None)` skips the guard ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:321)). The only in-repo call using it is `verify_rebuild`'s temporary rebuild, after `verify_rebuild` guards the source path ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:355)); I found **no current in-repo production call path** that passes `None` to an arbitrary output. A direct caller can nevertheless do so. **Fix:** keep the public `build` guarded and move the temporary rebuild to a private unchecked helper.
+> 
+> Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`.
+> 
+> VERDICT: FIX-FIRST
+### Codex 원문 3(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> **Read-only re-check of `5b271ec..9235ad8`:** Codex found both remaining findings resolved. The worktree is clean. It inspected code and synthetic tests only. It did not open market data or run the test suite.
+> 
+> - **MAJOR (symlink): RESOLVED.**
+>   - `capture` checks both `raw.parent` and the resolved `raw` path before creating or writing files. `build` and `verify_rebuild` check both `out` and `out/raw` ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:121), [build](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:322), [verify_rebuild](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:361)).
+>   - The new test points `prepared/raw` outside `var/t4`, confirms all three operations refuse it, and checks that the target stays empty ([test_prepare_t4.py](/home/cms/project/BTC_Futures_E2E/tests/test_prepare_t4.py:263)).
+>   - `verify_rebuild` checks `raw` before `verify_manifest` or `copytree`, so it does not copy from the symlinked location.
+> 
+> - **MINOR (bypass): RESOLVED.**
+>   - Public `build` now always calls the path guard, and its `root` parameter no longer accepts `None` as a bypass.
+>   - Only the guarded `build` and `verify_rebuild` paths call `_build_unchecked`, and `verify_rebuild` uses it on a temporary copy ([prepare_t4.py](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:322), [verify_rebuild](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t4.py:367)).
+>   - The private function can still be called directly in Python, but Codex found no in-repo production call that exposes it as an unguarded entry point.
+> 
+> **New findings:** None in this diff. Codex did not treat a path replacement between validation and use as a finding, per the requested TOCTOU scope.
+> 
+> Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`.
+> 
+> VERDICT: MERGE
