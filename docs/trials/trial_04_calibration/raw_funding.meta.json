@@ -1,0 +1,13 @@
+{
+ "captured_utc": "2026-09-30T06:05:17+00:00",
+ "startTime": 1622505600000,
+ "endTime": 1704067199999,
+ "pages": 3,
+ "rows": 2832,
+ "file_sha256": "cef3bf91048f7fcbc72d7d553c1f5761b31ccda6c9862e8341f2ff160c858f5d",
+ "line_sha256": [
+  "7cbe67268bed9a9bfb7d0de83fe9859f7c96082195a42b49c88f8d58906696e2",
+  "f445c5aded2a92f17cee4fcbe0397572ec6193c802afdff2533c13f1bb3c34b9",
+  "b0c2e853638e4b153e28ec1e53041e60ae53acf3a6468feb4ccc3728a8c160b9"
+ ]
+}
