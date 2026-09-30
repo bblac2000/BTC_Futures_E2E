@@ -10030,3 +10030,38 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > **Byte checks pass:** `origin/main` equals `HEAD`; the document is 27,697 bytes, 172 lines, SHA256 `2d504b4122e1e9f7a4c3e251aa61cf71c882af700321528e169ea2ea366daa8b`. The §1 table is 24 LF-terminated lines, 5,315 bytes, SHA256 `e0362fb31452dff128b1ccf6f1381062225a0417152aa5f271ccc0646d3c492e`. `count_r2.json` hashes to `12f598968487d96c49300228f011af4b6960c8f2c466dd66c3e34101f1f5627b` and records S 43 / L 56. I verified the recorded counts and hash; I did not rerun the count or open market data.
 > 
 > VERDICT: FIX-FIRST
+
+## 2026-09-30 — 트라이얼 #4 **앵커**(r3 · createdTime 2026-09-30T10:17:47.203Z)
+
+> 사용자(원문 요지): "Point 3: half-open interval (t, t + 6 days] — 18 settlements ... Then one more short re-check with both reviewers. If both MERGE: anchor today in this order — snapshot capture (with the comparison of MIN_NOTIONAL, MMR, taker and max leverage against r3's assumptions; stop if any differ) → Drive upload → createdTime from rclone and the connector → byte-compare → snapshot row → anchor row → push."
+
+- 결정 17 반영 커밋 177e7f7 · 최종 확인: advisor **MERGE** · Codex **MERGE**(01a0f1b9…) · 재계수 경계 목록 = 18(T+8h … T+144h · 코드가 이미 반열린 집합) → S 43 · L 56 유지.
+- 스냅샷(10:16Z): `uv run python -c "import scripts.capture_trial03_rules as C; C.OUT_DIR = C.ROOT/'docs/trials/trial_04_rules_snapshot'; C.main()"` rc 0 · 표준오류 0바이트 · trial_03 폴더 네 파일 SHA256 캡처 전후 동일(#48과 같음) · 새 해시·값 대조는 #69.
+- 업로드: `rclone copyto` 10:17:44.668Z~10:17:48.265Z rc 0 → `rclone lsjson --metadata`: ID 1hqUPOXg3LKarOjbhiyE1DYYOeAdDZvGc · Size 28828 · btime **2026-09-30T10:17:47.203Z** · ModTime 10:13:42.508Z(로컬 mtime) · Drive 커넥터 get_file_metadata: createdTime **2026-09-30T10:17:47.203Z** · parentId 14NZhku5Odij7BX_6nk2uPkqNiESTb8-2 · fileSize 28828 → 일치.
+- 내려받기 `rclone copyto` → `cmp` identical · SHA256 0fde1da9… · MD5 b3b206c8….
+- OOS_end = 2026-09-29T23:59:59.999Z(createdTime 이전 완전 마감 UTC 날). 레지스트리 #69(스냅샷) · #70(앵커).
+- 참고: rclone이 공유 Google Drive client_id 은퇴 예고(NOTICE)를 출력 — 원격 설정은 바꾸지 않았다(향후 별도 과제).
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor | 결정 17 일관 · 경계 목록 18 확인 | ✅ | 확인(18) |
+| Codex | 세 지적 닫힘 · 새 불일치 없음 · tc_v3 확인 | ✅ | 앵커 |
+
+### advisor 원문
+> **Advisor verdict: MERGE.** Decision 17 is applied coherently: mark minutes are checked on the closed span `[t, t+6d]` (a position needs a price at t and at the exit open), settlements on the half-open `(t, t+6d]` (a fill on a boundary minute doesn't settle it — trial #3's rule). Those are different quantities, so closed-vs-half-open is correct, not inconsistent. Base, P1 and P2 now share one definition; the §1 펀딩 row's "15 settlements per hold" and the sample rule's 18 are both true (hold vs. hold + P2's 24h cover). Both wording findings are fixed at the right lines. The tc_v3 change from `e0362fb3…` to `389f036e…` is expected — the sample-rule row is inside the hashed span — and you've declared the new value. Nothing substantive remains from my side.
+> 
+> **One check the count's own comment now contradicts — do it before anchoring, it's 30 seconds.** `count_r2.py` builds the boundary list as `range(T + H8, fill + (hold+extra)*MIN + 1, H8)` where `fill = T + 1m`. That already excludes the boundary at T and includes `fill + 6d − 1m`… verify the list length is exactly 18 for a fill at T+1m (it should be: T+8h … T+144h). If it's 18, the 43/56 stand under decision 17 as well; state that in the report ("recount unchanged; the code already used the half-open set"). If it isn't, the §5-1 numbers need one more run before upload. Don't edit the script's docstring for this — it's evidence.
+> 
+> (Pre-upload order and non-blocking notes: as followed below.)
+
+### Codex 원문(verbatim · 진행 로그 제외)
+> **Review session:** `01a0f1b9-b816-7380-8b99-888e512b65fe` (the same thread as the prior review).
+> 
+> All three FIX-FIRST findings are closed. Gate P1 is described as direction-randomized, with same-direction P1-timing explicitly report-only ([lines 88–94 and 148](docs/trials/trial_04_preregistration_r3.md:88)). The five-day/15-settlement count is labeled superseded by the six-day/18-settlement recount, S 43 and L 56 ([lines 105–112](docs/trials/trial_04_preregistration_r3.md:105)). The sample and P1 rules now exclude a settlement at the start boundary ([lines 35 and 88](docs/trials/trial_04_preregistration_r3.md:35)).
+> 
+> The **closed mark-minute span** `[t, t+6d]` and **half-open funding span** `(t, t+6d]` are coherent: they require the exit minute's mark and funding while excluding funding before a boundary-minute entry. Eighteen settlements belong to the six-day admissibility check; fifteen belong to a five-day hold ([lines 29, 35 and 37](docs/trials/trial_04_preregistration_r3.md:29)). P2 retains the base sample, and its delayed fill does not pay a settlement at its own fill boundary ([line 89](docs/trials/trial_04_preregistration_r3.md:89)). I found no new substantive inconsistency.
+> 
+> `HEAD` equals `origin/main`. The document hash is `0fde1da977001c1526f5844786af67a2adb7c6b887f74288aea93a2429ba1cf0` (28,828 bytes). The §1 table at lines 16–39 is 24 lines, 5,548 bytes, LF with a trailing newline, and hashes to `389f036e44ba907329d08a0d697dc16b504863b04d7d2f17bcfede19ac121580`. The review was read-only; I did not open market data.
+> 
+> VERDICT: MERGE
