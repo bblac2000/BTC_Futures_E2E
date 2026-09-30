@@ -1,0 +1,142 @@
+{
+ "files_compared": 46,
+ "identical": true,
+ "mismatches": 0,
+ "p1_merged": {
+  "L": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "S": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  }
+ },
+ "p1_parts": {
+  "P1_L_000_124": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_125_249": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_250_374": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_375_499": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_500_624": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_625_749": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_750_874": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_L_875_999": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_000_124": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_125_249": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_250_374": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_375_499": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_500_624": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_625_749": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_750_874": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "P1_S_875_999": {
+   "files": 1,
+   "mismatches": [],
+   "names_equal": true
+  }
+ },
+ "runs": {
+  "L_P2_delay1": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "L_P2_delay5": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "L_P3_invert": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "L_base": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "S_P2_delay1": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "S_P2_delay5": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "S_P3_invert": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  },
+  "S_base": {
+   "files": 3,
+   "mismatches": [],
+   "names_equal": true
+  }
+ },
+ "wall_s": 842.1
+}
