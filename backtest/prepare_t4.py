@@ -11,8 +11,8 @@
   close가 유한 Decimal이 아니면 그 분은 **없음**(475/480 계산에서 빠짐 · 달·분별 감사) · CHECKSUM 불일치 · 달 파일 없음 · zip 안 CSV ≠ 1개 → 중단.
 - **인쇄 p_T**: 경계 T(00/08/16 UTC) · 분 = open_time ∈ [T − 8h, T − 1분](480개 · 종료가 (T − 8h, T]) · **유효 ⇔ ≥ 475분** · p_T = 쓸 수 있는 분의
   close **Decimal 합 ÷ 개수**(지역 `Context(prec=28, ROUND_HALF_EVEN)` · 문자열) — 이진 float 없음 · **T − 8h ≥ 시작 ∧ T ≤ IS 끝**만 내보낸다(IS 경로의
-  마지막 인쇄 = 2025-12-31 16:00 · 2026-01-01 00:00 인쇄 없음) · 마지막 분(T − 1분)이 없으면 인쇄는 유효할 수 있어도 **결정 없음**(`final_minute_present`
-  = false · 결정 규칙은 (d)).
+  마지막 인쇄 = 2025-12-31 16:00 · 2026-01-01 00:00 인쇄 없음) · 분포 소속 = 유효(≥ 475) · **결정(방아쇠)은 480분 전부**일 때만(`complete` ·
+  아니면 `print_incomplete` — 사용자 결정 2026-09-30 · 결정 규칙 적용은 (d)).
 - **펀딩 워밍업 빈 mark**: markPrice == "" ∧ fundingTime 정수 ∧ fundingTime < WINDOW_START인 행만 버린다(트라이얼 #4 구현 규약 · 트라이얼 #3 #54와 같은
   규칙의 복사) — 창 안 빈 mark는 여전히 중단.
 🔒 OOS 가드: 범위는 [DATA_START, IS_END] 안 · 산출물은 `var/t4/` 아래만 · 모든 타임스탬프를 적재 때 다시 단언.
@@ -228,7 +228,7 @@ def analyze_premium(pdir: Path, start_ms: int, end_ms: int
 
 
 def build_prints(minutes: dict[int, Decimal | None], start_ms: int, end_ms: int) -> list[dict[str, Any]]:
-    """경계 T마다 한 행: {T, p(문자열 또는 None), n_minutes, valid, final_minute_present}. T − 8h ≥ 시작 ∧ T ≤ 끝만."""
+    """경계 T마다 한 행: {T, p(문자열 또는 None), n_minutes, valid(≥ 475 · 분포 소속), complete(= 480 · 결정 가능)}. T − 8h ≥ 시작 ∧ T ≤ 끝만."""
     out = []
     first = start_ms + A.H8_MS
     first += (-first) % A.H8_MS                                    # 다음 00/08/16 UTC 경계(8h 격자는 epoch 기준)
@@ -241,7 +241,7 @@ def build_prints(minutes: dict[int, Decimal | None], start_ms: int, end_ms: int)
             with decimal.localcontext(P_CONTEXT):                  # 합과 나눗셈 모두 지역 문맥(주변 정밀도 무관)
                 p = str(sum(use, Decimal(0)) / Decimal(n))
         out.append({"T": T, "p": p, "n_minutes": n, "valid": n >= PRINT_VALID_MIN,
-                    "final_minute_present": minutes.get(T - MIN) is not None})
+                    "complete": n == PRINT_MINUTES})
     return out
 
 
@@ -303,7 +303,7 @@ def analyze(raw: Path, expect_range: tuple[int, int]) -> tuple[list[BD.Bar1m], l
     minutes, prem_audit, prem_stops = analyze_premium(raw / "premium", start, end)
     prints = build_prints(minutes, start, end) if not prem_stops else []
     prem_audit |= {"prints": len(prints), "prints_invalid": sum(not p["valid"] for p in prints),
-                   "prints_valid_final_minute_missing": sum(p["valid"] and not p["final_minute_present"] for p in prints)}
+                   "prints_valid_incomplete": sum(p["valid"] and not p["complete"] for p in prints)}
     audit = {"price": price_audit, "premium": prem_audit, "window": "IS+warmup · 2023-10-02 → 2025-12-31 · trial #4"}
     if price_stop is not None or prem_stops:
         raise _StopWithAudit((price_stop.findings if price_stop else []) + prem_stops, audit)

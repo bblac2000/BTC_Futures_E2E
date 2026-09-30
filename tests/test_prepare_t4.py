@@ -70,7 +70,7 @@ def test_print_window_is_t_minus_8h_to_t_minus_1m_and_no_2026_print(tmp_path):
     assert [p["T"] for p in pr] == [DAY0 + H8, DAY0 + 2 * H8]         # 08:00 · 16:00 — 2026-01-01 00:00 없음
     assert max(p["T"] for p in pr) <= END
     p08 = pr[0]
-    assert p08["n_minutes"] == 480 and p08["valid"] and p08["final_minute_present"]
+    assert p08["n_minutes"] == 480 and p08["valid"] and p08["complete"]
     assert Decimal(p08["p"]) == (Decimal("0.0481") + Decimal("0.0001") * 479) / 480
     assert Decimal(pr[1]["p"]) != Decimal("0.0001")                  # 08:00 분(9.9)은 T=16:00 창의 첫 분
 
@@ -81,9 +81,12 @@ def test_475_of_480_rule(tmp_path, missing, valid):
     assert pr[0]["n_minutes"] == 480 - missing and pr[0]["valid"] is valid
 
 
-def test_valid_print_with_missing_final_minute_is_flagged(tmp_path):
-    pr = prints_of(tmp_path, day_rows(drop={479}))                   # 07:59 = T=08:00의 마지막 분
-    assert pr[0]["valid"] and not pr[0]["final_minute_present"]
+@pytest.mark.parametrize("drop,valid,complete", [(set(), True, True), ({479}, True, False), ({0}, True, False),
+                                                ({10, 11, 12, 13, 14}, True, False), (set(range(6)), False, False)])
+def test_distribution_membership_475_but_trigger_needs_all_480(tmp_path, drop, valid, complete):
+    """사용자 결정 2026-09-30: 분포 소속 = 유효(≥ 475) · 방아쇠 = 480분 전부(아니면 print_incomplete — 결정은 (d))."""
+    pr = prints_of(tmp_path, day_rows(drop=drop))[0]
+    assert (pr["valid"], pr["complete"]) == (valid, complete)
 
 
 def test_non_finite_close_is_an_absent_minute_not_a_stop(tmp_path):

@@ -10606,3 +10606,6 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Real session/thread ID: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`.
 > 
 > VERDICT: MERGE
+## 2026-09-30 — 트라이얼 #4 사용자 결정(단계 (a) 보고 뒤 · verbatim 요지)
+> "Decision 1 (item 9): distribution membership = valid print (≥ 475/480 minutes); TRIGGER requires all 480 minutes present at decision time. This is the literal reading of r3 §1 ... Reason code for a valid-but-incomplete print at decision: print_incomplete (distinct from print_invalid). Report-only: on pre-IS 2022–2023, count prints with 475–479 minutes ... Decision 2 (step b): GO. Append-only one line adding (3, 30) ... focused tests; trial #2 full regression as in step (b) of trial #3; trial #3 regression by scratch-directory comparison of run_arm outputs (all 8 runs) and P1 part outputs against the recorded hashes in docs/trials/trial_03/records/ ... Codex review of the diff; registry row stating that trial #3's run gate refuses from this commit by design ... Stop and report after (b) with both regressions' results before starting (c)."
+- 결정 1 반영: prepare_t4 인쇄 필드 `final_minute_present` → `complete`(480분 전부) · 감사 `prints_valid_incomplete` · 규약 A9 교체 · IS 이전 효과 크기(보정 zip · 2022~2023 인쇄 2,190): 480분 2,181 · 475~479분 1 · 475 미만 8.
