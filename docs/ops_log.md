@@ -10065,3 +10065,417 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > `HEAD` equals `origin/main`. The document hash is `0fde1da977001c1526f5844786af67a2adb7c6b887f74288aea93a2429ba1cf0` (28,828 bytes). The §1 table at lines 16–39 is 24 lines, 5,548 bytes, LF with a trailing newline, and hashes to `389f036e44ba907329d08a0d697dc16b504863b04d7d2f17bcfede19ac121580`. The review was read-only; I did not open market data.
 > 
 > VERDICT: MERGE
+
+## 2026-09-30 — 트라이얼 #4 구현 계획 **before-pass**(advisor + Codex r1~r4 → PROCEED)
+
+> 사용자(원문 요지): "Anchor #70 accepted. Start trial #4 implementation with the same step structure and stop points as trial #3. Constitution v1.5 governs; t4_ namespace throughout; no edits to any trial #3 file or the #48 snapshot. ... (b) Shared layer: expected NO change. If any shared file must change, stop and report before touching it ... Begin with the plan before-pass and step (a); stop and report after (a)."
+
+- 계획 r1 → r4(scratchpad 원문은 아래) · Codex r1 FIX-PLAN-FIRST → r2 FIX-PLAN-FIRST → r3 FIX-PLAN-FIRST → **r4 PROCEED**.
+- **공유 런타임 발견(Claude Code grep · Codex r2 확인)**: `sizing/config.py` REGISTERED_LEVERAGE_BANDS = ((50,100),(10,30)) — (3,30) 없음 → SizingLimits·RegimeSizing 거부 · 단계 (b)에 공유 파일 한 줄(추가 전용) + 트라이얼 #2·#3 회귀 필요 → (a) 정지 보고에서 사용자 결정.
+
+### 입장표(요지)
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor Q1 | MD5 · OOS 272일 · spawn 접두 성질 · 트라이얼 #3 SR 픽스처 · 시드 역순 주석 | ✅ | anchor.py · 시험 |
+| advisor Q2 · Codex Q2 | import 말고 복사 | ✅ | prepare_t4에 복사 · 정적 시험 |
+| advisor Q3 · Codex Q3 | #54 규칙 = 구현 규약(창 밖) | ✅ | 규약 10 |
+| advisor Q4 · Codex 10 | #69 _meta 정정 행 | ✅ | 레지스트리 #71 · 규약 3 |
+| advisor Q5 · Codex 3 | 비유한 = 없음 · 중복은 무조건 중단 | ✅ | 규약 7 · 시험 |
+| advisor Q6 · Codex Q6 | Decimal 지역 문맥 | ✅ | 규약 8 · 시험 |
+| advisor Q7 | 사이징 바닥 grep | ✅ | 발견(위) |
+| Codex r1 BLOCKER 1 / r2 A / r3 1·2 | P1 실행기 | ✅ | 계획 C1″(국소 실행기 · 수수료 차감 · 체결 분 버킷 제외 · 만기 시가) — (e) |
+| Codex r1 BLOCKER 2 | 인쇄 경계 | ✅ | T ≤ IS_END · 시험 |
+| Codex r1 4 · r2 C | 프리미엄 계약 · 머리 행 · 마지막 분 | ✅ | 규약 7~9 · 시험 |
+| Codex r1 5·6·7·8·9 · r2·r3 부분 | P1-timing · 슬리피지 시험 · (g) 계약 · 6일 조건 · 판정기 · 손익 항등식 | ✅ | 계획 r4 · 해당 단계에서 |
+| Codex r4 MINOR | loss_remaining := loss 명명 | ✅ | (f) 규약에서 |
+
+
+#### 계획 t4_impl_plan_r1
+> # Trial #4 implementation plan r1 (anchored #70 · r3 0fde1da9… · tc_v3 389f036e… · constitution v1.5 · t4_ namespace)
+> Standing: no edits to any trial #3 file or #48 snapshot; shared layer expected unchanged; per-step before/after passes; conventions
+> file docs/trials/trial_04_conventions.md grows per step (diff shown to user each step); counts only until evaluator; push each step.
+> 
+> ## Whole-plan outline (step (a) detailed below)
+> (a) strategies/trial04/{__init__,anchor}.py + backtest/prepare_t4.py (capture/analyze/build/verify/pinned loaders for premium index + mark
+>     1m + funding + klines) + tests (synthetic only). Stop & report.
+> (b) Shared layer: expected no change. Known NON-shared guard to extend: tests/test_slippage_param.py allows non-default slippage_rate
+>     only under strategies/trial03/ → add strategies/trial04/ allowance (test-only change, reported). If any shared code must change → stop.
+> (c) Time exit: import strategies.trial03.exit_schedule.TimeExitSchedule(hold_min=7200) — no trial #3 edit (it is parameterized); do NOT use
+>     trial #3's busy_check (raises PositionBusyError — busy is normal in t4). Tests: 7,200-bar clock, exit-bar order (funding → liquidation
+>     by open → time_exit), 18-settlement half-open admissibility (t, t+6d], boundary-minute fill does not pay that boundary.
+> (d) strategies/trial04/{config,strategy,harness,run}.py: state machine IDLE → ENTRY_PENDING → IN_POSITION → WAIT → IDLE; position_busy
+>     recorded (normal); reason codes per r3 §7-3; B2 via shared sizing with L ∈ [3,30] passed as a trial-local SizingLimits; determinism
+>     + per-arm golden ledgers (synthetic).
+> (e) backtest/p1_t4.py: port of trial #3 (a)–(f) with h = 7,200, dir_k randomized, pair_k source sl_dist, B2 [3,30], no SL, >10 fail →
+>     discard; report-only same-direction timing P1 children 1000–1999; P2 +1/+3 prints on the shared 18-settlement sample; P3 sign flip;
+>     stream-identity tests. Reuses backtest/p1_core (shared, unchanged).
+> (f) backtest/evaluate_t4.py + verdict_t4.py: N 8, G0 n ≥ 48 ∧ n/(1+4·max(ρ̂,0.15)) ≥ 30, §7-2 sign-first (20/5/10 bps), SR* over 8,
+>     survival, flat, run-once, freeze set, report incl. price-vs-funding P&L, realized L distribution, p_T sign at entry, P1 liquidated
+>     draw ratio.
+> (g) HALF 1 freeze: t4_provenance/t4_stages analogues (freeze keys t4_ namespace, own manifest), conventions row, freeze row, push, stop.
+> 
+> ## Step (a) detail
+> A1 strategies/trial04/anchor.py — ONLY place for anchor constants; imports no other trial's anchor:
+>    ANCHOR_CREATED_TIME "2026-09-30T10:17:47.203Z", ANCHOR_DRIVE_FILE_ID "1hqUPOXg3LKarOjbhiyE1DYYOeAdDZvGc", PREREG_PATH r3,
+>    PREREG_SHA256 0fde1da9…, PREREG_SIZE 28,828, TC_V3_LINES (16, 39), TC_V3_SHA256 389f036e…; N_TRIALS 8, ALPHA 0.05/8, LEVEL,
+>    CI_LO_Q = ALPHA/2 = 1/320, CI_HI_Q; PINNED_SR = (#1A, #1B, #2A, #2B, #3L −0.23689701015198752, #3S −0.19165332011747566) with
+>    report SHA256s (trial #3 41f789fc…) cross-checked against tests/fixtures and docs/trials/trial_03/records/evaluation/report.json;
+>    MASTER_SEED 20260930; BOOTSTRAP (…,1) spawn 8, streams IS {gross_S 0, net_S 1, gross_L 2, net_L 3} OOS 4–7 (r3 §3-1 order: S first);
+>    P1_SEEDS {"S": (…,2), "L": (…,3)} (r3 §4 — note: opposite of trial #3's L=2/S=3), P1_DRAWS 1000, P1_TIMING_CHILD_OFFSET 1000
+>    (spawn(2000)[1000+d]), P1_SLOT_ATTEMPTS 1000, P1_FAIL_MAX 10; RULES_SNAPSHOT_DIR docs/trials/trial_04_rules_snapshot + 4 hashes (#69);
+>    DATA_START 2023-10-02, WINDOW_START 2024-01-01, IS_END 2025-12-31T23:59:59.999Z, OOS_START, OOS_END = oos_end_from_created(created)
+>    = 2026-09-29T23:59:59.999Z (mechanical).
+>    Tests: doc bytes/size/tc_v3 span recomputed from the file; constants; seeds; snapshot hashes; no other-trial anchor import;
+>    OOS_END mechanical; pinned SR values vs fixtures.
+> A2 backtest/prepare_t4.py (new; imports prepare_t2 (shared) and, read-only, selected prepare_t3 functions — or copies them: see Q2):
+>    - Range = [DATA_START, IS_END]; OOSGuard on any other range; output dir must be under var/t4/.
+>    - capture(raw, client, archive, fetch_premium, start, end): archive rows bounded (stop at first row past end), fill ranges, REST klines +
+>      markPriceKlines for fill ranges (endTime ≤ end), REST funding (endTime ≤ end), premium monthly zips for months 2023-10 … 2025-12
+>      ONLY (list derived from the range; 2026 never requested) + .CHECKSUM saved raw.
+>    - analyze: T2.analyze for bars/fundings/kline_daily (funding handled as below) + premium: CHECKSUM mismatch / missing month / zip ≠ 1
+>      CSV / bad header / unparseable open_time / duplicate open_time (across files) → SourceStop (data-quality stop, audit written); rows
+>      with open_time outside [start, end] dropped BEFORE value parsing; value not a finite decimal → minute absent (counts toward the 475
+>      rule), not a stop [PROPOSED — mirrors trial #3's OI "unusable = absent" rule].
+>    - print builder: for every settlement T with T−8h ≥ start (00/08/16 UTC) and T ≤ end+1ms boundary: minutes = bars with open_time in
+>      [T−8h, T−1m] (480); valid ⇔ ≥ 475 present; p_T = Decimal mean of present closes (string, default 28-digit context); output
+>      premium_prints.json [{T, p, n_minutes, valid}] + audit counts (invalid prints, per-month minute coverage).
+>    - Funding warm-up rows with empty markPrice (the 88 Oct-2023 rows): reuse trial #3's #54 rule (drop iff markPrice == "" ∧ int
+>      fundingTime < WINDOW_START; audit count/range/line SHA256) — by importing prepare_t3.funding_view read-only, or a t4 copy (Q2).
+>    - build → prepared/{bars_1m.parquet, funding.json, kline_close_daily.json, premium_prints.json, source_audit.json, manifest.json};
+>      manifest hashes every raw file; verify_rebuild; pinned loaders later ((g)) with t4 pins.
+>    - Tests (synthetic): window (T−8h, T] (bar opening at T excluded, bar opening T−8h included); 474 → invalid, 475 → valid; duplicate
+>      minute across two monthly files → stop; checksum mismatch → stop; missing month → stop; rows outside range dropped before parse;
+>      months list for the IS range ends at 2025-12 (no 2026); non-finite value → absent; Decimal mean exactness; rebuild identity;
+>      OOS guard on ranges; output dir guard; empty-mark warm-up funding handled per #54.
+> Questions for reviewers: (Q1) anything in A1 missing vs trial #3's anchor module and the #70 row; (Q2) import read-only helpers from
+> prepare_t3 (frozen trial #3 module; coupling) vs copy into prepare_t4 (duplication) — which is safer for provenance/freeze;
+> (Q3) the #54 funding rule for t4: r3 §5 says the signal does not use funding rates; is reusing the drop rule a pre-registration matter
+> or an implementer convention (the rows are warm-up, never settled); (Q4) the #69 snapshot files carry _meta.purpose "trial #3 runtime rules
+> (registry #48)" because the t3 script wrote them — hashes are pinned in #70 so bytes cannot change; is a correction registry row +
+> conventions note sufficient; (Q5) premium non-finite value → absent vs stop; (Q6) Decimal mean vs float; (Q7) anything in (b)–(g)
+> that must be decided now.
+
+#### 계획 t4_impl_plan_r2
+> # Trial #4 implementation plan r2 = r1 + advisor + Codex (01a0f1fa-21ed-73b0-8a96-4c6b15c28016) FIX-PLAN-FIRST
+> NEW FACT (not seen by Codex r1): sizing/config.py REGISTERED_LEVERAGE_BANDS = ((50,100),(10,30)) and SizingLimits.__post_init__ raises for
+> any other leverage_range → B2 with L ∈ [3,30] (r3 · v1.5 #65) needs an append-only (3,30) entry in a SHARED RUNTIME file. Per the user's (b)
+> rule: reported at the (a) stop, NOT touched; (b) then = that one append-only line + trial #2 and trial #3 full regressions (bit-identical)
+> + Codex review, only on the user's go.
+> 
+> C1 P1 EXIT (Codex BLOCKER 1): trial #4 does NOT use placebo_exec.run_time_exit (closes at t+h−1). backtest/p1_t4.py has a local executor
+>    that drives the canonical engine (paper engine via engine_replay) with a synthetic EntryIntent at minute t and TimeExitSchedule(7200)
+>    (imported unchanged from strategies/trial03/exit_schedule) so the due bar t+7200 is processed as base: ① funding ② liquidation-by-open
+>    ③ time_exit at open; SL absent (no stop in the intent). Local placement adapter: every slot has h = 7,200 regardless of the source
+>    trade's realized duration (source sl_dist only via pair_k). If engine APIs cannot express "no SL" or the due-open exit without a shared
+>    edit → stop at (b). Tests: early-stopped source still gives h 7,200; due-minute funding paid before exit; open-gap liquidation; eligibility.
+> C2 PRINT BOUNDARY (BLOCKER 2): prints only for T ≤ IS_END (last IS print 2025-12-31 16:00); the 2026-01-01 00:00 print is not emitted on
+>    the IS path; test max(T) ≤ IS_END and that no decision can come from a later print.
+> C3 DUPLICATES (MAJOR 3): one global set of in-range open_time across all files; any second occurrence → SourceStop (same file, cross-file,
+>    identical or not, valid or non-finite); checked BEFORE value classification; tests for all three cases.
+> C4 PREMIUM CONTRACT (MAJOR 4): distinct series from premiumIndexKlines 1m only (never bars_1m.parquet / mark). CSV 12 columns
+>    (open_time, open, high, low, close, volume, close_time, quote_volume, count, taker_buy_volume, taker_buy_quote_volume, ignore); header
+>    row optional (absent in older months, present in newer) — any other non-numeric first field → stop; open_time integer ms, % 60,000 == 0,
+>    close_time == open_time + 59,999 else stop; close = finite Decimal else the minute is ABSENT (counts against 475/480; audited by month).
+>    Print p_T uses minutes with open_time ∈ [T − 8h, T − 1m]; valid ⇔ ≥ 475 usable; p_T = Decimal sum / count in a LOCAL
+>    decimal.Context(prec=28, rounding=ROUND_HALF_EVEN), serialized with str() of the normalized quotient — no binary float. Audit per print:
+>    n_minutes, final-minute (T − 1m) present or not. Backtest availability = present in the pinned archive (no receipt times exist);
+>    the forward T+5m receipt rule (r3 §3-3) is implemented and tested in the forward stage, not in (a).
+> C5 P1-TIMING (MAJOR 5): trial #4 local draw routine sharing placement/occupancy with the gate draw but with direction fixed by arm and NO
+>    dir_k call (call order slot(pair) → placement); streams children 1000–1999 of spawn(2000); stream-identity tests for children 0, 999,
+>    1000, 1999 and the spawn(2000)[:1000] == spawn(1000) prefix property; timing output never read by the verdict.
+> C6 SLIPPAGE GUARD TEST (MAJOR 6): tests/test_slippage_param.py allowlist extended narrowly to strategies/trial04/ and backtest/*_t4.py using
+>    the trial #4 config constant (TC_V3.slippage) — shared TEST edit, done in (d)/(e) and reported.
+> C7 (g) CONTRACT (MAJOR 7): files: backtest/{prepare_t4, p1_t4, p1_t4_run, t4_outputs, t4_provenance, t4_stages, evaluate_t4, verdict_t4}.py,
+>    strategies/trial04/*.py; artifacts: prepared/{bars_1m.parquet, funding.json, kline_close_daily.json, premium_prints.json,
+>    source_audit.json, manifest.json} + raw/{archive rows, fill_ranges, rest klines/mark, funding.jsonl, premium/*.zip + *.CHECKSUM} all in the
+>    manifest; pins = manifest sha, raw inventory, prepared hashes incl. premium_prints.json; run/P1 summaries carry tc_v3 and #69 hashes;
+>    freeze set = t4 files + every shared module and the imported strategies/trial03/exit_schedule.py; t4_ row keys (own namespace, own
+>    manifest); sequence C1 conventions → H → manifest+row → push → capture → pins+row → verify → runs → P1 → merge → evaluate once.
+> C8 SIX-DAY PREDICATE (MAJOR 8): strategies/trial04/eligibility.py — one function used by strategy, P1, P2, P3: mark minutes [t, t + 6d]
+>    all present ∧ funding boundaries in (t, t + 6d] = 18, each with exactly one validated settlement ∧ the 14 UTC days before day(t)
+>    complete ∧ t ≥ WINDOW_START ∧ t + 6d ≤ IS_END; P1 occupancy [t, t + 5d); test boundary-minute fill, missing interior minute, missing
+>    18th settlement, IS end; synthetic grid: strategy and P1 accepted start sets identical.
+> C9 EVALUATOR (MAJOR 9, fixed now for (f)): both arm SR̂ computed first; SR* = expected_max_sr(6 pinned + defined {SR̂_S, SR̂_L}, n_trials
+>    8); bootstrap V-day blocks, streams IS gross_S 0 · net_S 1 · gross_L 2 · net_L 3, 10,000 resamples; undefined quantity never passes;
+>    priority IS(0)→IS(5) as r3 §7; §7-2 sign-first then 20/5/10 bps; IS PASS only (ACCEPT forward-only); ledger identities as trial #3 +
+>    per-trade price P&L + funding P&L = net identity; P2 keeps the original decision's SL price and sl_dist; P3 mirrored SL, funding sign
+>    follows position.
+> C10 #69 _meta (MINOR 10): append-only correction row + conventions note (bytes untouched; identity = path, captured_at 2026-09-30T10:16Z,
+>    hashes; loader reads `response` only) + test that trial #4 load_rules asserts the #69 hashes and taker 0.0005 and ignores _meta.
+> C11 ANCHOR (MINOR 11 + advisor): full digests (doc SHA256, MD5 b3b206c8…, size 28,828, tc_v3 lines 16–39 LF + trailing newline), six SR
+>    values with three source report hashes (fixtures trial01/02 exist; add tests/fixtures/trial03_sr_pinned.json from
+>    docs/trials/trial_03/records/evaluation/report.json with _meta.report_sha256 41f789fc…), BOOTSTRAP_RESAMPLES 10,000, exact ms constants,
+>    OOS_END 2026-09-29T23:59:59.999Z = 272 OOS days (not trial #3's 271), anchor comment that S=k2/L=k3 and S-first streams are the reverse of
+>    trial #3; oos_range entry point gated by a user-decision registry row (inert).
+> C12 COPY NOT IMPORT (Q2): prepare_t4 copies read_archive_rows_bounded and funding_view from prepare_t3 @ 177e7f7 (provenance line, bound to
+>    trial04.anchor, audit label "trial #4 convention"); imports only shared modules; static test: nothing under strategies/trial04/ or
+>    backtest/*_t4.py imports strategies.trial03.anchor/config/strategy/harness (exit_schedule allowed, frozen in t4's set).
+> C13 CONVENTIONS before capture (Q3, Q5): docs/trials/trial_04_conventions.md starts in (a) with: warm-up empty-mark funding drop (only
+>    markPrice == "" ∧ int fundingTime < WINDOW_START; in-window empty mark still stops; audit count/range/line SHA256/raw hash; argument: never
+>    settled or checked); non-finite premium close = absent minute; header optional; Decimal context; print boundary T ≤ IS_END; #69 _meta note.
+>    Registry conventions row at (g) as trial #3 did; user sees the diff at each step.
+> C14 GUARDS: (a) synthetic tests only; prepare_t4 never points at var/t4_calib/; BTCUSDT_1m_2024.csv and later are never opened in (a); IS
+>    capture months 2023-10 … 2025-12 only (derived from the range); out-of-range rows dropped before value parsing.
+
+#### 계획 t4_impl_plan_r3
+> # Trial #4 implementation plan r3 = r2 + Codex re-check (01a0f1fa…) FIX-PLAN-FIRST
+> C1′ P1 EXECUTOR (BLOCKER A): trial-local executor in backtest/p1_t4.py, modelled on placebo_exec's restoration pattern but with its own
+>    clock: (1) canonical B2 sizing decision (shared sizing.size_entry via the same call path the base uses) at start minute t with the
+>    pair_k sl_dist and the drawn/fixed direction, mark open[t] as reference, 6 bps adverse fill; (2) Engine.restore_position with an
+>    UNREACHABLE monitoring SL (so no stop can fire — P1 has no SL); (3) minute loop t … t+7,200 driving the canonical engine APIs in the
+>    base order: at each minute ① settle any funding in that minute ② liquidation check (open-gap at the due minute, intrabar otherwise)
+>    ③ at minute t+7,200: close at OPEN (time_exit) after ①–②; due clock = entry_ms + 7,200 min set locally (TimeExitSchedule.observe is not
+>    fed a restoration — the local clock is tested to equal the base's fill + 7,200). Synthetic tests: early-stopped source → h 7,200;
+>    due-minute funding before exit; open-gap liquidation at due minute; intrabar liquidation mid-hold; base vs P1 exit instants equal for
+>    the same t. If any step needs a shared runtime edit → stop at (b).
+> C4′ PREMIUM HEADER + FINAL MINUTE (MINOR C): a header row is accepted only if it equals exactly the 12 names in order (open_time, open,
+>    high, low, close, volume, close_time, quote_volume, count, taker_buy_volume, taker_buy_quote_volume, ignore); anything else non-numeric
+>    → stop. A print with ≥ 475 usable minutes is VALID (enters the trailing distribution) but if its final minute (open T − 1m) is absent
+>    it yields NO backtest decision (`final_minute_missing`, r3 §1 availability: the window's closing bar is not in the record at T + 1m);
+>    audited separately from invalid prints. (Reading of r3 §1 recorded in conventions for the user.)
+> C7′ FREEZE SET (enumerated, for (g)): backtest/{prepare_t4, p1_t4, p1_t4_run, t4_outputs, t4_provenance, t4_stages, evaluate_t4, verdict_t4,
+>    stats, stats_t2, p1_core, placebo_exec, engine_replay, returns, data, replay, prepare_t2}.py + strategies/trial04/*.py +
+>    strategies/trial03/exit_schedule.py + paper/*.py + sizing/*.py (incl. sizing/config.py) + exchange/*.py + pyproject.toml + uv.lock;
+>    fixed paths must exist at H; manifest = per-file SHA256; t4_ keys.
+> C8′ ELIGIBILITY FOR P2 (C8 PARTIAL): the six-day predicate is evaluated at the ORIGINAL base fill t for base, P2 (+1 / +3 print delays use
+>    the same admitted event — the extra 24 h is already inside [t, t+6d]) and P3; P1 evaluates it at its own random start t. Test: the
+>    predicate returns identical results for identical candidate t whether called from the strategy or from P1 (same function, same inputs);
+>    no claim that signal starts and P1 grid sets coincide.
+> C9′ P&L DECOMPOSITION (MAJOR B): per trade, in the engine's execution decimal context: price_pnl = qty × (exit_fill − entry_fill) × side
+>    (fills include slippage) · slippage_cost = qty × |fill − reference mark| per leg (reported, already inside price_pnl) · funding_cf = Σ
+>    signed settled funding · commissions = entry + exit taker · for liquidation: exit leg = engine _liquidate loss formula (liquidation fee
+>    included) replaces price_pnl + exit commission. Identity tested: wallet_after − wallet_before == price_pnl + funding_cf − commissions
+>    (ordinary exits) and == engine liquidation loss identity (liquidations); synthetic tests for both.
+> Sizing band (confirmed by Codex): shared runtime change required — append (3,30) to REGISTERED_LEVERAGE_BANDS only (PERMITTED_LEVERAGE and
+>    existing bands unchanged) + focused tests (SizingLimits(3,30) and a 3–30 RegimeSizing construct; unregistered bands still rejected) +
+>    trial #2 and trial #3 regressions (existing golden/synthetic paths) — reported at the (a) stop; executed only on the user's go in (b).
+> Everything else as r2.
+
+#### 계획 t4_impl_plan_r4
+> # Trial #4 implementation plan r4 = r3 + Codex re-check 3 (01a0f1fa…)
+> C1″ P1 executor, completed: (1) quote adverse fill at mark open[t] (6 bps), sizing SL from pair_k sl_dist, canonical size_entry (B2,
+>    L ∈ [3,30]); (2) Engine(PAPER).restore_position with monitoring SL unreachable (long 0 · short far above) exactly as placebo_exec does;
+>    (3) entry_commission = qty × quoted_fill × pinned taker, stored in restored state, wallet := E_ref − entry_commission in the engine's
+>    execution decimal context (same as placebo_exec); (4) funding: records whose minute bucket == t's bucket (exact AND offset timestamps
+>    in that minute) are EXCLUDED (the fill's boundary is not paid — r3 decision 17); later buckets settle via on_funding before that
+>    minute's processing, including the due-minute bucket; (5) minutes t … t+7,199: on_funding(if any) → on_bar (intrabar liquidation
+>    before the unreachable SL); (6) due minute t+7,200: on_funding(if any) → liquidate_if_open_beyond(open) → close_now(open, TIME_EXIT) —
+>    on_bar is NOT called for the due bar (same sequence as engine_replay's due-bar path). Tests: initial wallet = E_ref − entry_commission;
+>    entry-boundary fill with exact and offset funding timestamps not paid; due-minute funding paid before exit; open-gap liquidation at
+>    the due minute; intrabar liquidation mid-hold; early-stopped source still h 7,200; P1 exit instant == base exit instant for the same t.
+> C9″ Signed identities (engine semantics: paid = signed_qty × mark × rate · wallet −= paid): funding_cf = −Σ paid · ordinary exit:
+>    wallet_after − E_ref = price_pnl + funding_cf − entry_commission − exit_commission (price_pnl at execution fills; slippage already inside
+>    it and reported separately as Σ qty × |fill − reference mark|) · liquidation: loss = N/L − entry_commission − Σ paid +
+>    liquidation_fee_amount (engine _liquidate) applied ONCE to the already-adjusted wallet: wallet_after = (E_ref − entry_commission − Σ
+>    paid) − loss_remaining per engine — tested for long and short, funding of both signs, and a liquidation.
+> Everything else as r3 (sizing band change reported at the (a) stop; executed only on the user's go).
+
+### advisor 원문(verbatim)
+> Advisor half of the plan before-pass. Verdict: **PROCEED with the amendments below** — none changes r3, all are implementation-side.
+> 
+> **Q1 — anchor module.** Plan is complete against #70 with four additions: `PREREG_MD5` (#70 records it; trial #3's anchor didn't, but the row does — pin what the row pins); `OOS_END` test value **2026-09-29T23:59:59.999Z, 272 OOS days** (not 271 — recompute, don't copy trial #3's assertion); `P1_TIMING_CHILD_OFFSET = 1000` with a test that `SeedSequence(seed).spawn(2000)[:1000]` produces the same states as a fresh `spawn(1000)` — that prefix property is what makes the report-only run unable to disturb the gate P1; and a pinned-SR fixture `tests/fixtures/trial03_sr_pinned.json` generated from `docs/trials/trial_03/records/evaluation/report.json` with its SHA `41f789fc…` in `_meta`, mirroring the trial01/02 fixtures. Confirm the stream order literally from r3 §3-1 (`gross_S 0 · net_S 1 · gross_L 2 · net_L 3`) and §4(e) (S = k2, L = k3) — you have it right, and the anchor comment should say it's the reverse of trial #3 so nobody "fixes" it.
+> 
+> **Q2 — import vs copy: copy.** `prepare_t3.funding_view` reads `A.WINDOW_START_MS` from *trial #3's* anchor; importing it pulls another trial's anchor into trial #4's data path through the back door — exactly what your anchor test forbids at the front door. Same for `read_archive_rows_bounded`. Copy both into `prepare_t4` with a provenance line ("copied from backtest/prepare_t3.py @ 177e7f7, unchanged except the anchor import") and bind them to `trial04.anchor`. Import only the designated shared layer (`prepare_t2`, `data`, `engine_replay`, `placebo_exec`, `p1_core`, `sizing`, `paper`, `exchange`). Widen the static test: no file under `strategies/trial04/` or `backtest/*_t4.py` imports `strategies.trial03.anchor` or `strategies.trial03.config`. Whatever trial-#3 module trial #4 *does* import (the user allowed `exit_schedule` in (c)) must appear in trial #4's freeze set in (g) so t4's fingerprint covers it — say that in the plan now.
+> 
+> **Q3 — #54 rule for t4: implementer convention, pre-committed in (a).** Positions exist only ≥ WINDOW_START, admissibility validates settlements in `(t, t+6d]` with t ≥ WINDOW_START, and the signal reads premium, not rate — so a warm-up funding row can never be settled or checked. Dropping the empty-mark rows before WINDOW_START cannot move a number. Write it as a conventions item with that three-line argument and the same audit fields (count/range/line SHA) as #54; it becomes the first entry of `docs/trials/trial_04_conventions.md`.
+> 
+> **Q4 — #69 `_meta.purpose`: correction row + conventions note is sufficient, and is the only correct remedy.** Bytes are pinned by #70; a recapture would be a new snapshot, not a fix. The row should state: text inherited from the t3 script; identity established by #69's `captured_at_utc` 2026-09-30T10:16Z vs #48's 2026-09-29T09:22Z and by the four hashes; `rules_from_snapshot_dir` reads `response`, never `_meta`. Add a test in (a) that t4's `load_rules()` asserts the #69 hashes and *ignores* `_meta`.
+> 
+> **Q5 — non-finite premium value → absent, mirroring trial #3's OI rule; duplicates → stop even when identical.** r3 decision 9 says "same minute twice = stop", full stop — don't import trial #3's "merge identical duplicates" leniency. Also handle a header row present or absent (the monthly files vary by year — the calibration script already special-cased this), and drop out-of-range rows before parsing values.
+> 
+> **Q6 — Decimal.** Sum the 8-dp strings as Decimal, divide at the default 28-digit context, store the string; quantiles then run on `float(p)` with numpy linear as r3 says. State both steps in the conventions item so a second implementation lands on the same bytes.
+> 
+> **Q7 — decide now, before (a) closes:**
+> - **Sizing floor.** Before writing a line of (d), grep `sizing/` for any hard minimum-leverage assertion (from #30's 10x era) independent of `SizingLimits.leverage_range`. If one exists, (b)'s "expected no change" is false and the user must hear it *now*, not in (d). One grep, report the result in the (a) report.
+> - **P1 exit mechanism.** r3 decision 11 exits P1 at `t + 7,200` bar *open* with funding first; trial #3's P1 exited at `t+h−1` *close* through `placebo_exec.run_time_exit`. If (e) cannot get the open-exit from the shared executor without changing it, that's a shared-layer change → the user's stop condition. Decide the mechanism in the plan: drive P1 draws through the same replay + `TimeExitSchedule(7200)` path the base uses (a synthetic entry at t), not through `run_time_exit`. Name this in the plan text before Codex's verdict so it's reviewed.
+> - **Slippage guard test** — your (b) note is right; it's a test allowlist edit, report it as such.
+> 
+> **Constraints the brief implies:** the calibration zips in `var/t4_calib/` (2021-10…2023-12) are *not* the trial's raw — HALF 2 captures its own 2023-10…2025-12 set with capture-time hashes (L12); never point `prepare_t4` at the calibration directory. In (a), synthetic tests only — no request, file read, or fixture that can touch 2024+; the archive's KST-year files make `BTCUSDT_1m_2024.csv` off-limits even for a "just the header" read. Output under `var/t4/` (already gitignored).
+> 
+> Sequence: wait for Codex; reconcile against this; if PROCEED, implement (a) with its own before/after passes as in trial #3, show the conventions-file diff, stop after the (a) report. Nothing here blocks starting; Q2 and the two Q7 checks are the ones a second reviewer would call omissions if they surface later.
+
+### Codex 원문 1(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> # Trial #4 plan r1 — read-only BEFORE-pass review
+> 
+> **Session/thread ID:** `01a0f1fa-21ed-73b0-8a96-4c6b15c28016` (`CODEX_THREAD_ID`). The companion Claude session is `db9ba374-0a81-45cc-99f7-dab6bbef9b2c`.
+> 
+> I reviewed the [implementation plan](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md) against the anchored [r3 preregistration](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md), [registry rows #69–#70](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:77), the trial #3 code and [conventions](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md), [CLAUDE.md](/home/cms/project/BTC_Futures_E2E/CLAUDE.md:40), and constitution v1.5. I made no edits, ran no backtest, and opened no market data dated 2024-01-01 or later.
+> 
+> ## Findings, ranked
+> 
+> ### BLOCKER
+> 
+> 1. **P1’s registered exit cannot use the trial #3 shared execution path as it stands.** Plan lines 16–18 say to reuse `p1_core` unchanged, but leave the execution path unspecified. [Trial #3’s `placebo_exec.run_time_exit`](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:58) exits at the **close of minute `t+h−1`**, after testing that minute’s intrabar liquidation; [trial #4 §4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:88) requires the **open of minute `t+7200`**, with that minute’s funding first and an open-gap liquidation check. This changes both P1 returns and settlements. Also, [`p1_core.SourceTrade.h`](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:33) derives `h` from each source trade’s realized duration; trial #4 fixes every P1 slot at 7,200 minutes, including sources stopped early. **Fix:** specify a trial #4 local P1 placement adapter with fixed `h=7200` and a trial #4 local executor using the canonical engine at the due bar’s open. Test early-stopped source trades, due-minute funding, open-gap liquidation, and the 6-day eligibility span. If canonical engine APIs cannot support this without a shared runtime edit, stop at step (b) as the plan promises. [Plan (b), (e)](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:8); [r3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:29).
+> 
+> 2. **The proposed print builder crosses the IS timestamp boundary.** Plan lines 46–48 permit `T ≤ end+1ms`. For the registered IS end, that emits a print stamped **2026-01-01 00:00**, outside the IS range, even though its input minutes are in 2025. The plan also promises an OOS guard and pinned-loader range checks. **Fix:** emit IS prints only for `T ≤ IS_END` (the last is 2025-12-31 16:00), or explicitly represent the boundary print as an untradeable, separately guarded carry record. The simpler IS contract is to omit it. Test that no prepared print timestamp exceeds `IS_END`, and that no decision or fill can arise from the excluded boundary. [Plan A2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:38); [r3 §1 window boundary](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:36); [trial #3 pinned-loader precedent](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:379).
+> 
+> ### MAJOR
+> 
+> 3. **“Duplicate across files” is narrower than the registered duplicate-minute stop.** R3 says the *same minute twice* stops the dataset; plan A2 names duplicates “across files,” and its tests only name that case. Two rows in one CSV, or one valid and one non-finite row for the same minute, must also stop before value classification. **Fix:** keep a global set of every in-range `open_time`, reject the second occurrence regardless of file or value, and test same-file, cross-file, and mixed-validity duplicates. [Plan A2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:42); [r3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:20).
+> 
+> 4. **The premium input and print availability need an explicit data contract.** Plan line 46 calls the selected minutes “bars,” which could mean the prepared mark bars. The registered print uses **premiumIndexKlines closes**, independently of mark-bar completeness; its final premium bar must be present at decision time, while 475/480 controls print validity. **Fix:** name a distinct premium series, define its CSV header and exact close/open-time fields, require minute alignment and a finite Decimal close, and assert that print construction never reads `bars_1m.parquet`. Record separately a missing final premium minute, an invalid print, and an otherwise valid print whose bars were unavailable at the decision cutoff. The latter must produce no decision under §1’s availability rule. [Plan A2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:46); [r3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:19).
+> 
+> 5. **The report-only same-direction P1 is not supplied by unchanged `p1_core`.** [`p1_draw_generic`](/home/cms/project/BTC_Futures_E2E/backtest/p1_core.py:104) always draws `dir_k`. R3 explicitly forbids that RNG call for P1-timing and assigns children 1000–1999. **Fix:** define a trial #4 local draw routine that shares the occupancy and sampling rules where possible, fixes direction by arm, and draws only `pair_k` before placement. Add stream identity tests for both modes, including children 0, 999, 1000, and 1999. The timing result must stay outside the gate. [Plan (e)](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:16); [r3 §4](/home/cms/project/BTC_Futures_E2E/docs/trial_04_preregistration_r3.md:88).
+> 
+> 6. **The planned shared test change is incomplete.** [`test_slippage_param.py`](/home/cms/project/BTC_Futures_E2E/tests/test_slippage_param.py:160) permits a non-default `slippage_rate` in `strategies/trial03/`, tests, or `backtest/*_t3.py` with exactly `TF_V1.slippage`. Adding only `strategies/trial04/` still rejects a trial #4 P1 executor in `backtest/p1_t4.py` or a trial #4 backtest wrapper. **Fix:** extend the test’s allowlist narrowly to trial #4 strategy files and trial #4 backtest files using the trial #4 config constant; retain rejection of arbitrary rates elsewhere. This is a shared **test** edit, not a shared runtime edit. [Plan (b)](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:8).
+> 
+> 7. **Step (g) is too abbreviated to secure the new premium input.** “`t4_provenance/t4_stages` analogues” does not name the trial #4 output reader, P1 CLI/merge artifacts, premium print pin, raw ZIP and CHECKSUM inventory, or the exact freeze set. Trial #3’s gate binds those interfaces, hashes, receipt, and run outputs together. **Fix:** before implementation, list the trial #4 files and artifact schemas, include `premium_prints.json` and every raw ZIP/CHECKSUM in the manifest and pin checks, bind run/P1 summaries to the `tc_v3` and #69 hashes, and state the C1→H→manifest/registry→push→capture→pin→verify→runs→P1→one evaluation sequence. Include every imported trial #3 or shared module that can affect results in the freeze set. [Plan (g)](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:22); [r3 §4-1, §10–11](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:96); [trial #3 provenance precedent](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:27).
+> 
+> 8. **The six-day sample rule needs a shared, precise predicate now.** The plan mentions 18 settlements in (c) and “shared 18-settlement sample” in (e), but does not fix the full predicate across base, P1, P2, and P3. It is **mark minutes `[t,t+6d]`**, funding boundaries **`(t,t+6d]`**, prior 14 complete UTC days, and `t+6d ≤ IS_END`; funding at a boundary-minute fill is excluded. P1 occupancy remains `[t,t+5d)`. **Fix:** write one trial #4 eligibility specification and test it at a boundary fill, a missing interior mark minute, a missing eighteenth settlement, and the IS end. The strategy and P1 may implement it separately, but their accepted start sets must match on a synthetic grid. [Plan (c), (e)](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:10); [r3 §1, §4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:35).
+> 
+> 9. **Evaluator choices that can change the verdict remain implicit.** Step (f) lists headline gates but omits the registered priority order, undefined-statistic behavior, both-arm SR* construction, V-day bootstrap domain, and “IS PASS” versus forward “ACCEPT.” **Fix:** put these in the plan before (f): compute both arm SRs before SR*; use six fixed prior SRs plus only defined #4 SRs with `n_trials=8`; use the registered S-first bootstrap streams and 10,000 resamples; reject undefined quantities as passing evidence; apply IS(0)→IS(5) in order; classify negative net CI before the 20/5/10-bps MDE branches; reserve ACCEPT for forward. Specify ledger identity and price/funding decomposition checks. [Plan (f)](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:19); [r3 §§3, 7](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:57); [trial #3 conventions G](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:71).
+> 
+> ### MINOR
+> 
+> 10. **The snapshot metadata has a misleading purpose label, but its bytes are anchored.** This is a documentation provenance error, not evidence that #69 points to the wrong files: #69 pins all four hashes and records how the trial #4 directory was captured. **Fix:** do not rewrite the JSON. Append a registry correction explaining that `_meta.purpose` was inherited from the trial #3 capture script while the path, capture, and hashes are trial #4; repeat it in trial #4 conventions. [Plan Q4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:60); [registry #69](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:77).
+> 
+> 11. **Anchor tests should pin the full evidence, not abbreviated values.** A1 has the right categories, including document bytes, table span, seeds, OOS derivation, and #69 snapshots. The plan text uses abbreviated hashes and does not explicitly name both earlier report hashes or the exact trial #3 report hash. **Fix:** use the full #70 document/table digests and four #69 digests; pin the six historical SR values and their source report hashes (trial #1, #2, #3); assert `PREREG_SIZE=28,828`, line span 16–39 with LF and trailing newline, and that the createdTime yields the stated OOS end. Check the first two against fixtures as trial #3 does. [Plan A1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:25); [registry #70](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:78); [trial #3 anchor](/home/cms/project/BTC_Futures_E2E/strategies/trial03/anchor.py:11).
+> 
+> ## Answers to Q1–Q7
+> 
+> **Q1 — A1 missing anything?** Its outline covers the essential #70 categories, but spell out full hashes, `PREREG_SIZE`, all three historical report hashes, `BOOTSTRAP_RESAMPLES=10_000`, and exact IS/OOS millisecond constants. Bind #69’s four hashes to a trial #4 `load_rules()` that fails on mismatch and asserts taker 5 bps. Keep OOS constants inert behind a separate user-decision registry gate, as the [trial #3 OOS entry point](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:411) does.
+> 
+> **Q2 — import `prepare_t3` helpers or copy?** Copy the small trial #3-specific helpers into `prepare_t4`, with trial #4 anchor constants and audit labels. In particular, `funding_view()` reads trial #3’s `WINDOW_START_MS` and labels its audit “registry #54” ([source](/home/cms/project/BTC_Futures_E2E/backtest/prepare_t3.py:225)); a direct import silently couples trial #4 to frozen trial #3 policy. Continue importing genuinely shared `prepare_t2` functions read-only. Put any copied logic and its source commit in conventions, then freeze the trial #4 copy. This is a provenance recommendation, not a claim that the current dates differ.
+> 
+> **Q3 — #54 warm-up funding rule?** Treat it as a **trial #4 implementer convention requiring a registry/conventions entry before data capture**, not a change to the anchored signal or `tc_v3` table. Apply only `markPrice == ""` with an integer `fundingTime < WINDOW_START`; retain raw rows and audit count, range, affected line hashes, and raw-file hash. An empty mark in the IS window must still stop. R3 expressly says funding rates are not the signal, but settlements inside the window are real inputs ([r3 §5](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:99)); the filter must therefore never extend into it.
+> 
+> **Q4 — erroneous `_meta.purpose`?** Yes: an append-only correction row plus conventions note is sufficient, provided the four #69 bytes remain untouched and the loader verifies their hashes. Changing the pinned JSON would contradict [#69–#70](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:77).
+> 
+> **Q5 — non-finite premium close: absent or stop?** “Absent minute” is a defensible pre-result convention because r3 defines validity by **present usable minutes** and allows up to five missing minutes per print. It is not explicitly decided by r3, so commit it in conventions and a registry row before capture. Audit raw non-finite rows by month and minute; count each as absent for 475/480; reject duplicate timestamps before checking values. Malformed header, timestamp, alignment, ZIP, or checksum remains a stop. [R3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:19); [trial #3 analogous OI convention](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:13).
+> 
+> **Q6 — Decimal mean or float?** Use `Decimal` parsed directly from the premium close strings, sum in a fixed local 28-digit context, divide by the count of usable minutes, and serialize a canonical decimal string. Do not pass through binary float. Specify the context and serialization before capture, then test exact decimal input and rebuild identity. This implements r3’s arithmetic mean without making the output depend on ambient decimal context. [Plan A2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r1.md:46); [r3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:19).
+> 
+> **Q7 — what in (b)–(g) must be decided now?** The P1 fixed clock and due-open executor; the no-`dir_k` timing stream; the six-day sample predicate; P2’s delayed fill with the original decision’s SL price and `sl_dist`; P3’s mirrored SL and funding direction; the full evaluator order and undefined cases; and the artifact, pin, freeze, failure, and one-shot evaluation contracts. Record those choices before any trial #4 market-data capture or P&L. The registered forward polling deadline (`T+5m`) also needs a named implementation/test stage if (g) is intended to cover more than IS; it is already fixed in [r3 §3-3](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:80).
+> 
+> ## Shared-file scope
+> 
+> No shared **runtime** file is demonstrably required to change if trial #4 supplies local P1 draw and due-open execution adapters using existing engine APIs. That feasibility remains a hypothesis until synthetic tests prove it. The shared [`tests/test_slippage_param.py`](/home/cms/project/BTC_Futures_E2E/tests/test_slippage_param.py:160) does need the narrow trial #4 allowance described above. Append-only `docs/trial_registry.md` and `docs/ops_log.md` will also change for conventions, reviews, and freeze evidence; trial #3 files and the #48 snapshot need no edits. If a shared runtime change proves necessary, the plan’s step (b) stop-and-review rule is appropriate.
+> 
+> **Decision:** fix the plan’s exit, boundary, duplicate, and provenance contracts before step (a) begins. These are choices that affect the tested sample or verdict, and the anchored workflow calls for them to be fixed before real-data results can influence implementation.
+> 
+> VERDICT: FIX-PLAN-FIRST
+> 
+> Real Codex thread/session id: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+### Codex 원문 2(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> # Trial #4 plan r2 — read-only narrow re-check
+> 
+> **Real session/thread ID:** `01a0f1fa-21ed-73b0-8a96-4c6b15c28016` (`CODEX_THREAD_ID`). Companion Claude session: `db9ba374-0a81-45cc-99f7-dab6bbef9b2c`.
+> 
+> This is Codex's output, quoted in full. I did not edit it.
+> 
+> I compared [plan r2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md) with the eleven r1 findings and inspected the sizing, engine, and replay code. I made no edits and opened no market data dated 2024-01-01 or later.
+> 
+> ## R1 findings 1–11
+> 
+> | # | Status | Reason and residual fix |
+> |---|---|---|
+> | **1 — P1 due-open exit** | **PARTIAL** | R2 correctly fixes `h=7200` and rejects trial #3's previous-minute-close executor. Its proposed **"no SL" synthetic `EntryIntent` is impossible as written**: `EntryIntent.sl` is required, and engine entry calls `size_entry` with that SL. The replay loop also constructs its own engine. Use a trial #4 local executor that sizes from the paired `sl_dist`, then restores a position with an unreachable monitoring SL, as the existing placebo executor does; settle funding, check open-gap liquidation, and close at the due open through engine APIs. See new BLOCKER A below. [R2 C1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:7), [`EntryIntent`](/home/cms/project/BTC_Futures_E2E/paper/engine.py:127), [entry sizing](/home/cms/project/BTC_Futures_E2E/paper/engine.py:433), [replay construction](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:70). |
+> | **2 — IS print boundary** | **RESOLVED** | R2 limits prints to `T ≤ IS_END`, names the last IS print, and tests the boundary. [R2 C2](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:13). |
+> | **3 — duplicate minute** | **RESOLVED** | The global in-range timestamp set now catches same-file, cross-file, identical, and mixed-validity duplicates before close-value classification, matching [r3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:20). [R2 C3](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:15). |
+> | **4 — premium input and availability** | **PARTIAL** | The distinct premium series, minute/window rule, alignment, and Decimal close are specified. Two details remain: require the **exact named header when a header exists**; and state explicitly that a missing final minute can leave a 475/480-valid print but yields **no backtest decision** under r3's availability rule. Recording `final-minute present` alone does not specify that behavior. [R2 C4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:17), [r3 §1](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:19). |
+> | **5 — same-direction P1-timing** | **RESOLVED** | A local draw routine omits `dir_k`, fixes direction by arm, uses children 1000–1999, and keeps its result out of the verdict. The proposed stream tests address the identified risk. [R2 C5](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:25), [r3 §4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:92). |
+> | **6 — slippage guard test** | **RESOLVED** | R2 now includes trial #4 backtest call sites as well as strategy files, with the rate taken from trial #4 config. This matches the actual AST guard's scope. [R2 C6](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:28), [test guard](/home/cms/project/BTC_Futures_E2E/tests/test_slippage_param.py:160). |
+> | **7 — provenance and (g) contract** | **PARTIAL** | R2 names the new files, premium raw inventory, prepared pin, artifacts, and freeze sequence. The freeze set still says "every shared module" without an enumerated set, and must now explicitly include **`sizing/config.py`**, `paper/engine.py`, the replay and sizing paths used by P1, and any imported trial #3 helper. Specify the exact set before generating H and its manifest. [R2 C7](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:30), [trial #3 freeze precedent](/home/cms/project/BTC_Futures_E2E/backtest/t3_provenance.py:27). |
+> | **8 — six-day eligibility** | **PARTIAL** | The interval endpoints, 18 settlements, prior days, and occupancy are now explicit. The one function "used by P2" must check eligibility at the **original base fill `t`**, not at the delayed fill: applying its six-day horizon to `t+24h` would demand a seventh day and change the shared sample. Compare the predicate on the same candidate starts; the strategy's signal starts and P1's random grid are not literally identical sets. [R2 C8](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:36), [r3 sample and P2 rules](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:35). |
+> | **9 — evaluator** | **PARTIAL** | Gate order, SR*, streams, and sign-first classification are now explicit. The proposed identity "price P&L + funding P&L = net" is false if those labels retain their ordinary meaning: entry/exit commission and execution slippage also affect net, and liquidation uses a special wallet-loss formula. Specify the components and their exact wallet identity before (f). See new MAJOR B. [R2 C9](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:40), [engine liquidation](/home/cms/project/BTC_Futures_E2E/paper/engine.py:607). |
+> | **10 — #69 `_meta.purpose`** | **RESOLVED** | R2 keeps pinned bytes unchanged, proposes an append-only correction and conventions note, and verifies the four hashes and taker rate. [R2 C10](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:45), [registry #69](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:77). |
+> | **11 — anchor evidence** | **RESOLVED** | R2 now specifies document size/digests, table span, all six prior SR values and three source-report hashes, resamples, mechanical OOS end, seed ordering, and an inert OOS gate. [R2 C11](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:47), [registry #70](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:78). |
+> 
+> ## Leverage-band question
+> 
+> **The new fact is correct, and it refutes my r1 statement that no shared runtime change was demonstrably required.** [`REGISTERED_LEVERAGE_BANDS`](/home/cms/project/BTC_Futures_E2E/sizing/config.py:14) contains only `(50,100)` and `(10,30)`. [`SizingLimits.__post_init__`](/home/cms/project/BTC_Futures_E2E/sizing/config.py:60) rejects `(3,30)` outright, and [`RegimeSizing.__post_init__`](/home/cms/project/BTC_Futures_E2E/sizing/config.py:35) independently rejects a 3–30 regime. [`Engine.request_entry`](/home/cms/project/BTC_Futures_E2E/paper/engine.py:203) then requires the regime to fit inside the limits; [`size_entry`](/home/cms/project/BTC_Futures_E2E/sizing/position.py:149) uses that range to search leverage. Merely passing a trial-local `SizingLimits` cannot implement the anchored rule.
+> 
+> **R2's handling is right:** report this at the step (a) stop; on the user's go for (b), append `(3,30)` to the registered bands without changing `PERMITTED_LEVERAGE` or either existing band, and run trial #2/#3 regressions for unchanged decisions and golden outputs. Add focused synthetic tests that both `SizingLimits(3,30)` and a 3–30 `RegimeSizing` construct, while unregistered bands remain rejected. The trial #2/#3 regressions should use their existing synthetic/golden paths at this stage; opening real 2024+ market data is outside this review. [R2 new fact and sequencing](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:2), [trial #3 10–30 config](/home/cms/project/BTC_Futures_E2E/strategies/trial03/config.py:50).
+> 
+> No further shared runtime edit is **proven** necessary from the inspected code. That narrower conclusion depends on replacing C1's impossible `EntryIntent` approach with a trial-local executor built on the existing engine restore, funding, liquidation, and close methods. This is a feasibility hypothesis until its synthetic tests pass. [`restore_position`](/home/cms/project/BTC_Futures_E2E/paper/engine.py:329), [due-open replay order](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:92).
+> 
+> ## New findings
+> 
+> - **BLOCKER A — C1 describes an unsupported P1 entry path.** A no-SL `EntryIntent` cannot be constructed under the current contract, and `engine_replay.replay` does not accept an already constructed engine. **Fix:** write C1 as a trial #4 local executor: use the canonical B2 sizing decision with the paired `sl_dist`; restore the resulting position with an unreachable monitoring SL; then drive the canonical engine through due-open funding, open-gap liquidation, and time exit. Do not claim that `TimeExitSchedule.observe()` sees an `EntryFilled` from restoration; either set a trial-local due clock from `entry_ms` or provide a tested adapter. [R2 C1](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:7), [existing placebo restoration pattern](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:63), [`TimeExitSchedule.observe`](/home/cms/project/BTC_Futures_E2E/strategies/trial03/exit_schedule.py:35).
+> 
+> - **MAJOR B — the evaluator's stated P&L identity omits costs.** **Fix:** define price P&L at execution fills, signed funding cashflow, entry/exit commissions, and liquidation fee/loss treatment so their sum equals the engine wallet delta under the same decimal context. If "price P&L" instead means mark-to-mark gross P&L, disclose slippage as its own component. Test ordinary exit and liquidation separately. [R2 C9](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:40), [engine entry commission](/home/cms/project/BTC_Futures_E2E/paper/engine.py:495), [exit accounting](/home/cms/project/BTC_Futures_E2E/paper/engine.py:664).
+> 
+> - **MINOR C — premium availability and header acceptance need one sentence each.** **Fix:** accept a header only when its 12 names and order match the declared schema; for a valid 475–479-minute print missing `T−1m`, record `print_valid` but produce no backtest decision. [R2 C4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:17), [r3 availability](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:24).
+> 
+> R2 closes most r1 findings and correctly identifies the necessary shared sizing change. The C1 execution claim is presently contradicted by the code, so it should be corrected in the plan before implementation starts.
+> 
+> VERDICT: FIX-PLAN-FIRST
+> 
+> Real Codex thread/session id: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+### Codex 원문 3(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> # Trial #4 plan r3 — read-only narrow re-check
+> 
+> **Real session/thread ID:** `01a0f1fa-21ed-73b0-8a96-4c6b15c28016` (`CODEX_THREAD_ID`). Companion Claude session: `db9ba374-0a81-45cc-99f7-dab6bbef9b2c`.
+> 
+> This is the Codex output, reproduced in full.
+> 
+> I reviewed [plan r3](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md) and the named r2 findings. I made no edits and opened no market data dated 2024-01-01 or later. The repository worktree was clean.
+> 
+> ## Status of the requested findings
+> 
+> | Finding | Status | Reason and residual fix |
+> |---|---|---|
+> | **BLOCKER A — unsupported no-SL `EntryIntent`** | **RESOLVED** | C1′ replaces the unsupported intent with B2 sizing followed by `Engine.restore_position`, following the established placebo pattern. The engine accepts a restored position with a monitoring SL beyond the tested price range. It offers the needed funding, liquidation, and close methods. C1′ still needs the entry-fee and entry-minute-funding details below; those are separate accounting and settlement omissions. [Plan C1′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:2), [placebo restoration](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:63). |
+> | **MAJOR B — P&L decomposition** | **PARTIAL** | C9′ now separates price, funding, commissions, and a liquidation branch. Define `funding_cf = −Σ FundingSettled.paid`, since the engine subtracts `paid` from the wallet. State the liquidation wallet equation explicitly and avoid subtracting entry fees or funding twice when applying `_liquidate`'s loss. See new MAJOR 2. [Plan C9′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:24), [funding accounting](/home/cms/project/BTC_Futures_E2E/paper/engine.py:402), [liquidation accounting](/home/cms/project/BTC_Futures_E2E/paper/engine.py:607). |
+> | **MINOR C — premium header and final minute** | **RESOLVED** | C4′ requires the exact ordered header and distinguishes a valid 475/480 print from a decision: if `T−1m` is absent, the print joins trailing history but cannot trigger a backtest decision. This is a stated reading of the [registered availability rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:24), to be recorded in conventions. [Plan C4′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:11). |
+> | **PARTIAL 1 — P1 due-open execution** | **PARTIAL** | The fixed clock, due-minute funding, open-gap liquidation, and due-open close now have a feasible engine path. C1′ must also specify **no settlement in the entry minute's funding bucket**, including an offset funding timestamp, and debit the simulated entry commission before replay. Add both to its synthetic tests. [Plan C1′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:2), [registered P1 boundary rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:88), [trial #3 bucket filter](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3.py:127). |
+> | **PARTIAL 4 — premium contract** | **RESOLVED** | C4′ closes the two residuals: exact optional header and explicit no-decision behavior when the closing premium minute is absent. The other series, alignment, Decimal, and audit terms remain specified in [r2 C4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r2.md:17). [Plan C4′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:11). |
+> | **PARTIAL 7 — freeze set** | **RESOLVED** | C7′ enumerates the relevant trial #4 files, shared backtest modules, trial #3 exit helper, `paper/*.py`, `sizing/*.py` including `sizing/config.py`, `exchange/*.py`, and dependency locks. Its fixed-path and per-file hash rule is concrete enough for the planned manifest. [Plan C7′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:16). |
+> | **PARTIAL 8 — P2 eligibility** | **RESOLVED** | C8′ applies the six-day predicate at the **original** fill for base, P2, and P3, while P1 applies it at its random start. The corrected test compares identical candidate starts, rather than equating signal events with the P1 grid. [Plan C8′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:20), [r3 sample rule](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:35). |
+> | **PARTIAL 9 — evaluator identity** | **PARTIAL** | C9′ corrects the ordinary-exit identity by including commissions and by treating slippage as already included in execution-fill price P&L. Its funding sign and liquidation equation still need exact definitions, as above. [Plan C9′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:24). |
+> 
+> ## C1′ feasibility without a shared engine edit
+> 
+> **Feasible in principle, with the accounting and settlement fixes below.** This is a code-path assessment, not an executed result.
+> 
+> The [existing placebo executor](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:43) already quotes the adverse fill, derives the sizing SL from `sl_dist`, and calls canonical `size_entry`. It creates a PAPER `Engine`, restores a position with `sl=0` for long or a far-away short SL, and manually debits entry commission ([lines 63–77](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:63)). Thus C1′ can use trial-local code without a no-SL `EntryIntent` or an edit to `paper/engine.py`.
+> 
+> After restoration, [`on_funding`](/home/cms/project/BTC_Futures_E2E/paper/engine.py:278) settles against the open position and refreshes its estimated liquidation price ([lines 402–418](/home/cms/project/BTC_Futures_E2E/paper/engine.py:402)). For ordinary hold minutes, `on_bar` checks intrabar liquidation before the monitoring SL ([lines 262–275](/home/cms/project/BTC_Futures_E2E/paper/engine.py:262), [564–579](/home/cms/project/BTC_Futures_E2E/paper/engine.py:564)). At `t+7200`, the local executor can follow the base replay's due-bar sequence: fund first, call `liquidate_if_open_beyond(open)`, then, if still positioned, `close_now(open, TIME_EXIT)`; it must **skip `on_bar` for that due bar**. Those are public methods, and the sequence is already present in [engine replay](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:86). `restore_position` recomputes the liquidation estimate rather than trusting the supplied estimate, preserving the engine rule ([lines 329–354](/home/cms/project/BTC_Futures_E2E/paper/engine.py:329)).
+> 
+> The required shared runtime change remains the separately staged addition of `(3,30)` to [`REGISTERED_LEVERAGE_BANDS`](/home/cms/project/BTC_Futures_E2E/sizing/config.py:16). Neither `RegimeSizing(3,30)` nor `SizingLimits(3,30)` constructs before that addition ([lines 35–42, 60–62](/home/cms/project/BTC_Futures_E2E/sizing/config.py:35)). C1′ does not demonstrate a need for any *further* shared runtime edit.
+> 
+> ## New findings, ranked
+> 
+> 1. **MAJOR — C1′ omits the restored position's entry-fee debit.** `Engine.restore_position` sets a position but does not charge its entry commission to `wallet`; the [placebo executor does so explicitly](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:69). Without that step, P1 net returns and its gate are biased. **Fix:** state `entry_commission = qty × quoted_fill × pinned_taker`, store it in restored state, set wallet to `E_ref − entry_commission` in the same execution context, and test the initial wallet and final per-trade identity. [Plan C1′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:2), [`restore_position`](/home/cms/project/BTC_Futures_E2E/paper/engine.py:329).
+> 
+> 2. **MAJOR — C1′ does not exclude entry-bucket funding.** "Settle any funding in that minute" would settle a boundary-minute record after a restored P1 entry, although r3 explicitly excludes that fill's boundary. An offset timestamp in the same minute must also be excluded. **Fix:** filter funding by minute bucket at entry, then settle later buckets normally, including the due-minute bucket before closing. Test entry-boundary fill at both exact and offset funding timestamps. [Plan C1′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:5), [r3 §4](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:88), [trial #3 precedent](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3.py:133).
+> 
+> 3. **MINOR — C9′ needs unambiguous signed funding and liquidation equations.** The engine defines `paid = signed_qty × mark × rate` and applies `wallet -= paid`; therefore funding **cashflow** is `−paid`, not `paid`. For a restored trade whose wallet starts at `E_ref − entry_commission`, liquidation uses `loss = N/L − entry_commission − funding_paid + liquidation_fee_amount`; that loss must be applied once to the already adjusted wallet. **Fix:** put those exact sign and wallet identities in C9′ and test long/short funding and liquidation. [Plan C9′](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r3.md:24), [engine funding](/home/cms/project/BTC_Futures_E2E/paper/engine.py:402), [engine liquidation](/home/cms/project/BTC_Futures_E2E/paper/engine.py:607).
+> 
+> R3 removes the engine-API blocker and closes the premium, freeze, and P2 residuals. The two P1 omissions would change its registered null distribution, so they need to be written into the plan before implementation.
+> 
+> VERDICT: FIX-PLAN-FIRST
+> 
+> Real Codex thread/session id: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`
+### Codex 원문 4(verbatim · 세션 01a0f1fa-21ed-73b0-8a96-4c6b15c28016)
+> # Trial #4 plan r4 — read-only narrow re-check
+> 
+> **Real session/thread ID:** `01a0f1fa-21ed-73b0-8a96-4c6b15c28016` (`CODEX_THREAD_ID`). Companion Claude session: `db9ba374-0a81-45cc-99f7-dab6bbef9b2c`.
+> 
+> The Codex output follows in full.
+> 
+> I reviewed [plan r4](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md) against the requested findings and engine code. I made no edits and opened no market data dated 2024-01-01 or later. This is a plan review; I did not validate the untracked trial #4 implementation files currently in the worktree.
+> 
+> | Prior finding | Status | Reason |
+> |---|---|---|
+> | **MAJOR 1 — entry-fee debit** | **RESOLVED** | C1″ stores `qty × quoted_fill × pinned taker` as `entry_commission` and sets the engine wallet to `E_ref − entry_commission`. That matches the existing [placebo executor](/home/cms/project/BTC_Futures_E2E/backtest/placebo_exec.py:63); [`restore_position`](/home/cms/project/BTC_Futures_E2E/paper/engine.py:329) stores the commission but does not itself debit the wallet. [Plan C1″](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:2). |
+> | **MAJOR 2 — entry-bucket funding** | **RESOLVED** | C1″ excludes the entire entry-minute bucket, including offset timestamps, then settles later buckets before processing their bars, including the due bar. Its tests name both entry-boundary cases. This matches the [trial #3 bucket-filter precedent](/home/cms/project/BTC_Futures_E2E/backtest/p1_t3.py:127) and the [trial #4 registered half-open interval](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_04_preregistration_r3.md:88). [Plan C1″](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:5). |
+> | **MINOR 3 — signed identities** | **RESOLVED** | C9″ defines funding cashflow as `−Σ paid`, which is the engine's wallet sign: it computes `paid = signed_qty × mark × rate` and then subtracts it. Its ordinary-exit identity includes entry and exit commissions, with slippage already inside execution-fill price P&L. [Plan C9″](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:12), [engine funding](/home/cms/project/BTC_Futures_E2E/paper/engine.py:402), [ordinary exit](/home/cms/project/BTC_Futures_E2E/paper/engine.py:671). |
+> | **PARTIAL 1 — P1 due-open execution** | **RESOLVED** | C1″ now specifies the complete local sequence: restored position, fee debit, no entry-bucket settlement, intrabar liquidation during the hold, and due-minute funding → open-gap liquidation → open time exit, with no due-bar `on_bar`. The required methods exist without an additional shared engine edit. [Plan C1″](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:2), [engine funding and open-gap methods](/home/cms/project/BTC_Futures_E2E/paper/engine.py:278), [base due-bar sequence](/home/cms/project/BTC_Futures_E2E/backtest/engine_replay.py:92). Feasibility is established from the API contracts; behavior remains to be proven by the listed synthetic tests. |
+> | **PARTIAL 9 — evaluator identity** | **RESOLVED** | C9″ gives a correct ordinary-exit identity and specifies that liquidation applies the engine's loss once to the wallet already reduced by entry commission and funding. The liquidation equation is checked precisely below. [Plan C9″](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:12). |
+> 
+> ## Precise liquidation-identity verdict
+> 
+> **Correct, provided `loss_remaining` in plan line 16 means the `loss` defined in line 14.** Let `C` be entry commission, `F = Σ paid = pos.funding_paid`, `N = qty × entry_price`, and `Q` be the liquidation fee amount. The engine computes `loss = N/L − C − F + Q` and subtracts it once from the current wallet ([`_liquidate`, lines 607–619](/home/cms/project/BTC_Futures_E2E/paper/engine.py:607)). C1″ and funding settlement make that current wallet `E_ref − C − F` ([plan lines 4–6](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:4), [engine funding](/home/cms/project/BTC_Futures_E2E/paper/engine.py:402)). Therefore:
+> 
+> `wallet_after = (E_ref − C − F) − (N/L − C − F + Q) = E_ref − N/L − Q`.
+> 
+> For the trial #4 PAPER limits, `Q = qty × liq_price_est × liquidation_fee` when `liq_fee_on_liq_price=True`; the engine otherwise uses `N × liquidation_fee` ([lines 612–615](/home/cms/project/BTC_Futures_E2E/paper/engine.py:612)). The cancellation of `C` and `F` is the engine's actual liquidation accounting; neither should be subtracted a second time from this result.
+> 
+> **New finding — MINOR:** r4 introduces `loss_remaining` without defining it after naming the quantity `loss`. Use the same name in both lines, or write `loss_remaining := loss`, and state the applicable `Q` basis in the evaluator convention. This is an editorial precision fix; the stated operation and algebra agree with the engine. [Plan C9″](/tmp/claude-1000/-home-cms-project-BTC-Futures-E2E/db9ba374-0a81-45cc-99f7-dab6bbef9b2c/scratchpad/t4_impl_plan_r4.md:14).
+> 
+> No new BLOCKER or MAJOR finding arose in this narrow re-check. The planned shared `(3,30)` sizing-band change remains a step (b) dependency under the previously reviewed sequence.
+> 
+> VERDICT: PROCEED
+> 
+> Real Codex thread/session id: `01a0f1fa-21ed-73b0-8a96-4c6b15c28016`

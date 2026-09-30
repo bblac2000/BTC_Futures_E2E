@@ -1,0 +1,7 @@
+{
+ "_meta": {"source": "docs/trials/trial_03/records/evaluation/report.json (trial #3 IS evaluation, registry #58)",
+           "report_sha256": "41f789fc21fa2e545ea3e09263475f11bd8dc103b8e463ccabf58394a183cec5",
+           "keys": "arms.L.stats.sr, arms.S.stats.sr", "series": "per-trade net_bps", "copied": "2026-09-30"},
+ "sr_L": -0.23689701015198752,
+ "sr_S": -0.19165332011747566
+}
