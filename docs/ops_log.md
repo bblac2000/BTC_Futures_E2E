@@ -9388,3 +9388,112 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Read-only plan check; no edits or tests. **Codex session/thread ID:** `01a0f045-0b83-7be1-a67f-47c09e3d04b2`.
 > 
 > VERDICT: FIX-PLAN-FIRST
+
+## 2026-09-30 — 트라이얼 #3 캡처 실패 수정 **after-pass A**(코드 검토 · advisor + Codex 5회 → MERGE) · C1′ = 26591fa
+
+- 구현 커밋: 2fedaf4(수정) → fd84321(A: 동결 행만 파싱 · 테스트) → 8db7dff(동결 계열 토큰만) → f70a16b(비튼 할당 거부) → 26591fa(전역 정규화 선형 개수 = 정규 토큰 수). 전체 1,536 통과 · ruff · pyright 0.
+- 동결 디렉터리 diff(305e664 → 26591fa): `M backtest/prepare_t3.py` · `M backtest/t3_provenance.py`만(최종 F5″는 after-pass B).
+- 관문 위협 모델(Codex 수락 조건): 레지스트리는 유지자만 Codex 검토 뒤 덧붙이고 모든 행은 덧붙이기 전 정확한 토큰 검사를 거친다 · 관문은 사고를 막는 장치 — HTML 주석·이중 인코딩 엔티티처럼 일부러 만든 형태까지 모두 잡는다고 주장하지 않는다(Codex A5 MINOR, 코드 미변경·기록).
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 1 | 모든 행 엄격 파싱 = 영구 잠금 위험 | ✅ | fd84321 → 8db7dff(동결 계열 토큰만) |
+| advisor 2 | 실제 레지스트리 테스트 앞으로 호환 | ✅ | 1 in fz |
+| advisor 3 | 수정 순서 · C1′ = 푸시된 마지막 코드 | ✅ | C1′ = 26591fa(푸시됨) |
+| advisor 4 | #55에 문언 밖 선택 전부 | ✅ | #55 |
+| advisor 5 | #55/#56 덧붙이기 전 검사 | ✅ | B 전 로컬 검사 |
+| advisor 6 | F5″ 문자 그대로 | ✅ | after-pass B |
+| Codex A1 MINOR ×2 | 남는 펀딩 e2e · v3/핀 행 | ✅ | fd84321 테스트 |
+| Codex A2 MINOR | 산문 행이 다른 오타 토큰 노출 | ✅ | 8db7dff |
+| Codex A3 MAJOR | 비튼 중복 행 건너뜀 | ✅ | f70a16b |
+| Codex A4 MAJOR/MINOR | 구분자 길이·개행·이스케이프·전각 · 2차 비용 | ✅ | 26591fa 구조적 선형 개수 |
+| Codex A5 MINOR ×2 | 만든 형태(HTML 주석·이중 엔티티) · 시간 테스트 | ⚠️ 부분 동의 | 사고 방지 범위로 기록 · 코드 불변(다시 열면 검토 반복) · 덧붙이기 전 검사가 막는다 |
+
+### advisor 원문(verbatim)
+> You're in after-pass A. The implementation matches #54 and r2–r5; the suite is green. What your checks don't cover, ordered by damage:
+> 
+> **1. `freeze_versions` strict-parses *every* table row — that's a new permanent lock-out vector.** Before the fix, `_tokens` ran only on the row matching a gate key. Now any registry row containing `t3_<word>=<non-hex>` refuses the gate forever, and the append-only rule means the typo row can never be removed — the only remedy is a gate code change → new H → full restart. This is concrete, not hypothetical: today's user decision text literally contains `t3_freeze_H_v2=` and your project rule is "user decisions go verbatim into registry rows." A verbatim paste into #58 or any later row would do it. Fix in `t3_provenance` (still one of the two allowed files): only rows containing `t3_freeze` or `t3_fingerprint` get parsed in `freeze_versions`; everything else is skipped. Keep the strictness *inside* those rows. Add a test: a row `| x | 메모 t3_note=hello |` alongside a valid v1 row still parses to `{1}`. Put it to Codex in the A re-check as a hazard you found, not a Codex omission.
+> 
+> **2. `test_real_registry_has_only_freeze_version_1_today` turns red the moment C3′ lands.** It asserts `sorted(fz) == [1]`. Make it forward-compatible now (`1 in fz and fz[1]["H"] == "305e664…"`; parse succeeds), so C3′ is docs-only and the suite you run before the freeze push is the suite that stays green after it.
+> 
+> **3. Sequence for applying fixes.** Wait for Codex A's first output; apply its findings plus 1–2 in one commit; push; re-check A until MERGE. C1′ = that last *pushed* code commit — don't leave a local code commit hanging. Only C2′ (#55) and C3′ (manifest v2 + #56) are local until B; B's reset target is C1′.
+> 
+> **4. #55 must carry every place the code goes beyond #54's letter**, verbatim, since the conventions file can't: (a) "empty" = exactly the empty string `""` (missing/None/"NaN" still stop) — Codex r1 called this defensible, so record it as the implementation reading; (b) `shared_bucket` / `rate_not_ok` are report-only audit fields that never change which rows drop; (c) `line_sha256` = SHA256 of the captured JSONL page line bytes, not HTTP bytes; (d) the freeze-set specification is unchanged between v1 and v2 (51 files, same paths — the union diff proves it); (e) the standing rule "no `t3_<name>=` in any registry row except the designated gate tokens"; plus the #54 nine-cell correction, attempt-1 raw hashes (`41fe9bd8…`, page line 0 `5d16a0c3…`), and the numbering shift (#56 freeze v2, #57 pins, #58 verdict).
+> 
+> **5. Row pre-append gates before *each* of #55/#56** (this is the trap that already bit #54): `re.findall(r"t3_[\w./-]+=", row)` == exactly `["t3_freeze_auth_v2="]` for #55 and exactly the three `_v2` keys for #56; `"strategies/trial03/data_pins.json" not in row`; `row.count("|") == 9`; then `PV.freeze_versions(current_registry + row)` parses to the expected versions. Only then append.
+> 
+> **6. At B, run F5″ exactly as planned and paste the literal output**: OLD = keys of the #53 manifest at `956d403`, NEW = keys of `trial_03_freeze_manifest_v2.json` cross-checked against a literal-spec `git ls-tree -r --name-only H′` filter, then `git diff --name-status -M 305e664 H′ -- <OLD∪NEW>`. The directory-wide diff you ran (`M prepare_t3.py`, `M t3_provenance.py` only) is good corroboration but isn't the pre-committed check.
+> 
+> Items 1–2 are edits before C1′; neither touches the drop rule or any file outside the two permitted. Item 1 is the one that matters most — it's cheap now and unfixable later.
+
+### Codex A1 원문(verbatim)
+> Session `01a0f04f-b65d-7fb3-bdac-8390f984a979`.
+> 
+> **Review of `40d1b99..2fedaf4`: no BLOCKER or MAJOR findings.** The drop predicate matches registry #54, including the in-window hard stop. The audit is attached on success and source-stop paths; `build` compares its raw funding hash with the manifest. The funding view is confined to T2 analysis, while manifest, rebuild, and pinned loading use the original raw files. The version gate checks the complete per-version rows and manifests, authorization, strict ancestry, and the newest H. The frozen-file diff from `305e664` contains only the two permitted modules.
+> 
+> - **MINOR — retained funding lacks an end-to-end regression test.** [test_t3_fix54.py](tests/test_t3_fix54.py:52) builds the 88-row case with an empty final funding series; the shared-bucket case tests `funding_view` alone at [line 89](tests/test_t3_fix54.py:89). Add a build → verify → pinned-load case with both dropped warm-up rows and a retained valid funding event.
+> 
+> - **MINOR — later registry shape is not exercised.** The tests cover a v2 chain but do not run a successful v3 chain or a pins row containing `t3_prepared/...` tokens through [freeze_versions](backtest/t3_provenance.py:210). Add those cases before the planned rows are appended.
+> 
+> I could not independently rerun pytest: it failed before test collection because this read-only environment has no usable temporary directory. The reported 1,515-pass suite remains unverified here. The workspace stayed clean. Codex session/thread: `01a0f04f-b65d-7fb3-bdac-8390f984a979`.
+> 
+> VERDICT: MERGE
+
+### Codex A2 원문(verbatim)
+> Session `01a0f058-c0db-7353-9213-0474c61b4306`.
+> 
+> **MINOR — The filter can still refuse a prose row.** [freeze_versions](backtest/t3_provenance.py:217) selects rows by the raw substring, then [_tokens](backtest/t3_provenance.py:137) strictly parses *every* `t3_...=` token on that row. In a read-only probe, a later pins row containing prose `t3_freeze v2` and malformed `t3_prepared/bars_1m.parquet=zz` refused the gate; the same row without that prose was skipped. A quoted `t3_freeze_H_v2=` also refused. This is a **hypothetical future append-only lockout**, not a failure in the current registry. The new [skip test](tests/test_t3_fix54.py:116) does not cover it: its freeze mention has no `=` and its malformed pins token is on a different row. **Fix:** identify freeze-family token candidates before strict parsing, and add a prose-plus-unrelated-malformed-token test. Token-shaped quotes still need a distinct convention or a pre-append check.
+> 
+> For **canonical tokens**, the narrowing is safe: every key `_tokens` can recognize as a freeze or fingerprint key contains the raw substring tested at [line 218](backtest/t3_provenance.py:218). Case changes, Unicode lookalikes, inserted whitespace, Markdown escapes, and keys split across cells are not canonical tokens; backticks around an intact token are parsed. Non-table lines and lines without a leading `|` remain outside the gate. The real [#53 and #54 rows](docs/trial_registry.md:61) parse as version `{1}`: #54 quotes v2 names without `=`. The planned #55 authorization, #56 triple, and pins-row token shapes are covered by the [chain tests](tests/test_t3_fix54.py:127) and [v3 test](tests/test_t3_fix54.py:295), provided their prose does not add token-shaped quotes. The retained-funding test exercises build, rebuild verification, and pinned loading; its audit detail is covered by the earlier test in the same file.
+> 
+> No BLOCKER or MAJOR finding. The diff changes only the two stated files, passes `git diff --check`, and the worktree remains clean. I ran read-only parser probes; I did not independently rerun the reported 1,518-test suite.
+> 
+> Codex session/thread id: `01a0f058-c0db-7353-9213-0474c61b4306`
+> 
+> VERDICT: MERGE
+
+### Codex A3 원문(verbatim)
+> Session `01a0f060-e7e8-74a0-b53d-d4eedcfcbaf1`.
+> 
+> **MAJOR — malformed freeze-family rows can be silently skipped.** The splitter in [t3_provenance.py](backtest/t3_provenance.py:249) accepts only an uninterrupted, lowercase `key=value` token. Read-only probes showed that a second v2 freeze row or #55 authorization row is ignored when its key is separated from `=` by whitespace or a cell boundary; a capitalized duplicate v2 row is also ignored. `freeze_versions` then accepts the registry despite its exactly-one-row rule at [line 237](backtest/t3_provenance.py:237). **Fix:** reject freeze/fingerprint/auth-looking assignments in these forms while continuing to ignore unrelated `t3_prepared/...` tokens and prose mentions. Add duplicate-row cases for whitespace, case, backticks, punctuation, and cell splits to [test_t3_fix54.py](tests/test_t3_fix54.py:308). Ordinary duplicate rows and the exact `t3_freeze_H_v2x` spelling were rejected in probes.
+> 
+> The real registry parsed, as did a synthesized #55 authorization, #56 v2 triple, and later pins row. Fifteen focused tests passed. The reported **1,519 passed** was not independently rerun: this read-only sandbox gives pytest no writable temporary directory. `fd84321..HEAD` changes only `backtest/t3_provenance.py` and its test file; the frozen-file diff from `305e664` remains exactly `prepare_t3.py` and `t3_provenance.py`. `HEAD` equals `origin/main`, `git diff --check` passed, and the worktree is clean.
+> 
+> Codex session/thread ID: `01a0f060-e7e8-74a0-b53d-d4eedcfcbaf1`
+> 
+> VERDICT: FIX-FIRST
+
+### Codex A4 원문(verbatim)
+> Session `01a0f068-d1af-7583-bc1a-fa35f8fc71f8`.
+> 
+> ### Findings
+> 
+> - **MAJOR — malformed duplicate rows can still be silently skipped.** The detector in [t3_provenance.py](backtest/t3_provenance.py:249) allows at most eight non-word characters before `=` and excludes newlines. Read-only probes showed that a second `t3_freeze_H_v2` assignment with nine spaces, a wider cell split, a newline, a Markdown-escaped underscore, an HTML entity, or a full-width equals sign leaves `freeze_versions` accepting `[1, 2]`. The added cases in [test_t3_fix54.py](tests/test_t3_fix54.py:316) stop at shorter separators. **Fix:** validate freeze-family assignments without a fixed separator limit, account for escaped or normalized forms and line continuations, and add duplicate-row regression cases for each bypass.
+> 
+> - **MINOR — the detection regex has quadratic worst-case cost.** Repeated `t3_freeze_` text with no `=` took 0.07 seconds at 1,000 repetitions and 4.26 seconds at 8,000 in a direct read-only probe of [the regex](backtest/t3_provenance.py:270). **Fix:** use a linear scan when revising the detector.
+> 
+> The real registry parses as `[1]`; adding the planned #55 auth row, #56 v2 triple row, and a later `t3_prepared/...` pins row parses as `[1, 2]`. The existing #54 prose caused no false refusal. The commit changes only `t3_provenance.py` and its tests; the frozen-file diff from `305e664` contains exactly `prepare_t3.py` and `t3_provenance.py`. Pytest could not start in this read-only sandbox because no writable temporary directory was available, so I could not verify the reported 1,528 passes.
+> 
+> Codex session/thread: `01a0f068-d1af-7583-bc1a-fa35f8fc71f8`
+> 
+> VERDICT: FIX-FIRST
+
+### Codex A5 원문(verbatim)
+> Session `01a0f072-00f4-72c0-b8bd-43b5548c8d61`.
+> 
+> **Review of `f70a16b..HEAD` (`26591faf`):** no BLOCKER or MAJOR findings under the stated maintainer-only, pre-append-checked workflow.
+> 
+> - **MINOR — the count check is not a universal detector.** [t3_provenance.py](backtest/t3_provenance.py:279) misses `t3_freeze_H_v2<!--note-->=…` and `t3_freeze_H_v2&amp;#61;…`. In read-only probes, each added to a valid v1 registry left the counts at `3 = 3`, and `freeze_versions` returned `[1]`. A word gap such as `t3_freeze_H_v2 value=…` also passes, though that is not syntactically an assignment to the freeze key. **Fix if literal coverage is required:** reject HTML comments and unresolved encoded entities adjacent to reserved keys before comparing counts.
+> 
+> - **MINOR — test gaps.** [test_t3_fix54.py](tests/test_t3_fix54.py:316) covers the common malformed separators but not those passing forms. Its timing test at [line 339](tests/test_t3_fix54.py:339) asserts no count and uses a fixed one-second threshold. Add the counterexamples and a count assertion; use a scaling check if performance regression coverage is needed.
+> 
+> The real registry yields near count `3`, canonical count `3`, and version `[1]`. Read-only probes of the planned #55 authorization, #56 v2 triple, and later pins row yielded `7 = 7` and versions `[1, 2]`. Zero-width and combining characters, U+FE66/U+207C/U+208C equals, and assignments in code fences were refused. Repeated-key probes scaled from 0.031 s at 200,000 characters to 0.755 s at 5 million characters. I did not rerun the writing test suite.
+> 
+> The diff changes only [t3_provenance.py](backtest/t3_provenance.py:210) and [test_t3_fix54.py](tests/test_t3_fix54.py:316); the frozen-file diff from `305e664` remains exactly `prepare_t3.py` and `t3_provenance.py`. `HEAD` equals `origin/main`, and the working tree is clean.
+> 
+> **CLASS CLOSURE: ACCEPT** for the stated accident-guard workflow, with exact-token pre-append checks on every maintainer row. The literal claim that *every* assignment-shaped representation is caught is false for the constructed forms above.
+> 
+> Codex session/thread id: `01a0f072-00f4-72c0-b8bd-43b5548c8d61`.
+> 
+> VERDICT: MERGE
