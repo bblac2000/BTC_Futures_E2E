@@ -18,7 +18,6 @@ import inspect
 import json
 import math
 import shutil
-import subprocess
 import tempfile
 from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
@@ -42,13 +41,6 @@ from strategies.trial03.harness import GRID, complete_days
 
 ROOT = Path(__file__).resolve().parent.parent
 DAY = A.DAY_MS
-EVALUATOR_FILES = ("backtest/evaluate_t3.py", "backtest/verdict_t3.py", "backtest/t3_outputs.py", "backtest/stats.py",
-                   "backtest/stats_t2.py")
-#  판정을 바꿀 수 있는 코드 전부(Codex (f) after #1) — 판정기 커밋과 지금이 바이트 동일해야 한다(파일 집합도 같아야 한다)
-FREEZE_FILES = EVALUATOR_FILES + tuple(f"backtest/{n}.py" for n in (
-    "p1_t3", "p1_core", "placebo_exec", "engine_replay", "returns", "data", "replay", "prepare_t3", "prepare_t2")) + (
-    "pyproject.toml", "uv.lock")
-FREEZE_GLOBS = ("strategies/trial03/*.py", "paper/*.py", "sizing/*.py", "exchange/*.py")
 BPS = Decimal(10_000)
 
 
@@ -335,38 +327,21 @@ def compute_with_fixture(base: Path, bars: Sequence[Bar1m], kline_daily: Sequenc
     return _compute(base, bars, kline_daily, p=p, window=window, liq_fee=liq_fee, p1_draws=p1_draws)
 
 
-# ── 한 번만 · 커밋 검사 · 쓰기 ────────────────────────────────────────────────
-def _git(repo: Path, *a: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True)
-
-
-def freeze_set(repo: Path) -> set[str]:
-    out = set(FREEZE_FILES)
-    for g in FREEZE_GLOBS:
-        out |= {str(p.relative_to(repo)) for p in repo.glob(g)}
-    return out
+# ── 한 번만 · 관문 · 쓰기((g) 계획 r3 K5/K5′) ─────────────────────────────
+from backtest.t3_provenance import (  # noqa: E402 — 동결 정의는 t3_provenance가 정본
+    FREEZE_FILES,  # noqa: F401
+    FREEZE_GLOBS,  # noqa: F401
+    ProvenanceError,
+    freeze_set,  # noqa: F401
+)
+from backtest.t3_provenance import require_frozen as _pv_require_frozen  # noqa: E402
 
 
 def require_frozen(repo: Path, commit: str, *, fetch: bool = True) -> None:
-    if fetch and _git(repo, "fetch", "--quiet", "origin").returncode != 0:
-        raise Refusal("git fetch 실패")
-    if _git(repo, "status", "--porcelain").stdout.strip():
-        raise Refusal("작업 트리가 깨끗하지 않다")
-    for ref in ("HEAD", "origin/main"):
-        if _git(repo, "merge-base", "--is-ancestor", commit, ref).returncode != 0:
-            raise Refusal(f"판정기 커밋 {commit}가 {ref}의 조상이 아니다(푸시 전 판정 금지)")
-    now = freeze_set(repo)
-    then_set = set(FREEZE_FILES)
-    for g in FREEZE_GLOBS:
-        d, pat = g.rsplit("/", 1)
-        out = _git(repo, "ls-tree", "--name-only", f"{commit}:{d}").stdout.split()
-        then_set |= {f"{d}/{n}" for n in out if Path(n).match(pat)}
-    if now != then_set:
-        raise Refusal(f"동결 파일 집합이 커밋 {commit}와 다르다: {sorted(now ^ then_set)[:5]}")
-    for f in sorted(now):
-        then = _git(repo, "show", f"{commit}:{f}")
-        if then.returncode != 0 or then.stdout != (repo / f).read_text(encoding="utf-8"):
-            raise Refusal(f"동결 파일 {f}가 판정기 커밋 {commit} 뒤에 바뀌었다")
+    try:
+        _pv_require_frozen(repo, commit, fetch_first=fetch)
+    except ProvenanceError as e:
+        raise Refusal(str(e)) from e
 
 
 def _finite_json(o: Any) -> Any:
@@ -385,13 +360,39 @@ def report_bytes(report: dict[str, Any]) -> bytes:
     return (json.dumps(_finite_json(report), sort_keys=True, indent=1, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
 
 
-def _evaluate(base: Path, repo: Path, evaluator_commit: str, fetch: bool,
-              fn: Callable[[], tuple[dict[str, V.Verdict], dict[str, Any]]]) -> tuple[str, dict[str, Any]]:
-    decimal.setcontext(decimal.Context())
-    out = base / "evaluation"
-    if out.exists():
-        raise Refusal("판정은 한 번만 — evaluation/이 이미 있다")
-    require_frozen(repo, evaluator_commit, fetch=fetch)
+ATTEMPT = "evaluation_attempt.json"
+
+
+def _input_hashes(base: Path) -> dict[str, str]:
+    """판정 입력 해시(준비 원시는 매니페스트가 덮으므로 제외 · 판정 결과·시도 기록 제외)."""
+    out = {}
+    for p in sorted(base.rglob("*")):
+        rel = p.relative_to(base)
+        if not p.is_file() or rel.parts[0] == "evaluation" or rel.parts[0].startswith("evaluation_") \
+                or (len(rel.parts) > 1 and rel.parts[:2] == ("prepared", "raw")) or rel.name == ATTEMPT:
+            continue
+        out[str(rel)] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return out
+
+
+def _claim_attempt(base: Path, commit: str) -> None:
+    """K5′: 시도 기록을 배타적으로 만든다(O_CREAT|O_EXCL · fsync) — 두 판정기가 함께 통과할 수 없다."""
+    import os
+    rec = base / "_records"
+    rec.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(rec / ATTEMPT, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError as e:
+        raise Refusal("판정 시도 기록이 이미 있다 — 중단된 시도(레지스트리 행·검토·재동결 절차)") from e
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps({"evaluator_commit": commit, "started": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _run_once(base: Path, commit: str, before: dict[str, str], fn: Callable[[], tuple[dict[str, V.Verdict], dict[str, Any]]],
+              extra: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    _claim_attempt(base, commit)
     try:
         with np.errstate(over="raise", invalid="raise", divide="raise"):
             _, report = fn()
@@ -399,33 +400,64 @@ def _evaluate(base: Path, repo: Path, evaluator_commit: str, fetch: bool,
         raise
     except (OSError, ValueError, KeyError, TypeError, ArithmeticError, FloatingPointError, O.ContractError, P1.P1Error) as e:
         raise Refusal(f"{type(e).__name__}: {e}") from e
-    read = {str(p.relative_to(base)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(base.rglob("*")) if p.is_file()}
+    if _input_hashes(base) != before:
+        raise Refusal("판정 중 입력 파일이 바뀌었다")
     tmp = Path(tempfile.mkdtemp(prefix="evaluation_", dir=base))
     try:
         rb = report_bytes(report)
         (tmp / "report.json").write_bytes(rb)
         (tmp / "verdict.txt").write_text(report["trial_verdict"] + "\n")
-        record = {"evaluator_commit": evaluator_commit, "inputs_sha256": read,
+        record = {"evaluator_commit": commit, "inputs_sha256": before, **extra,
                   "report_sha256": hashlib.sha256(rb).hexdigest(),
                   "verdict_sha256": hashlib.sha256((tmp / "verdict.txt").read_bytes()).hexdigest()}
-        (tmp / "record.json").write_text(json.dumps(record, sort_keys=True, indent=1) + "\n")
-        tmp.rename(out)
+        (tmp / "record.json").write_text(json.dumps(record, sort_keys=True, indent=1, default=str) + "\n")
+        tmp.rename(base / "evaluation")
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
     return report["trial_verdict"], record
 
 
-def evaluate(base: Path, repo: Path, *, evaluator_commit: str, bars: Sequence[Bar1m], kline_daily: Sequence[dict[str, Any]],
-             liq_fee: Decimal, fetch: bool = True) -> tuple[str, dict[str, Any]]:
-    """한 번만(실행 경로 · `compute`). 모든 실패 = 거부 — 아무것도 쓰지 않는다(다시 시도해도 두 번째 판정이 아니다)."""
-    return _evaluate(base, repo, evaluator_commit, fetch, lambda: compute(base, bars, kline_daily, liq_fee))
+def _preconditions(base: Path) -> None:
+    decimal.setcontext(decimal.Context())
+    if (base / "evaluation").exists():
+        raise Refusal("판정은 한 번만 — evaluation/이 이미 있다")
+    if (base / "_records" / ATTEMPT).exists():
+        raise Refusal("판정 시도 기록이 이미 있다 — 중단된 시도(레지스트리 행·검토·재동결 절차)")
+
+
+def evaluate(base: Path, repo: Path, *, evaluator_commit: str, fetch: bool = True) -> tuple[str, dict[str, Any]]:
+    """한 번만(실행 경로). 데이터 인자가 없다 — 관문(동결·행·핀·verify 영수증·모든 실행/P1/병합 기록)을 여기서 다 통과한 뒤
+    고정 로더로 봉·kline 일 종가를 읽고 청산 수수료는 #48 `load_rules()`. 모든 실패 = 거부(아무것도 쓰지 않음)."""
+    from backtest import prepare_t3 as PT
+    from backtest.t3_stages import StageFailed, Stages
+    from strategies.trial03.harness import load_rules
+    _preconditions(base)
+    st = Stages(evaluator_commit, base=base, repo=repo, fetch=fetch)
+    try:
+        prov = st.receipt_ok(st.begin())
+        record_shas = st.check_all_records(prov)
+        from backtest.t3_provenance import load_pins
+        pins, pc = load_pins(repo, fetch_first=False)
+        bars, _, _, _ = PT.load_prepared_pinned(st.prep, pins, PT.is_range(), root=repo)
+        kd = PT.load_kline_daily_pinned(st.prep, pins, PT.is_range(), root=repo)
+        liq_fee = load_rules().symbol_rules.liquidation_fee
+    except (StageFailed, ProvenanceError, OSError, ValueError, KeyError) as e:
+        raise Refusal(f"{type(e).__name__}: {e}") from e
+    receipt = json.loads((st.records / "verify_receipt.json").read_text())
+    before = _input_hashes(base)
+    extra = {"fingerprint": prov["fingerprint"], "rows": prov["rows"], "pins": pins, "pins_commit": pc, "verify_receipt": receipt,
+             "stage_records_sha256": record_shas}
+    return _run_once(base, evaluator_commit, before, lambda: compute(base, bars, kd, liq_fee), extra)
 
 
 def evaluate_with_fixture(base: Path, repo: Path, *, evaluator_commit: str, bars: Sequence[Bar1m],
                           kline_daily: Sequence[dict[str, Any]], liq_fee: Decimal, p: TfParams, window: tuple[int, int],
                           p1_draws: int, fetch: bool = False) -> tuple[str, dict[str, Any]]:
-    """**테스트 전용** — 같은 한 번만·커밋 검사, 계산만 픽스처 매개변수."""
+    """**테스트 전용** — 같은 한 번만(시도 기록 · 입력 재해시 · 원자적 쓰기)과 동결 검사, 계산만 픽스처 매개변수(행·핀·기록 관문 없음)."""
     _require_test_caller()
-    return _evaluate(base, repo, evaluator_commit, fetch,
-                     lambda: _compute(base, bars, kline_daily, p=p, window=window, liq_fee=liq_fee, p1_draws=p1_draws))
+    _preconditions(base)
+    require_frozen(repo, evaluator_commit, fetch=fetch)
+    before = _input_hashes(base)
+    return _run_once(base, evaluator_commit, before,
+                     lambda: _compute(base, bars, kline_daily, p=p, window=window, liq_fee=liq_fee, p1_draws=p1_draws), {})

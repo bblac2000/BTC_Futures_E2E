@@ -187,6 +187,19 @@ def require_rows(repo: Path, commit: str, *, ref: str = "origin/main") -> dict[s
             "fingerprint": fp_h}
 
 
+def stage_repo() -> Path:
+    """자식 CLI가 검사할 저장소: 실행기가 띄웠으면(T3_STAGE_ORIGIN과 T3_STAGE_REPO 둘 다) 그 저장소 — 단 그 저장소의 동결 코드가 지금
+    실행 중인 코드(ROOT)와 바이트 동일해야 한다(다른 코드를 가리키는 우회 차단) · 아니면 ROOT."""
+    import os
+    r, o = os.environ.get("T3_STAGE_REPO"), os.environ.get("T3_STAGE_ORIGIN")
+    if not (r and o):
+        return ROOT
+    repo = Path(r).resolve()
+    if repo != ROOT.resolve() and file_hashes(repo) != file_hashes(ROOT):
+        raise ProvenanceError("실행기 저장소의 동결 코드가 실행 중인 코드와 다르다")
+    return repo
+
+
 def child_gate(repo: Path, commit: str) -> dict[str, str]:
     """하위 CLI 관문(계획 r3 K3′): 실행기가 넘긴 T3_STAGE_ORIGIN(= 실행기가 fetch한 origin/main)과 지금 origin/main이 같으면 fetch 생략,
     환경 변수가 없으면(단독 실행) 먼저 fetch. 그다음 동결·행 관문."""

@@ -46,6 +46,14 @@ class P1Error(RuntimeError):
     pass
 
 
+class P1Failure(RuntimeError):
+    """P1 조각 실행 중 실패 — 끝난 추출과 귀무 행을 담아 CLI가 보존한다((g) 계획 K7 · 원인은 __cause__)."""
+
+    def __init__(self, draws: list[C.P1Draw], null: list[dict[str, Any]]):
+        super().__init__(f"P1 실패 — 끝난 추출 {len(draws)} · 귀무 행 {len(null)}")
+        self.draws, self.null = draws, null
+
+
 def source_trades(trades_t3: Sequence[dict[str, Any]]) -> list[C.SourceTrade]:
     return [C.SourceTrade(int(t["trade_id"]), int(t["entry_ms"]), int(t["exit_ms"]), Decimal(t["t3"]["sl_dist"])) for t in trades_t3]
 
@@ -158,8 +166,16 @@ def _run_range(arm: str, trades_t3: Sequence[dict[str, Any]], bars: Sequence[Bar
         return P1Part(arm, lo, hi, 0, False, "[]", [])
     segs = build_segments(bars, fundings, window)
     by_t = {b.open_ms: b for b in bars}
-    draws = [draw(d, cfg, src, segs, by_t, rules) for d in range(lo, hi + 1)]
-    null = [null_point(dr, by_t, fundings, rules) for dr in draws if dr.ok]
+    draws: list[C.P1Draw] = []
+    null: list[dict[str, Any]] = []
+    try:
+        for d in range(lo, hi + 1):
+            dr = draw(d, cfg, src, segs, by_t, rules)
+            draws.append(dr)
+            if dr.ok:
+                null.append(null_point(dr, by_t, fundings, rules))
+    except BaseException as e:
+        raise P1Failure(draws, null) from e
     return P1Part(arm, lo, hi, len(src), True, C.canonical_json(draws), null)
 
 
@@ -189,6 +205,10 @@ def merge(parts: Sequence[P1Part], draws_total: int = A.P1_DRAWS) -> dict[str, A
     comp = {p.computable for p in parts}
     if len(arms) != 1 or len(n_src) != 1 or len(comp) != 1:
         raise P1Error(f"조각 불일치: arm {arms} · n_source {n_src} · computable {comp}")
+    ranges = sorted((p.lo, p.hi) for p in parts)
+    covered = [d for lo, hi in ranges for d in range(lo, hi + 1)]
+    if covered != list(range(draws_total)):
+        raise P1Error(f"조각 범위가 0..{draws_total - 1}을 정확히 한 번씩 덮지 않는다")          # 계산 불가 암도(Codex (g) before #6)
     if not comp.pop():
         if any(p.draws_json != "[]" or p.null for p in parts):
             raise P1Error("계산 불가 조각에 추출이 있다")

@@ -358,14 +358,15 @@ def oos_range(registry: Path, row_id: int) -> tuple[int, int]:
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
-def gate(commit: str | None) -> str | None:
-    """캡처·verify·--gate-check 공통 관문(계획 r3 K12): 동결(H) + 레지스트리 행(#52·#53). 통과하면 None, 아니면 사유."""
-    from backtest.t3_provenance import ProvenanceError, child_gate
+def gate(commit: str | None) -> tuple[Path | None, str | None]:
+    """캡처·verify·--gate-check 공통 관문(계획 r3 K12): 동결(H) + 레지스트리 행(#52·#53). 반환 (저장소, None) 또는 (None, 사유)."""
+    from backtest.t3_provenance import ProvenanceError, child_gate, stage_repo
     try:
-        child_gate(ROOT, commit or "")
+        repo = stage_repo()
+        child_gate(repo, commit or "")
     except ProvenanceError as e:
-        return str(e)
-    return None
+        return None, str(e)
+    return repo, None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -377,14 +378,14 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     out = Path(a.out)
     rng = is_range()
-    why = gate(a.evaluator_commit)
-    if why is not None:
+    repo, why = gate(a.evaluator_commit)
+    if repo is None:
         print(f"🚫 관문 실패(rc 6): {why}", file=sys.stderr)
         return 6
     if a.gate_check:
         print("gate ok")
         return 0
-    check_out_dir(out)
+    check_out_dir(out, repo)
     if a.verify:
         m = verify_rebuild(out, rng)
         print(json.dumps({"verified": True} | m, sort_keys=True, indent=1))

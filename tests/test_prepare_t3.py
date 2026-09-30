@@ -256,7 +256,7 @@ def test_build_stops_on_oi_defect_and_writes_audit_only(tmp_path):
 
 def test_loader_refuses_other_trials_directories_and_wrong_pins(tmp_path):
     out = capture(tmp_path)
-    m = P.build(out, (START, END))
+    P.build(out, (START, END))
     pins = PV.make_pins(out)
     for bad in ("var/t3_s0/IS", "var/backtest/t2/IS", "elsewhere/IS"):
         with pytest.raises(P.OOSGuard):

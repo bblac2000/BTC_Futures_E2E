@@ -101,7 +101,12 @@ def _part_dict(p: P1.P1Part) -> dict[str, Any]:
 
 
 def write_p1_part(base: Path, part: P1.P1Part) -> Path:
-    d = p1_parts_dir(base, part.arm) / f"part_{part.lo:03d}_{part.hi:03d}"
+    return write_p1_part_to(p1_parts_dir(base, part.arm) / f"part_{part.lo:03d}_{part.hi:03d}", part)
+
+
+def write_p1_part_to(d: Path, part: P1.P1Part) -> Path:
+    if d.name != f"part_{part.lo:03d}_{part.hi:03d}" or d.parent.name != f"{part.arm}_P1":
+        raise ContractError(f"{d}: 조각 경로가 arm·범위와 다르다")
     d.mkdir(parents=True, exist_ok=True)
     (d / P1_PART_FILE).write_text(json.dumps(_part_dict(part), sort_keys=True) + "\n")
     return d / P1_PART_FILE
@@ -167,3 +172,34 @@ def check_run_inventory(base: Path) -> None:
     want = expected_run_dirs(base)
     if got != want:
         raise ContractError(f"runs/ 목록 불일치: 빠짐 {sorted(want - got)} · 남음 {sorted(got - want)}")
+
+
+# ── 실패 보존((g) 계획 r3 K7) ────────────────────────────────────────────────
+FAILURE_FILES = ("_failure_error.txt", "_failure_events.jsonl", "_failure_state.json")
+
+
+def write_error(out: Path, e: BaseException) -> None:
+    import traceback
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "_failure_error.txt").write_text("".join(traceback.format_exception(e)))
+
+
+def write_run_failure(out: Path, strategy: Any, cause: BaseException) -> dict[str, Any]:
+    """전략 기록 보존: 이벤트 전부 · 상태·깔때기 요약 · 원인 트레이스백 — 출력 디렉터리에 바로(기록이 해시하고 read_run은 거부)."""
+    out.mkdir(parents=True, exist_ok=True)
+    s = strategy
+    (out / "_failure_events.jsonl").write_text("".join(json.dumps(e, sort_keys=True, default=str) + "\n" for e in s.events))
+    state = {"arm": s.arm, "variant": s.variant.name, "state": s.state, "cooldown_end": s.cooldown_end, "window_bars": s.window_bars,
+             "funnel": dict(s.funnel), "sub": dict(s.sub), "entry": dict(s.entry), "n_events": len(s.events)}
+    (out / "_failure_state.json").write_text(json.dumps(state, sort_keys=True, indent=1) + "\n")
+    write_error(out, cause)
+    return state
+
+
+def write_p1_failure(out: Path, draws: Sequence[Any], null: list[dict[str, Any]], cause: BaseException) -> None:
+    """P1 조각 기록 보존: 끝난 추출 · 영가설 행 · 원인 트레이스백."""
+    from backtest import p1_core as C
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "_failure_draws.json").write_text(C.canonical_json(draws))
+    (out / "_failure_null.jsonl").write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in null))
+    write_error(out, cause)
