@@ -556,6 +556,13 @@ def test_repeated_row_token_is_refused_even_with_equal_values():
     h = "a" * 64
     with pytest.raises(PV.ProvenanceError, match="둘 이상"):
         PV._tokens(f"| t3_conventions={h} · t3_conventions={h} |")
+    with pytest.raises(PV.ProvenanceError, match="둘 이상"):
+        PV._tokens(f"| t3_conventions={h} · t3_conventions=oops |")
+    with pytest.raises(PV.ProvenanceError, match="형식"):
+        PV._tokens(f"| t3_freeze_H={h[:40]}) |")
+    with pytest.raises(PV.ProvenanceError, match="형식"):
+        PV._tokens(f"| t3_freeze_H=`{h[:40]}` |")                        # 키와 값 사이 기호 없음
+    assert PV._tokens(f"| `t3_freeze_H={h[:40]}` · 기타 |") == {"t3_freeze_H": h[:40]}
 
 
 def test_merge_record_requires_success_and_the_three_outputs(chain, monkeypatch):

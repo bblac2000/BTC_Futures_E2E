@@ -132,13 +132,18 @@ def require_frozen(repo: Path, commit: str, *, fetch_first: bool = True) -> None
 
 # ── 레지스트리 행 관문(K2) ───────────────────────────────────────────────────
 def _tokens(line: str) -> dict[str, str]:
+    """`t3_<키>=<값>` 토큰 — 키는 값 검사 전에 모은다: 같은 키가 두 번 → 거부 · 값이 40/64자리 16진이 아님 → 거부(Codex (g) after 재확인)."""
     out: dict[str, str] = {}
     for tok in re.split(r"[\s|·,`]+", line):
-        m = re.fullmatch(r"(t3_[\w./-]+)=([0-9a-f]{40}|[0-9a-f]{64})", tok)
-        if m:
-            if m.group(1) in out:
-                raise ProvenanceError(f"행에 {m.group(1)} 토큰이 둘 이상")
-            out[m.group(1)] = m.group(2)
+        m = re.fullmatch(r"(t3_[\w./-]+)=(.*)", tok)
+        if not m:
+            continue
+        k, v = m.groups()
+        if k in out:
+            raise ProvenanceError(f"행에 {k} 토큰이 둘 이상")
+        if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", v):
+            raise ProvenanceError(f"행의 {k} 값 형식이 틀렸다")
+        out[k] = v
     return out
 
 
