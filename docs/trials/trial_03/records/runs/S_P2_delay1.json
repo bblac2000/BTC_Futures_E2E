@@ -1,0 +1,46 @@
+{
+ "children_max_rss_kb": 2152936,
+ "provenance": {
+  "evaluator_commit": "f087611fa2367a4eb0b709e89059cac626cfa909",
+  "fetched_at": "2026-09-30T04:20:12+00:00",
+  "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+  "manifest_sha256": "7d267f9864e2f8f0f42b2c209363918978c07e36d9a0c97cf10b349b429977df",
+  "origin": "9bf8e5c19ad0f76a7605a6d483a4c48305f6cd2e",
+  "pins_commit": "77d5e247bdfa9f54a46fe31d8392dc3c461a9839",
+  "rows": {
+   "conventions_commit": "54b049a99736054931a3974d05d38b0e1b16281a",
+   "conventions_sha256": "937930b3fba874015191fd8b8d930e26ba6da29ca17895150949d0e2b4884e6a",
+   "fingerprint": "8554df6dd7d267607baf06eac6b30afe6961be25f648e1fd8619b224e941a0af",
+   "freeze_manifest_sha256": "5828120e2616b08eecdb00f31a3149f59cad27b2871629d3f9c9b20a188c0ebb",
+   "freeze_version": "2"
+  },
+  "variant": "S_P2_delay1"
+ },
+ "run": {
+  "args": [
+   "--arm",
+   "S",
+   "--variant",
+   "P2_delay1",
+   "--prepared",
+   "/home/cms/project/BTC_Futures_E2E/var/t3/IS/prepared",
+   "--evaluator-commit",
+   "f087611fa2367a4eb0b709e89059cac626cfa909"
+  ],
+  "ended_utc": "2026-09-30T04:22:41.450557Z",
+  "git_head": "9bf8e5c19ad0f76a7605a6d483a4c48305f6cd2e",
+  "module": "strategies.trial03.run",
+  "numpy": "2.5.3",
+  "outputs": {
+   "events.jsonl": "2a19db5f43254c65f7bfc5ce3ee8187e6b6d4e3002c4b3c19287d33a6eef0651",
+   "summary.json": "9f9f46bd1fa475960ee902a27a5304488838db959b18164db334e6d3bcc3803e",
+   "trades_t3.jsonl": "e84d43a5cb7759dad1ec6685c431449080a4a54eee93e88cfac41fc07557e026"
+  },
+  "python": "3.12.13",
+  "returncode": 0,
+  "started_utc": "2026-09-30T04:21:26.988684Z",
+  "stderr": "",
+  "stdout": "{\"arm\": \"S\", \"n_trades\": 233, \"qualified\": 245, \"variant\": \"P2_delay1\", \"window_bars\": 1052640}\n"
+ },
+ "wall_s": 74.5
+}
