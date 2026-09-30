@@ -388,7 +388,8 @@ def main(argv: list[str] | None = None) -> int:
     check_out_dir(out, repo)
     if a.verify:
         m = verify_rebuild(out, rng)
-        print(json.dumps({"verified": True} | m, sort_keys=True, indent=1))
+        print(json.dumps({"verified": True} | {k: v for k, v in m.items() if k != "raw"} | {"raw_files": len(m["raw"])}, sort_keys=True,
+                         indent=1))
         return 0
     if (out / "manifest.json").exists() or (out / "raw").exists():
         print("🚫 이미 준비된(또는 부분) 출력이 있다 — 다시 캡처하지 않는다(--verify로 대조만)", file=sys.stderr)

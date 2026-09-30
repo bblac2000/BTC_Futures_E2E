@@ -388,6 +388,11 @@ def _claim_attempt(base: Path, commit: str) -> None:
         f.write(json.dumps({"evaluator_commit": commit, "started": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}) + "\n")
         f.flush()
         os.fsync(f.fileno())
+    dfd = os.open(rec, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
 
 
 def _run_once(base: Path, commit: str, before: dict[str, str], fn: Callable[[], tuple[dict[str, V.Verdict], dict[str, Any]]],

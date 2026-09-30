@@ -9,6 +9,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -276,7 +277,7 @@ def test_partial_output_without_record_is_refused(chain):
     d = st.runs / "L_base"
     d.mkdir(parents=True)
     (d / "events.jsonl").write_text("")
-    with pytest.raises(T.StageFailed, match="부분 출력"):
+    with pytest.raises(T.StageFailed, match="기록 없는"):
         st.stage_runs(1)
 
 
@@ -321,6 +322,7 @@ def test_end_to_end_stages_then_evaluate_once(chain, monkeypatch):
         st.stage_p1(4, 2)
     assert len(st.stage_runs(3)) == 8
     assert st.stage_runs(3) == []                                         # 이어 하기: 전부 완료
+    assert st.stage_p1(4, 1, only="P1_L_000_249") == [("P1_L_000_249", 0)]
     st.stage_p1(4, 2)
     with pytest.raises(T.StageFailed, match="분할"):
         st.stage_p1(8, 2)
@@ -359,7 +361,7 @@ def _child_gate_off(monkeypatch, tmp_path: Path) -> Path:
     (base / "_records" / "verify_receipt.json").write_text("{}\n")
     monkeypatch.setattr(PV, "stage_repo", lambda: ROOT)
     monkeypatch.setattr(PV, "child_gate", lambda *a, **k: {})
-    monkeypatch.setattr(PV, "load_pins", lambda *a, **k: ({}, "c"))
+    monkeypatch.setattr(PV, "load_pins", lambda *a, **k: ({"manifest_sha256": "0" * 64}, "c"))
     monkeypatch.setattr(PV, "check_receipt", lambda *a, **k: None)
     sc = SCS["L"]
     rows, bad = sc.oi_rows()
@@ -429,6 +431,7 @@ def test_p1_cli_preserves_completed_draws_on_failure_and_success_is_counts_only(
     from backtest import p1_t3_run as PR
     base = _child_gate_off(monkeypatch, tmp_path)
     _p1_base(base)
+    monkeypatch.setattr(T.Stages, "check_record", lambda *a, **k: None)
     sc = SCS["L"]
     real_draw = P1.draw
 
@@ -461,3 +464,108 @@ def test_zero_source_merge_still_requires_exact_range_coverage():
     with pytest.raises(P1.P1Error):
         P1.merge([z], draws_total=40)
     assert not P1.merge([z, replace(z, lo=20, hi=39)], draws_total=40)["computable"]
+
+
+def test_p1_cli_requires_the_base_run_record(monkeypatch, tmp_path, capsys):
+    from backtest import p1_t3_run as PR
+    base = _child_gate_off(monkeypatch, tmp_path)
+    _p1_base(base)
+    out = O.p1_parts_dir(base, "L") / "part_000_009"
+    args = ["--arm", "L", "--lo", "0", "--hi", "9", "--prepared", str(base / "prepared"), "--evaluator-commit", "0" * 40,
+            "--out", str(out)]
+    assert PR.main(args) == 8                                               # 기본 실행 기록 없음
+    assert "L_base" in (out / "_failure_error.txt").read_text()
+    capsys.readouterr()
+
+
+# ── Codex (g) after-pass 보강 ────────────────────────────────────────────────
+def test_real_isolated_child_meets_the_runner_contract(chain, monkeypatch):
+    """가짜 실행기 없이: run_isolated(--out 덧붙임 · cwd · env) → 실제 자식 CLI가 관문·핀·영수증을 통과하고 캡처 범위에서 rc 8."""
+    from backtest.replay import run_isolated
+    for m in ("strategies.trial03.run", "backtest.p1_t3_run"):
+        monkeypatch.delitem(sys.modules, m, raising=False)
+    st = _prepared(chain)
+    st.runner = run_isolated
+    prov = st.receipt_ok(st.begin())
+    assert st.run_one("L_base", st.run_job("L", "base"), prov | {"variant": "L_base"}) == 8
+    body = json.loads((st.records / "L_base.json").read_text())
+    assert body["run"]["returncode"] == 8 and body["children_max_rss_kb"] > 0
+    err = (st.records / "failures" / "L_base" / "_failure_error.txt").read_text()
+    assert "캡처 범위" in err and "ProvenanceError" not in err                # 관문은 통과했다
+    assert json.loads(body["run"]["stdout"].strip()) == {"arm": "L", "variant": "base", "failure": "pre_strategy"}
+    with pytest.raises(T.StageFailed, match="실패 기록"):
+        st.stage_runs(1, only="L_base")
+
+
+def test_child_timeout_is_a_recorded_failure_and_not_rerun(chain):
+    class Slow(FakeRunner):
+        def __call__(self, module, args, out, *, timeout_s, env):
+            if module == T.STRATEGY:
+                out.mkdir(parents=True, exist_ok=True)
+                raise subprocess.TimeoutExpired(["x"], timeout_s)
+            return super().__call__(module, args, out, timeout_s=timeout_s, env=env)
+    st = _prepared(chain, Slow())
+    with pytest.raises(T.StageFailed, match="L_base"):
+        st.stage_runs(1, only="L_base")
+    body = json.loads((st.records / "L_base.json").read_text())
+    assert body["run"]["returncode"] == -1 and "TimeoutExpired" in body["run"]["stderr"]
+    with pytest.raises(T.StageFailed, match="실패 기록"):
+        st.stage_runs(1, only="L_base")
+
+
+def test_crashed_run_leaves_an_empty_dir_that_is_refused(chain):
+    st = _prepared(chain)
+    (st.runs / "L_base").mkdir(parents=True)
+    with pytest.raises(T.StageFailed, match="기록 없는"):
+        st.stage_runs(1, only="L_base")
+
+
+def test_prepare_with_partial_raw_and_no_record_is_refused(chain):
+    st = _stages(chain)
+    (st.prep / "raw").mkdir(parents=True)
+    (st.prep / "raw" / "funding.jsonl").write_text("")
+    with pytest.raises(T.StageFailed, match="기록 없는"):
+        st.stage_prepare()
+
+
+def test_newer_pins_on_origin_are_detected(chain):
+    st = _prepared(chain)
+    r = chain["repo"]
+    _git(r, "checkout", "-q", "-b", "other")
+    pf = r / PV.PINS_REL
+    pf.write_text(pf.read_text().replace('"is_grid_slots"', '"is_grid_slots" ', 1))
+    _git(r, "commit", "-qam", "newer pins elsewhere")
+    _git(r, "push", "-q", "origin", "other:main")
+    _git(r, "checkout", "-q", "main")
+    _git(r, "fetch", "-q", "origin")
+    with pytest.raises(PV.ProvenanceError, match="origin/main의 데이터 핀"):
+        PV.load_pins(r, fetch_first=False)
+    assert st  # 준비 기록은 그대로
+
+
+def test_parent_refuses_a_repo_whose_code_differs_from_the_running_code(chain):
+    f = chain["repo"] / "backtest" / "returns.py"
+    f.write_text(f.read_text() + "# drift\n")
+    with pytest.raises(PV.ProvenanceError, match="실행 중인 코드"):
+        _stages(chain).begin()
+    with pytest.raises(E.Refusal, match="실행 중인 코드"):
+        E.evaluate(chain["base"], chain["repo"], evaluator_commit=chain["H"], fetch=False)
+
+
+def test_repeated_row_token_is_refused_even_with_equal_values():
+    h = "a" * 64
+    with pytest.raises(PV.ProvenanceError, match="둘 이상"):
+        PV._tokens(f"| t3_conventions={h} · t3_conventions={h} |")
+
+
+def test_merge_record_requires_success_and_the_three_outputs(chain, monkeypatch):
+    st = _prepared(chain)
+    st.stage_runs(3)
+    st.stage_p1(1, 1)
+    st.stage_p1_merge()
+    prov = st.receipt_ok(st.begin())
+    rec = st.records / "P1_merge_L.json"
+    body = json.loads(rec.read_text())
+    rec.write_text(json.dumps(body | {"returncode": 1}))
+    with pytest.raises(T.StageFailed, match="병합 기록"):
+        st.check_merge_record("L", prov)

@@ -42,10 +42,21 @@ def main(argv: list[str] | None = None) -> int:
         pins, pc = PV.load_pins(repo, fetch_first=False)
         base = prepared.parent
         receipt = json.loads((base / "_records" / "verify_receipt.json").read_text())
-        PV.check_receipt(receipt, prepared=prepared, pins=pins, pins_c=pc, commit=a.evaluator_commit, fp=PV.fingerprint(repo))
+        fp = PV.fingerprint(repo)
+        PV.check_receipt(receipt, prepared=prepared, pins=pins, pins_c=pc, commit=a.evaluator_commit, fp=fp)
+        if prepared.resolve() != (base / "prepared").resolve():
+            raise O.ContractError(f"--prepared {prepared} ≠ {base / 'prepared'}")
         want = O.p1_parts_dir(base, a.arm) / f"part_{a.lo:03d}_{a.hi:03d}"
         if out.resolve() != want.resolve():
             raise O.ContractError(f"--out {out} ≠ {want}")
+        from backtest.t3_stages import Stages
+        st = Stages(a.evaluator_commit, base=base, repo=repo, fetch=False)
+        expect = {"evaluator_commit": a.evaluator_commit, "fingerprint": fp, "pins_commit": pc,
+                  "manifest_sha256": pins["manifest_sha256"], "variant": f"{a.arm}_base"}
+
+        def base_ok() -> None:                                   # 원판 = 성공 기록과 해시가 같은 기본 실행(Codex (g) after #3)
+            st.check_record(f"{a.arm}_base", st.run_job(a.arm, "base"), expect)
+        base_ok()
         trades, _, _ = O.read_run(O.run_dir(base, a.arm, "base"), a.arm, "base")
         bars, fundings, _, _ = PT.load_prepared_pinned(prepared, pins, PT.is_range(), root=repo)
     except BaseException as e:
@@ -61,6 +72,12 @@ def main(argv: list[str] | None = None) -> int:
     except BaseException as e:
         _write_error(out, e)
         print(json.dumps({"arm": a.arm, "lo": a.lo, "hi": a.hi, "failure": "pre_run"}))
+        return 8
+    try:
+        base_ok()                                                # 계산 뒤 쓰기 전에 다시
+    except BaseException as e:
+        _write_error(out, e)
+        print(json.dumps({"arm": a.arm, "lo": a.lo, "hi": a.hi, "failure": "base_changed"}))
         return 8
     O.write_p1_part_to(out, part)
     ok = sum(1 for d in json.loads(part.draws_json) if d["ok"])

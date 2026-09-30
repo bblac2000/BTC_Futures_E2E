@@ -5,6 +5,7 @@
     python -m backtest.t3_stages --evaluator-commit H --stage verify       # 원시에서 다시 빌드 대조 → verify 영수증
     python -m backtest.t3_stages --evaluator-commit H --stage runs --only L_base     # 메모리 측정(계획 K10)
     python -m backtest.t3_stages --evaluator-commit H --stage runs --jobs 3
+    python -m backtest.t3_stages --evaluator-commit H --stage p1 --parts 8 --jobs 1 --only P1_L_000_124   # 메모리 측정
     python -m backtest.t3_stages --evaluator-commit H --stage p1 --parts 8 --jobs 3
     python -m backtest.t3_stages --evaluator-commit H --stage p1-merge
     python -m backtest.t3_stages --evaluator-commit H --stage evaluate     # 한 번만
@@ -21,6 +22,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import resource
 import shutil
 import sys
 import time
@@ -45,6 +47,8 @@ P1_OUTPUTS = ("p1_part.json",)
 PREP_OUTPUTS = ("bars_1m.parquet", "funding.json", "kline_close_daily.json", "manifest.json", "oi_5m.json", "oi_unusable.json",
                 "source_audit.json")
 P1_DRAWS = 1000
+TIMEOUT_S = 48 * 3600
+MERGE_OUTPUTS = ("p1_draws.json", "p1_null.jsonl", "p1_summary.json")
 PROV_KEYS = ("evaluator_commit", "fingerprint", "pins_commit", "manifest_sha256", "variant")
 
 Job = tuple[str, list[str], Path, tuple[str, ...]]
@@ -73,6 +77,7 @@ class Stages:
         if self.fetch:
             PV.fetch(self.repo)
         self.origin = PV._git(self.repo, "rev-parse", "origin/main").stdout.strip()
+        PV.require_running_code(self.repo)
         PV.require_frozen(self.repo, self.h, fetch_first=False)
         rows = PV.require_rows(self.repo, self.h)
         return {"evaluator_commit": self.h, "fingerprint": rows["fingerprint"], "origin": self.origin,
@@ -113,8 +118,9 @@ class Stages:
     def done(self, name: str, job: Job, expect: dict[str, Any]) -> bool:
         if not self._rec(name).exists():
             out = job[2]
-            if out.exists() and any(out.iterdir()) and name not in ("prepare", "verify"):
-                raise StageFailed(f"{name}: 기록 없는 부분 출력 {out} — 다시 돌리지 않는다(검토용 보존 · K6′)")
+            partial = out.exists() and (name != "prepare" or any(out.iterdir()))    # verify는 prepare의 디렉터리를 공유한다
+            if partial and name != "verify":
+                raise StageFailed(f"{name}: 기록 없는 출력 디렉터리 {out} — 다시 돌리지 않는다(검토용 보존 · K6′)")
             return False
         self.check_record(name, job, expect)
         return True
@@ -124,10 +130,16 @@ class Stages:
         if PV.fingerprint(self.repo) != prov["fingerprint"]:
             raise StageFailed(f"{name}: 실행 코드 지문이 단계 시작 뒤 바뀌었다")
         t0 = time.time()
-        rec = self.runner(module, args, out, timeout_s=48 * 3600, env=self.env())
+        try:
+            rec = self.runner(module, args, out, timeout_s=TIMEOUT_S, env=self.env())
+        except BaseException as e:                                   # 시간 초과·실행 실패도 실패 기록으로 남긴다(Codex (g) after #2)
+            outputs = {p.name: PV.sha_file(p) for p in sorted(out.iterdir()) if p.is_file()} if out.exists() else {}
+            rec = RunRecord(module, list(args), -1, "", f"{type(e).__name__}: {e}", dt.datetime.now(dt.UTC).isoformat(), "", "", "",
+                            "", outputs)
         self.records.mkdir(parents=True, exist_ok=True)
         body = {"run": asdict(rec), "provenance": {k: v for k, v in prov.items() if k != "rows"} | {"rows": prov.get("rows")},
-                "wall_s": round(time.time() - t0, 1)}
+                "wall_s": round(time.time() - t0, 1),
+                "children_max_rss_kb": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss}   # 지금까지 끝난 자식 중 최대(K10)
         self._rec(name).write_text(json.dumps(body, sort_keys=True, indent=1, ensure_ascii=False) + "\n")
         if rec.returncode != 0 and out.exists():
             dst = self.records / "failures" / name
@@ -236,7 +248,7 @@ class Stages:
             jobs = {only: jobs[only]}
         return self.run_many(jobs, prov, n_jobs)
 
-    def stage_p1(self, parts: int, n_jobs: int) -> list[tuple[str, int]]:
+    def stage_p1(self, parts: int, n_jobs: int, only: str | None = None) -> list[tuple[str, int]]:
         prov = self.receipt_ok(self.begin())
         for k, job in self.run_jobs().items():
             if k.endswith("_base") and not self.done(k, job, prov | {"variant": k}):
@@ -249,7 +261,12 @@ class Stages:
         else:
             self.records.mkdir(parents=True, exist_ok=True)
             f.write_text(json.dumps(want) + "\n")
-        return self.run_many(self.p1_jobs(), prov, n_jobs)
+        jobs = self.p1_jobs()
+        if only is not None:
+            if only not in jobs:
+                raise StageFailed(f"--only {only}")
+            jobs = {only: jobs[only]}
+        return self.run_many(jobs, prov, n_jobs)
 
     def check_p1_complete(self, prov: dict[str, Any]) -> None:
         jobs = self.p1_jobs()
@@ -280,8 +297,10 @@ class Stages:
                 raise StageFailed(f"{name}: 기록 없는 병합 디렉터리 — 검토용 보존")
             O.write_p1_merged(self.base, a, O.read_p1_parts(self.base, a))
             files = {p.name: PV.sha_file(p) for p in sorted(d.iterdir())}
+            if sorted(files) != sorted(MERGE_OUTPUTS):
+                raise StageFailed(f"{name}: 병합 출력 파일이 {MERGE_OUTPUTS}가 아니다")
             rec.write_text(json.dumps({"provenance": {k: v for k, v in prov.items() if k != "rows"} | {"variant": name},
-                                       "outputs": files}, sort_keys=True, indent=1) + "\n")
+                                       "returncode": 0, "outputs": files}, sort_keys=True, indent=1) + "\n")
             out.append((name, 0))
         return out
 
@@ -291,7 +310,8 @@ class Stages:
         d = self.merge_expected(arm)
         files = {p.name: PV.sha_file(p) for p in sorted(d.iterdir())} if d.exists() else {}
         exp = {k: v for k, v in prov.items() if k in PROV_KEYS} | {"variant": name}
-        if any(body["provenance"].get(k) != v for k, v in exp.items()) or body["outputs"] != files:
+        if any(body["provenance"].get(k) != v for k, v in exp.items()) or body["outputs"] != files or body.get("returncode") != 0 \
+                or sorted(files) != sorted(MERGE_OUTPUTS):
             raise StageFailed(f"{name}: 병합 기록이 출처·출력 해시와 다르다")
 
     def check_all_records(self, prov: dict[str, Any]) -> dict[str, str]:
@@ -330,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         elif a.stage == "runs":
             res = st.stage_runs(a.jobs, a.only)
         elif a.stage == "p1":
-            res = st.stage_p1(a.parts, a.jobs)
+            res = st.stage_p1(a.parts, a.jobs, a.only)
         elif a.stage == "p1-merge":
             res = st.stage_p1_merge()
         else:

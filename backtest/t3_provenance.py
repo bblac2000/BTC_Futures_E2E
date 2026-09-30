@@ -136,8 +136,8 @@ def _tokens(line: str) -> dict[str, str]:
     for tok in re.split(r"[\s|·,`]+", line):
         m = re.fullmatch(r"(t3_[\w./-]+)=([0-9a-f]{40}|[0-9a-f]{64})", tok)
         if m:
-            if m.group(1) in out and out[m.group(1)] != m.group(2):
-                raise ProvenanceError(f"행에 {m.group(1)} 값이 둘 이상")
+            if m.group(1) in out:
+                raise ProvenanceError(f"행에 {m.group(1)} 토큰이 둘 이상")
             out[m.group(1)] = m.group(2)
     return out
 
@@ -187,6 +187,12 @@ def require_rows(repo: Path, commit: str, *, ref: str = "origin/main") -> dict[s
             "fingerprint": fp_h}
 
 
+def require_running_code(repo: Path) -> None:
+    """검사 대상 저장소의 동결 코드 = 지금 실행 중인 코드(ROOT) 바이트(Codex (g) after #1) — 실행기·판정기 입구에서."""
+    if repo.resolve() != ROOT.resolve() and file_hashes(repo) != file_hashes(ROOT):
+        raise ProvenanceError("검사 대상 저장소의 동결 코드가 실행 중인 코드와 다르다")
+
+
 def stage_repo() -> Path:
     """자식 CLI가 검사할 저장소: 실행기가 띄웠으면(T3_STAGE_ORIGIN과 T3_STAGE_REPO 둘 다) 그 저장소 — 단 그 저장소의 동결 코드가 지금
     실행 중인 코드(ROOT)와 바이트 동일해야 한다(다른 코드를 가리키는 우회 차단) · 아니면 ROOT."""
@@ -195,8 +201,7 @@ def stage_repo() -> Path:
     if not (r and o):
         return ROOT
     repo = Path(r).resolve()
-    if repo != ROOT.resolve() and file_hashes(repo) != file_hashes(ROOT):
-        raise ProvenanceError("실행기 저장소의 동결 코드가 실행 중인 코드와 다르다")
+    require_running_code(repo)
     return repo
 
 
@@ -260,7 +265,11 @@ def load_pins(repo: Path, *, fetch_first: bool = True) -> tuple[dict[str, Any], 
     c = pins_commit(repo)
     if _git(repo, "merge-base", "--is-ancestor", c, "origin/main").returncode != 0:
         raise ProvenanceError("데이터 핀 커밋이 origin/main에 없다")
-    pins = json.loads((repo / PINS_REL).read_text())
+    c_ref = _git(repo, "log", "-1", "--format=%H", "origin/main", "--", PINS_REL).stdout.strip()
+    b = (repo / PINS_REL).read_bytes()
+    if c_ref != c or _at(repo, "origin/main", PINS_REL) != b:
+        raise ProvenanceError("origin/main의 데이터 핀(파일·마지막 변경 커밋)이 지금과 다르다")
+    pins = json.loads(b)
     reg = _at(repo, c, REGISTRY_REL).decode("utf-8")
     rows = [ln for ln in reg.splitlines() if ln.startswith("|") and PINS_REL in ln]
     if len(rows) != 1:
