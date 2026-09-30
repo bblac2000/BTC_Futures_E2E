@@ -9097,3 +9097,18 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 > Section H is accurate enough to freeze as C1. Item 74's child-start gate timing and pins write exception match the stage code ([conventions.md](/home/cms/project/BTC_Futures_E2E/docs/trials/trial_03_conventions.md:97), [t3_stages.py](/home/cms/project/BTC_Futures_E2E/backtest/t3_stages.py:76)). Verification was a read-only parser probe and code review; the working tree remained clean.
 > 
 > VERDICT: MERGE
+
+## 2026-09-30 — 트라이얼 #3 (g) HALF 1 승인 · HALF 2 "go capture" · 사용자 결정(verbatim)
+> HALF 1 accepted. Section H (63–74) approved as frozen. Rows #52/#53 texts accepted.
+>
+> Decisions:
+> 1. Failure-report redaction — accepted as you described: state, funnel and entry counts, last N events with realized_pnl / wallet_after / exit_price / funding_paid / fill prices blanked; full log stays in var/ with its SHA256 in ops_log.md.
+> 2. Gate-only failures (rc 8, before any data is read and before any strategy runs) — restart allowed ONCE per job under all of: (a) the failure is proven to have occurred at the gate (record shows no data files opened, no var/t3/ writes from that job); (b) the cause is identified and, if it was a repo change, reverted so the working tree matches H byte-for-byte (fingerprint daa17d09… re-verified); (c) a one-line registry note records job, cause, fingerprint check and restart time. A second rc 8 on the same job, or any rc 7, is a full failure under the HALF 2 rules (row + Codex + new freeze + clean restart of everything).
+>
+> Resource procedure accepted: run --only L_base --jobs 1, read children_max_rss_kb, then one P1 part (--only P1_L_000_124), then choose --jobs (2 unless ≥ 11 GB free). Copy _records/ into docs/trials/trial_03/records/, commit and push after each stage; no repo writes while a stage runs.
+>
+> go capture
+>
+> Order: capture → verify receipts + oi_unusable.json + 0.5% cap → L_base → P1_L part 0 → remaining runs and P1 parts → merge → evaluator once → full report + verdict pair + (g) after-pass (advisor + Codex). Report only trade/funnel counts until the evaluator has run. If capture stops for a data-quality reason, report and wait.
+
+- 기록 위치: 규약 항목 74는 이 결정을 "레지스트리 행"에 적으라고 한다 · 항목 63은 #54 = 데이터 핀 · #55 = 판정으로 번호를 고정했으므로, 두 결정은 **#54 데이터 핀 행 안에** 함께 적는다(verify 전 · 어떤 실행보다도 먼저).
