@@ -9575,3 +9575,7 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 - 기록 사본 `docs/trials/trial_03/records/prepare/`.
 - 핀: `--stage pins` → data_pins.json + 레지스트리 #57(사용자 결정 K8 · rc 8 원문) 같은 커밋 77d5e24 · load_pins 통과 · 매니페스트 7d267f98… · 원시 목록 a82ea925….
 - verify: 04:15:17→04:16:09Z rc 0(원시에서 다시 빌드 = 매니페스트) · 영수증 = H′ · 지문 v2 8554df6d… · 핀 커밋 77d5e24 · 기록 사본 `docs/trials/trial_03/records/prepare/`. **단계 5 완료.**
+
+## 2026-09-30 — HALF 2 단계 6 · L_base 단독(메모리 측정)
+- `--stage runs --only L_base --jobs 1` 04:16:31→04:17:39Z rc 0 · wall 68.1 s · children_max_rss_kb 2,111,124(≈ 2.0 GiB) · 개수만: 트레이드 257 · 적격 269 · 창 봉 1,052,640.
+- P1 단계는 두 기본 실행 기록을 요구(동결 코드) → 사용자 순서 "L_base → P1_L 조각 0"에 S_base 단독을 끼운다(최소 편차).
