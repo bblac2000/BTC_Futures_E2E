@@ -123,6 +123,7 @@ def capture(raw: Path, client: Any, archive: Path, fetch_premium: PremiumFetch, 
     """`raw` = `<var/t4/…>/prepared/raw`(배치 규약 A11) — 쓰기 전에 경로·범위 관문."""
     check_is_bounds(start_ms, end_ms)
     check_out_dir(raw.parent, root)
+    check_out_dir(raw, root)                                       # 해석된 경로(심볼릭 링크 대상)까지
     raw.mkdir(parents=True, exist_ok=True)
     rows = read_archive_rows_bounded(archive, start_ms, end_ms)
     (raw / "archive_rows.jsonl").write_text("".join(json.dumps(x, sort_keys=True) + "\n" for x in rows))
@@ -318,10 +319,15 @@ def raw_files(raw: Path) -> list[str]:
     return list(PRICE_RAW) + sorted(f"premium/{p.name}" for p in (raw / "premium").iterdir())
 
 
-def build(out: Path, expect_range: tuple[int, int], *, root: Path | None = ROOT) -> dict[str, Any]:
-    """`out` = `<var/t4/…>/prepared`(원시는 `out/raw`) · root=None은 verify의 임시 디렉터리 전용(내부)."""
-    if root is not None:
-        check_out_dir(out, root)
+def build(out: Path, expect_range: tuple[int, int], *, root: Path = ROOT) -> dict[str, Any]:
+    """`out` = `<var/t4/…>/prepared`(원시는 `out/raw`) — 산출물 경로와 원시 경로(해석된 대상)를 먼저 관문."""
+    check_out_dir(out, root)
+    check_out_dir(out / "raw", root)
+    return _build_unchecked(out, expect_range)
+
+
+def _build_unchecked(out: Path, expect_range: tuple[int, int]) -> dict[str, Any]:
+    """내부 전용(verify_rebuild의 임시 디렉터리) — 경로 관문 없음."""
     raw = out / "raw"
     try:
         bars, fundings, audit, kline_daily, prints = analyze(raw, expect_range)
@@ -356,11 +362,12 @@ def verify_rebuild(out: Path, expect_range: tuple[int, int], *, root: Path = ROO
     """원시에서 **다시 빌드**해 산출물 해시가 매니페스트와 같은지(덮어쓰지 않는다 · 임시 디렉터리)."""
     import shutil
     check_out_dir(out, root)
+    check_out_dir(out / "raw", root)
     m = verify_manifest(out)
     with tempfile.TemporaryDirectory() as td:
         t = Path(td)
         shutil.copytree(out / "raw", t / "raw")
-        m2 = build(t, expect_range, root=None)
+        m2 = _build_unchecked(t, expect_range)
     bad = [n for n in PREPARED if m2[n] != m[n]]
     if bad:
         raise ValueError(f"원시에서 다시 빌드한 산출물이 다르다: {bad}")

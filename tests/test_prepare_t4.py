@@ -258,3 +258,24 @@ def test_single_non_csv_member_stops(tmp_path):
 
 def test_oos_bootstrap_streams_mapping():
     assert A.BOOTSTRAP_STREAMS["OOS"] == {"gross_S": 4, "net_S": 5, "gross_L": 6, "net_L": 7}
+
+
+def test_raw_symlink_escaping_var_t4_is_refused(tmp_path):
+    outside = tmp_path / "elsewhere" / "raw"
+    outside.mkdir(parents=True)
+    prep = tmp_path / "var" / "t4" / "IS" / "prepared"
+    prep.mkdir(parents=True)
+    (prep / "raw").symlink_to(outside)
+    arch = TP.write_archive(tmp_path / "arch", [], [])
+    with pytest.raises(P.OOSGuard):
+        P.capture(prep / "raw", TP.FakeRest(), arch, lambda mo: (b"", ""), DAY0, END, root=tmp_path)
+    assert not any(outside.iterdir())
+    with pytest.raises(P.OOSGuard):
+        P.build(prep, (DAY0, END), root=tmp_path)
+    with pytest.raises(P.OOSGuard):
+        P.verify_rebuild(prep, (DAY0, END), root=tmp_path)
+
+
+def test_public_build_has_no_guard_bypass():
+    import inspect
+    assert "None" not in str(inspect.signature(P.build).parameters["root"].annotation)
