@@ -9659,3 +9659,107 @@ Codex: r1 12개 전부 CLOSED · 새 지적 5개.
 ## 2026-09-30 — 트라이얼 #3 마무리(문서만 · 사용자 지시)
 - 사용자: 판정(#58) 수락 · Codex ACCEPT-RECORD 확인 · 트라이얼 #3 코드 변경 없음 · OOS 영구 폐쇄 · VPS 봇은 전략 없이 유지(손대지 않음) · 트라이얼 #4 사전등록은 헌법 v1.4 뒤.
 - learnings L11(T-FLUSH) · L12(REST mark 비재현) 원문 추가 · 헌법 v1.4 정정 목록(learnings 절) · 레지스트리 #60(발견) · #61(§7-2 부호 우선 분기 제안) · #62(v1.4 정정 목록).
+
+## 2026-09-30 — 트라이얼 #4 T-CARRY **before-pass**(advisor + Codex REDESIGN-FIRST) · IS 이전 보정 · 초안 r1
+
+### 사용자 가설 브리프(verbatim)
+> (2026-09-30 사용자 메시지 원문 — 항목 1~11과 Codex 질문 (i)~(iv) · 이 대화의 사용자 메시지 그대로)
+> Trial #4 — hypothesis T-CARRY (funding-crowding reversal). Decision by the user 2026-09-30. Start with the advisor + Codex before-pass on this hypothesis, then draft docs/trials/trial_04_preregistration.md r1. Do not anchor, do not touch data inside the IS window, do not write code beyond the draft. Constitution v1.4 governs (§7-2 sign-first classification applies from this trial).
+> Hypothesis (falsifiable): when the 8h funding rate is at an extreme of its trailing distribution, positioning is crowded and the subsequent multi-day drift is against the crowd; a counter-position that also collects the funding carry earns a net edge after 22 bp round-trip costs.
+> (설계 항목 1~11의 요약은 scratchpad 브리프 = Codex 입력 · 전문은 사용자 메시지)
+
+- 순서(advisor): IS 이전 보정 → Codex(수치 포함) → 초안. 보정: 펀딩 REST 2021-06-01 → 2023-12-31(endTime·행마다 단언 · 2,832 인쇄 · cef3bf91…) · 1m 아카이브 2021~2023(2024 파일 미개봉) · `docs/trials/trial_04_calibration/` 커밋 1afa4e3 + strict 집계 수정.
+- 핵심 발견: 펀딩이 0.0001에 고정(2022 초과 0 · 2023 69) → 후행 Q0.95 = 0.0001 · k 2.5×ATR_1d가 IS 이전 날 90%에서 6% 초과 → 브리프 그대로 진입 근사 S 12 · L 4(2년) · 중앙 보유 S 0.67일 · N 규칙상 8.
+
+### 입장표
+| 출처 | 지적 | 입장 | 조치 |
+|---|---|---|---|
+| advisor 순서 | 보정 먼저 | ✅ | 그대로 |
+| advisor 1 | 보정 범위·경계 단언·증거 위치 | ✅ | calibration/ 커밋 |
+| advisor 2 | 천장 6.33/6.27% · N = 8 | ⚠️ 부분 | N 8 ✅ · 천장은 Codex (vi)가 6.39/6.34%로 정정 — 정정값 채택 |
+| advisor 3a | 워밍업 율 대 #54 | ✅ | §5 · §12-7 |
+| advisor 3b | k×ATR 대 6% — 고르지 않음 | ✅ | §5-1 (c) · §12-3 |
+| advisor 3c | 가용·정산 규칙 | ✅ | §1 |
+| advisor 3d | 10일 보유 중 결손 | ✅ | §1 · §12-7 |
+| advisor 3e | P1 h ≤ 14,400 · 청산 · 캐리 통제 | ✅ | §4 · §12-9 |
+| advisor 3f | §7-2 원문 인용 | ✅ | §7-2 |
+| advisor 3g | n ≥ 30 설계상 | ✅ | §5-1 (d) · §12-10 |
+| advisor 4 | 형식·L1~L12 · 행 검사 | ✅ | §9 · #64 |
+| Codex (i) | 90/180일 — 동률 미해결 | ✅ | §12-2 |
+| Codex (ii) | 부호 중앙값 대 크기 띠 | ✅ | §12-5 |
+| Codex (iii) | P1 청산 경계 비대칭 | ✅ | §4 · §12-9 |
+| Codex (iv) | 가용·정산 | ✅ | §1 · §12-4 |
+| Codex (v) | 0.0001 고정 — S 암이 가설을 검정하지 못함 | ✅ | §12-1 선택지 |
+| Codex (vi) | k·밴드 · 천장 산술 정정 | ✅ | §1-1 · §12-3 |
+| Codex (vii) | G0 설계상 미달 · n ≥ 48 | ✅ | §3 G0 · §12-10 |
+| Codex (viii) | N = 8 | ✅ | §0 · §12-8 |
+| Codex (ix) | 워밍업 율 | ✅ | §5 · §12-7 |
+| Codex (x) | 보유 0.67일 대 며칠 | ✅ | §9 L6 · §12-5·10 |
+| Codex (xi) | 가격/펀딩 분리 · P1 청산 추출 · 방향 | ⚠️ 부분 | 분리 보고 ✅ · Codex는 "P1은 방향도 무작위"라 적었지만 이 저장소 P1 규약은 원 방향 유지 — §4에 그대로 적고 §12-9로 |
+| Codex 추가 | strict 집계 필드 오류 | ✅ | calibrate.py 수정 · 재생성 |
+| Codex 추가 | 같은 경계 우선순위 등 | ✅ | §1 · §12-6 |
+| Codex 추가 | 근사는 예측이 아님 | ✅ | §5-1 한계 |
+
+### advisor 원문(verbatim)
+> You're at the start of trial #4 with orientation done and the N conflict correctly caught. Here's the approach, then the constraints the brief implies but doesn't state.
+> 
+> **Order.** Calibration (read-only, pre-IS) → Codex before-pass fed with the numbers → draft r1 → ops_log verbatim + positions → push. Codex can't answer (i) or judge item 10 without the table, and item 10 may change the design (see 3g), so the numbers come first; they're orientation, not drafting.
+> 
+> **1. Calibration spec — bound it so it can't touch IS.**
+> - Funding: one read-only GET series on `/fapi/v1/fundingRate`, `startTime` 2021-07-01 (so a 180-day window is also computable for Codex (i)), `endTime` = 2023-12-31T23:59:59.999Z, hard-asserted on every returned `fundingTime`. Record the response line hashes (L12). Rate only — `markPrice` is empty for most of 2021–2023; say so.
+> - ATR: 1m mark H/L/C from the 2021/2022/2023 archive files, grouped by UTC day; 2024 file untouched as you said, so 2023-12-31 drops from the ATR table — state it.
+> - Outputs: prints per year (expect ~1,095; report gaps/duplicates); qualifying prints per arm per year at 90d and 180d; **entries after item 4 hysteresis with an occupancy approximation** (exit at normalization print or 10-day cap, SL ignored — label it an approximation and say which direction it biases); hold-length distribution; ATR_1d(14)/close percentiles; fraction of days where k×ATR > 6.0% for k ∈ {2.5, 2.0, 1.5}; threshold stability (day-to-day change of Q0.95/Q0.05, 90d vs 180d).
+> - Put script + outputs + response hashes under `docs/trials/trial_04_calibration/` — evidence, not trial code (outside `backtest/` and `strategies/`, no tests, no imports into trial modules). Scratchpad-only would violate "nothing local-only".
+> 
+> **2. Two arithmetic checks to carry into the draft.**
+> - L=10 long liquidation distance = (0.1 − 0.0005 − 0.004)/0.996 = 9.588%; with the 10-bp absolute margin the SL ceiling is **6.33% (long) / 6.27% (short)**. 6.0% passes; state the headroom.
+> - N: trial #3 line 71 counts each judged arm; two judged arms here → **N = 8**, α = 0.00625, CI quantiles 0.003125/0.996875; SR* gets six fixed values — the four from #1/#2 plus trial #3 L −0.23689701015198752, S −0.19165332011747566 (report 41f789fc…). Present 8 as the rule-consistent value and 7 as the user's wording under §12; don't resolve it yourself.
+> 
+> **3. Constraints the brief doesn't state — each goes to Codex and into §12 as [PROPOSED]/[CONFLICT].**
+> - a. **Warm-up funding vs #54.** Trial #3's drop rule removes the 88 Oct-2023 prints with empty mark. T-CARRY needs their *rates* for the trailing distribution from 2023-10-03. §5 must pre-commit: rate kept for all pre-WINDOW_START prints, mark required only from the first possible position. That's a data-rule statement now, code later.
+> - b. **k×ATR vs the 6% cap.** Expect a material fraction of days over the ceiling. The draft must present skip-vs-clamp and the k table, not choose. If skip at k=2.5 guts entries, that's a design finding, not a tuning knob.
+> - c. **Availability (iv).** Print at 00:00:00 → decision at the close of the 00:00 bar (00:01) → entry at 00:01 open; distribution = the 270 prints strictly before f_t; a position entered at 00:01 does not settle the 00:00 print; exit (a) at the next open after the normalizing print *does* settle that print. Bucket fundingTime to the minute as trial #3 did.
+> - d. **Admissibility over a 10-day hold.** Trial #3's complete-day window rule doesn't scale. Pre-commit what happens to a missing minute, an incomplete day, or a missing print inside a hold (and at entry).
+> - e. **P1 with h up to 14,400 min.** Eligibility shrinks with h (iii); P1 has no SL, so at 10–30x its liquidation share will be high (L9) — disclose; and because P1 randomizes the funding sign, it controls for the carry term too — say that's why it's the right control.
+> - f. **§7-2 sign-first** — quote research-protocol.md line 37 verbatim.
+> - g. **n ≥ 30 by construction.** If calibration extrapolates fewer than 30 entries/arm over two IS years, the design fails before anchoring. Present alternatives (Q0.90/Q0.10, shorter hysteresis) as user decisions; don't pick.
+> 
+> **4. Draft mechanics.** Mirror trial_03_preregistration.md §0–§12, `params_version = tc_v1`; §9 differences must cover L1–L12 (the brief says L11; L12 is the pin-the-response rule and applies to your capture plan). Check registry #43's row text and follow that pattern for r1 with the draft's SHA; run the row through your pre-append gate (no `t3_<x>=` shapes — trial #4 will need its own `t4_` namespace later, which is code, not now).
+> 
+> **5. Don'ts.** No anchor, no Drive, no code under `backtest/`/`strategies/`, no request or file read that can reach 2024-01-01, no settling the N question or the k question on your own.
+> 
+> The two things a reviewer would call omissions if missing: 3a (the warm-up rates) and 3g (entry count vs n ≥ 30). Everything else is presentation.
+
+### Codex 원문(verbatim)
+> Session/thread ID: `01a0f0ec-9d52-7a20-a481-04bb5cd04584`. This was a read-only review of the brief, code, calibration output, constitution, trial #3 documents, and registry. I did not fetch data or open market-data records dated 2024 or later.
+> 
+> 1. **(i) Trailing 90 days versus 180 days.** A 90-day window has 270 prints, leaving about 13.5 observations in a 5% tail; 180 days has 540 and about 27. The longer window reduces tail sampling noise but responds more slowly to a funding-regime change. Neither solves the short-arm tie: the pre-IS median trailing Q0.95 is exactly `0.0001` for the 270-print window, and the calibration's median absolute threshold step is zero. The occupancy approximation changes from S/L **135/57** entries at 90 days to **105/55** at 180 days, while strict short entries fall from **9 to 6**. **Options:** pre-commit either window and report threshold ties and effective qualifying frequency; change the signal definition if a 5% *economic extreme* is required. The evidence does not establish that 180 days makes the clamped upper tail stable. [Calibration code](docs/trials/trial_04_calibration/calibrate.py:67), [results](docs/trials/trial_04_calibration/calibration.json:74).
+> 
+> 2. **(ii) Normalization exit.** The signed-median rule closes a short when funding falls to or below the trailing median, even if funding remains positive; the long rule can close after funding rises into positive territory. The suggested `|f| ≤ Q0.50(|f|)` instead asks whether funding magnitude has become ordinary near zero. It is a *rolling magnitude band*, not a fixed numeric band, and could change both carry exposure and hold length. A signed central band is a third distinct definition. **Options:** retain the median rule and describe the hypothesis as return toward the signed center; or pre-commit a magnitude or signed band and recalibrate its entries, holds, and funding payments. The supplied counts apply only to the median exit. [Brief](t4_brief.md:4), [simulator](docs/trials/trial_04_calibration/calibrate.py:72).
+> 
+> 3. **(iii) Ten-day cap and P1.** Ten days is **14,400 minutes**. A P1 placement for such a hold needs complete mark coverage and every funding boundary across that interval; valid placements will shrink near missing days and window ends. Trial #3's P1 closes at the **last held minute's close**, whereas its base time exit pays funding at the **exit minute's open**. Trial #3 explicitly records the resulting funding-boundary asymmetry. Reusing that rule for T-CARRY could turn a long-hold carry comparison on an accounting difference. **Options:** pre-commit a P1 exit and eligibility rule matching the base settlement boundary, or retain and quantify the asymmetry with a stated rejection limit. Test placement failures against the protocol's >1% discard rule. The approximation recorded only **5 S and 2 L cap exits**, so most P1 holds are shorter, but that does not remove the boundary issue. [Trial #3 P1](docs/trials/trial_03_preregistration.md:89), [implementation conventions](docs/trials/trial_03_conventions.md:63), [calibration](docs/trials/trial_04_calibration/calibration.json:88).
+> 
+> 4. **(iv) Print availability and settlement.** A print stamped **00:00:00** settles positions already open at that boundary. For a decision at the close of the **00:00 bar** (00:01) and entry at the **00:01 open**, the new position does **not** receive/pay the 00:00 funding; if still held, its first possible settlement is **08:00**. The decision may use the 00:00 rate only if its availability by 00:01 is established under a pre-committed historical and forward rule; a late print must defer the decision. Compute Q0.05/Q0.95/median from prints strictly before `f_t`, then compare `f_t` to those values. The calibration implements that exclusion. **Options:** use recorded receipt times where available, or a conservative fixed availability delay established before IS. Specify how missing or late prints affect entry and exit. [Trial #3 funding order](docs/trials/trial_03_preregistration.md:31), [trailing slice](docs/trials/trial_04_calibration/calibrate.py:67).
+> 
+> 5. **(v) The 0.0001 clamp and the short hypothesis.** As briefed, `f ≥ Q0.95` largely selects the **baseline clamp**, so it does not cleanly test *extreme positive funding*. Across 2022–23, **759/2,190** prints equal `0.0001`; only **69** exceed it, all in 2023. The non-strict rule produces **658 qualifying S prints** and **135 approximate S entries**. **Options with measured pre-IS counts:** `f > Q0.95` gives **9 S entries**, just **1** inside the k=2.5 stop band; 180-day strict gives **6**, also **1** in band. Requiring `f > 0.0001` has **69 raw prints** across the two years, but its entry count under the full state machine was not separately measured. A quantile of the underlying premium component would address the clamp directly, but that component and its counts are absent from this calibration; they cannot be inferred uniquely from the settled rate. A `≥ Q0.95` rule can be retained only with the narrower claim that baseline positive funding is the signal. [Discreteness](docs/trials/trial_04_calibration/calibration.json:44), [strict counts](docs/trials/trial_04_calibration/calibration.json:150), [brief](t4_brief.md:20).
+> 
+> 6. **(vi) ATR stop against the 6% ceiling.** At k=2.5, **90.26%** of pre-IS days have `k×ATR > 6%` (2022 **95.89%**, 2023 **84.62%**). Skipping out-of-band entries preserves the stated ATR stop but leaves approximate S/L counts **12/4**. Reducing k to **2.0** gives **34/14**; **1.5** gives **72/23**, still below 30 for L. Clamping at 6% could admit more entries but changes the stop and payoff distribution, so it requires a new, explicit stop and sizing definition. A different SL definition is another hypothesis and needs its own pre-IS calibration. None of these counts is a final replay count: calibration filters entries *after* an SL-free occupancy simulation, without rerunning exits and hysteresis. Also, the brief's **6.33%/6.27%** maximum subtracts 10 bp before applying the 1.5 buffer. Registry #5 states two separate tests, `1.5×SL < liq_dist` and `liq_dist−SL ≥ 10 bp`; with the quoted 10x distances, the first binds at roughly **6.39% long / 6.34% short**. That arithmetic correction does not rescue k=2.5. [ATR and entry counts](docs/trials/trial_04_calibration/calibration.json:2), [filter method](docs/trials/trial_04_calibration/calibrate.py:189), [registry #5](docs/trial_registry.md:13).
+> 
+> 7. **(vii) n ≥ 30 per arm.** **The design as briefed is not credible against its own G0 gate:** the only supplied pre-IS approximation yields **S 12 / L 4** entries over two years at k=2.5 and the proposed band. Even without the band, L has only **57** approximate entries over two years; the final replay can differ in either direction because stops change occupancy and rearming. Thirty trades is a necessary floor, not necessarily enough: the constitution calls for an effective-sample allowance for autocorrelation, and trial #3 required **n ≥ 48** plus `n_eff ≥ 30`. **Options:** redesign the trigger, stop, or exit using pre-IS evidence and then lock one coherent hypothesis; or knowingly preregister a likely low-power test with a predetermined G0 failure. Do not assume IS will provide a multiple of the calibrated count without evidence. [Calibration](docs/trials/trial_04_calibration/calibration.json:75), [protocol](.claude/skills/quant-bot-constitution/references/research-protocol.md:17), [trial #3 G0](docs/trials/trial_03_preregistration.md:68).
+> 
+> 8. **(viii) N.** The registry and trial #3 count four earlier judged arms plus trial #3 L and S: **N=6** through #3. Two newly judged T-CARRY arms make **N=8**, not 7; `α=0.00625`, central CI **99.375%**, and SR* must use the defined estimates with `n_trials=8`. Counting only one T-CARRY arm would require changing which arm is judged, explicitly and before measurement. [Trial #3 N definition](docs/trials/trial_03_preregistration.md:9), [registry #58](docs/trial_registry.md:66), [protocol](.claude/skills/quant-bot-constitution/references/research-protocol.md:58).
+> 
+> 9. **(ix) Warm-up funding rates.** Registry #54 dropped **88** October 2023 rows because their `markPrice` was empty; it did **not** establish that their `fundingRate` was missing or invalid. T-CARRY's trailing window at the first 2024 settlement needs the preceding 270 **rates**. **Options:** pre-commit a rate-only validation path that retains a valid rate while excluding the empty mark field from mark-dependent uses, with separate audit counts and hashes; or mark the early window ineligible until 270 validated rates exist. Silently inheriting trial #3's whole-row drop would remove required history and shift the first eligible decisions. This review did not inspect those market-data rows. [Registry #54](docs/trial_registry.md:62), [T-CARRY window](t4_brief.md:11).
+> 
+> 10. **(x) Hold duration versus "multi-day drift."** In the SL-free approximation, S median hold is **0.67 day** (about 16 hours), L is **1.67 days**. S exits are overwhelmingly normalization exits (**129** versus **5** cap exits); L has **55** normalization versus **2** caps. Stops can shorten actual holds further. Thus the proposed short arm mainly tests sub-day to one-day reversion, while the long arm more plausibly spans multiple days. **Options:** keep the exit and narrow the stated premise, or define a longer-horizon exit and recalibrate counts, carry, risk, and P1 holds before IS. A longer cap alone is unlikely to matter much while normalization dominates. [Hold and exits](docs/trials/trial_04_calibration/calibration.json:88), [L11](docs/learnings.md:37).
+> 
+> 11. **(xi) Other pre-commitments that affect validity.** The claim combines price reversal and carry. P1 randomizes both timing **and direction**, so an apparent win may come from funding-sign exposure; P3 reverses both price direction and funding payments. **Options:** retain P1 as the protocol benchmark and add a separately specified, direction/funding-sign-matched control or sign randomization; report price PnL and funding PnL separately. The L trigger can be positive (the calibrated Q0.05 reaches `0.0000920065`), so a long need not collect carry. Trial #3 also found **5.2% liquidation** in its SL-free P1 despite zero in the protected base, making a 10–30x, potentially ten-day SL-free control particularly vulnerable to differing loss mechanisms. Pre-commit how liquidated P1 draws enter its distribution and report their share; consider a stop-matched diagnostic alongside the required P1. Preserve the constitution's zero-liquidation survival gate and its new **net-CI-sign-first** §7-2 classification for trial #4. [P1 convention](docs/trials/trial_03_preregistration.md:89), [L9](docs/learnings.md:24), [sign-first rule](.claude/skills/quant-bot-constitution/references/research-protocol.md:35).
+> 
+> **Additional objections**
+> 
+> - The calibration's `qualifying_prints_per_year` uses `>=`/`<=` even for its `strict` variants; those printed raw qualifying counts are **not strict counts**. Use the strict occupancy entries for the stated comparison, and correct or clearly label that audit field before relying on it. [Code](docs/trials/trial_04_calibration/calibrate.py:197).
+> - The calibration is deliberately an **SL-free, print-time occupancy approximation**, not a replay of next-minute fills, B2 rejection, intrabar stops, liquidation, or resulting hysteresis. It supports a redesign decision, not a predicted IS trade count. [Code](docs/trials/trial_04_calibration/calibrate.py:72), [scope note](docs/trials/trial_04_calibration/calibration.json:447).
+> - Pre-register precedence when settlement, normalization, cap, SL, liquidation, and a new signal meet at one boundary; whether an exit print may rearm; the end-of-window flat rule; and the prior-day ATR's exact completed-day and missing-day requirements. Trial #3's timing conventions are useful precedent but do not define this new state machine. [Trial #3 rules](docs/trials/trial_03_preregistration.md:29).
+> - Treat any choice among the inspected 90/180-day, quantile, and k variants as a **pre-IS design decision**, record it before IS, and keep the IS/OOS data sealed. The registry requires a new trial and higher N for rule changes after results. [Protocol](.claude/skills/quant-bot-constitution/references/research-protocol.md:38).
+> 
+> VERDICT: REDESIGN-FIRST

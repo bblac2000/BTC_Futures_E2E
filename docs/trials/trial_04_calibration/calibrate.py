@@ -204,8 +204,8 @@ def main() -> int:
             qhi.append(hi)
             qlo.append(lo)
             y = str(dt.datetime.fromtimestamp(t / 1000, UTC).year)
-            raw_q["S"][y] += f >= hi
-            raw_q["L"][y] += f <= lo
+            raw_q["S"][y] += (f > hi) if strict else (f >= hi)             # Codex before-pass: strict 변형은 strict로 센다
+            raw_q["L"][y] += (f < lo) if strict else (f <= lo)
         stab = {"Q_hi": {"min": min(qhi), "median": float(np.median(qhi)), "max": max(qhi),
                          "median_abs_step": float(np.median(np.abs(np.diff(qhi))))},
                 "Q_lo": {"min": min(qlo), "median": float(np.median(qlo)), "max": max(qlo),
