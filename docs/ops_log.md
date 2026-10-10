@@ -10797,3 +10797,99 @@ Three record-hygiene items to fix **before appending #72**, plus one disclosure 
 Also for the report: the user asked for the conventions diff at each step — show the A12 before/after text (git diff `b1b03e1..0455f28 -- docs/trials/trial_04_conventions.md`), both regression result blocks with commits, and state explicitly that (c) has not started.
 
 Sequence from here: Codex re-check verdict → fill `@VERDICT@` → fixes 1–3 → append #72 → ops_log section (Codex before r1/r2, diff review, re-check verbatim; advisor before as disclosed summary; advisor after verbatim; per-point positions) → secret scan → commit/push → update trial04-status memory → report → STOP. Do not start (c).
+
+## 2026-10-11 — 트라이얼 #4 단계 (c) **before-pass**(advisor만 — Codex는 사용자 지시 2026-10-11에 따라 대기열)
+> 사용자(원문 · 2026-10-11): "리뷰어(claude ai), codex(한도초과)는 사용을 못하니깐 advisor에게 확인받고 다음 단계 진행해줘"
+- 권한: 위 사용자 지시가 **이 단계 (c)**에 대해 CLAUDE.md 상시 규칙("Codex가 한도 초과면 after-pass를 대기열에 넣고, 그에 의존하는 것은 진행하지 않는다")보다 우선한다 — 범위는 "다음 단계" 하나((c)) · (c) 뒤 정지하고 (d)를 같은 대체로 진행할지 묻는다.
+- 바뀌지 않는 경계: (g) 동결·캡처·실행·판정(한 번만 실행)은 Codex 통과 뒤에만 · 삭제·라이브·자금 변경은 여전히 Codex 관문.
+- Codex before-pass는 **대기열**: 아래 프롬프트를 그대로 보낸다(계획 r1과 규약 B를 기록된 대로 검토 — 움직이는 대상이 아니다). 레지스트리 #73에 검토자 대체를 기록.
+- advisor: **PROCEED**(r3 §1 읽기를 시험 전에 규약 B로 고정 · 수정·추가 8건).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor Q1 | 보유 상수는 exit_schedule 한 곳 · (d) 설정은 import | 동의 — 규약 B13 |
+| 2 | advisor Q2 | window_end는 분 시작 시각 비교(트라이얼 #3 읽기) | 동의 — B16 ② |
+| 3 | advisor Q3 | mark 구간은 닫힌 8,641분 — P2 +3 인쇄의 종료 봉이 t + 6일 | 동의 — B18 · 시험 |
+| 4 | advisor Q4 | 읽기·사유 순서를 시험 전에 규약으로 · (c) 코드에 레지스트리 행 없음 | 동의 — B16~B19 · 트라이얼 #3 (c)에도 행 없음(grep 확인) |
+| 5 | advisor Q5 | 사용자 지시 verbatim · 대기 Codex 프롬프트 저장 · 검토자 대체 레지스트리 행 · (g) 경계 유지 · (c) 뒤 정지 | 동의 — 이 절 · #73 |
+| 6 | advisor 1 | complete_days는 import 불가 → 복사 | 동의 — B20 |
+| 7 | advisor 2 | 18 경계를 직접 계산 | 동의 — B17 |
+| 8 | advisor 3 | 경계 t에 펀딩 기록이 없어도 적격인 시험(결정 17) | 동의 — 시험 |
+| 9 | advisor 4 | PositionBusyError(체결 중복)는 유지 · busy_check만 제외 | 동의 — B14 · 모듈 주석 |
+| 10 | advisor 5 | (d) 메모: 종료 봉에서 결정 없음 | 동의 — B21 |
+| 11 | advisor 6 | 15회 정산: 구조 시험 + 전체 합성 재생 | 동의 — 시험 |
+| 12 | advisor 7 | 시험 규칙 = #69 스냅샷 디렉터리 · (3, 30) 한계 | 동의 |
+| 13 | advisor 8 | TDD: 적격성 시험 먼저 실패 확인 | 동의 |
+
+#### 계획 t4c_plan r1
+> # Trial #4 step (c) plan r1 — time exit + six-day eligibility (user 2026-10-11: reviewer(claude.ai) and Codex(quota) unavailable → advisor confirms, proceed)
+> Scope: synthetic tests only; no IS data; no shared-file edit; no trial #3 file edit; counts only.
+> C1 strategies/trial04/exit_schedule.py (new, thin): HOLD_MIN = 7_200 (r3 §1 fill + 7,200 min bar open); EVAL_TAIL_MIN = 1_440;
+>    EVAL_SPAN_MIN = HOLD_MIN + EVAL_TAIL_MIN (6 d); schedule() -> strategies.trial03.exit_schedule.TimeExitSchedule(HOLD_MIN)
+>    (imported unchanged — allowed by the (a) static import test; MissingExitBar re-exported). busy_check / PositionBusyError are NOT
+>    imported or re-exported: in trial #4 a busy extreme print is a normal record (r3 §1 position_busy) — handled by the strategy in (d).
+> C2 strategies/trial04/eligibility.py (new; one predicate for base, P1, P2, P3 — plan C8/C8′):
+>    Eligibility(bars, fundings, *, window_start=A.WINDOW_START_MS, window_end=A.IS_END_MS); __call__(t) -> None | reason, t = fill-bar open_ms.
+>    Checks in fixed order: (1) t % 60,000 == 0 else ValueError; (2) t < window_start → "window_start"; (3) t + 6d > window_end →
+>    "window_end" (r3: fill + 7,200 min + 24 h ≤ window end); (4) every minute m ∈ [t, t + 6d] (inclusive both ends = 8,641 minutes)
+>    present exactly once with four finite positive mark fields → else "mark_incomplete" (minute-level, prefix-sum index; a duplicated
+>    minute makes that minute unusable); (5) the 14 UTC days before day(t) each complete (1,440 valid minutes) → else "atr_days";
+>    (6) funding boundaries b on the 00/08/16 UTC grid with t < b ≤ t + 6d: exactly 18 by construction (asserted), each with exactly
+>    one funding record in b's minute bucket → else "funding" (0 or ≥ 2 records). The boundary in the fill minute itself (b == t) is
+>    NOT required (r3 decision 17). Off-grid funding records are not examined (same as trial #3).
+>    Decision-day reading: decision instant = T + 1 min = fill-bar open t, so day(t) is the decision day (T = 00:00 → same day).
+> C3 tests/test_trial04_exit_schedule.py (synthetic replay through backtest.engine_replay with SizingLimits(leverage_range=(3, 30)),
+>    a [3,30] regime, slippage 0.0006, rules from the #69 snapshot dir): constants; exit at fill + 7,200 open and 7,200 held bars;
+>    predicate true only at due; exit-bar open beyond liquidation → LIQUIDATION (long and short); open beyond SL only → TIME_EXIT at
+>    open; exit-bar high/low not evaluated; intrabar SL in last held bar clears the schedule; missing exit bar → MissingExitBar (later
+>    bar / end of input); a 5-day hold crosses exactly 15 boundaries for every fill minute (structural) and a replay pays 15
+>    settlements; fill in a boundary minute pays nothing for that boundary; time exit in a boundary minute pays first; module does not
+>    expose busy_check.
+> C4 tests/test_trial04_eligibility.py: 18 boundaries for every fill minute of a day (structural); boundary-minute fill not requiring
+>    its own boundary but requiring the 18th at t + 6d when t is on the grid; missing interior mark minute; missing last minute t + 6d;
+>    non-finite mark field; duplicated minute; missing 18th settlement; duplicated settlement; window_end inclusive boundary
+>    (t + 6d == IS_END floor-minute passes? see Q2); window_start; 13 vs 14 complete prior days; same object gives the same answer
+>    for the same t regardless of caller.
+> C5 conventions section B (items 13+), diff shown; ops_log before/after; registry: no row needed for (c) (trial #3 (c) had none) — confirm.
+> Reviewers: advisor before + after (saved to scratch immediately). Codex before/after-pass QUEUED (quota) — logged as queued in ops_log
+>    with the user's 2026-10-11 instruction verbatim; to be run when quota returns, before (g) freeze at the latest.
+> Questions: Q1 constants here vs (d) config (tc_v3 params object comes in (d)); Q2 window_end test: IS_END = …23:59:59.999, t and
+>    t + 6d are minute opens → condition t + 6d ≤ IS_END means the last admissible minute OPEN is 23:59 of 2025-12-31; is "≤ window end"
+>    on the minute open the right reading, or must the minute's close (open + 59,999) be ≤ window end (same result here); Q3 mark
+>    interval inclusive of minute t + 6d (8,641 minutes) vs half-open; Q4 anything in (c) that needs a pre-commitment beyond the
+>    conventions file; Q5 how to record the reviewer change vs CLAUDE.md "If Codex is over quota, queue the after-pass; nothing that
+>    depends on it proceeds until it lands".
+
+### advisor 원문(verbatim)
+You're at the (c) before-pass with a plan written and no code yet. The plan is sound and matches the anchored r3 text. Verdict: PROCEED, with the readings below fixed in conventions B *before* you write tests, and the process items recorded this turn.
+
+**Answers to your Q1–Q5**
+
+- **Q1 (constants):** Define `HOLD_MIN = 7_200` and `EVAL_TAIL_MIN = 1_440` once, in `strategies/trial04/exit_schedule.py` (trial #3 precedent). In (d), the tc_v3 config imports them from there — never a second literal. Add a one-line test in (d) that the config value *is* the exit_schedule value.
+- **Q2 (window_end):** Use trial #3's reading: compare the minute **open** of `t + 6d` against `IS_END_MS` (`hi > window_end → "window_end"`). Anchored text is "체결 + 7,200분 + 24시간 ≤ 창 끝" on fill time, so minute-open is the literal reading. State it in conventions; note the close-based reading gives the same result.
+- **Q3 (inclusive end):** Inclusive, 8,641 minutes. The anchored text uses `[체결, 체결 + 7,200분 + 24시간]`. And it's load-bearing: P2 at +3 prints fills at `t + 24h`, so its exit bar is exactly `t + 6d`. A half-open interval would drop P2's own exit bar. Write that sentence into conventions and test it (a missing bar at exactly `t + 6d` → `mark_incomplete`).
+- **Q4 (pre-commitments):** All implementation readings of r3 §1 go in conventions B before any test: inclusive mark interval; half-open funding interval `(t, t+6d]` (this **differs** from trial #3's `Admissibility`, which used `t0 <= b <= hi` — say so explicitly, cite r3 decision 17); minute-level mark check rather than trial #3's day-level; day(t) = decision day = day(T); the reason-code evaluation order (it determines reported `not_evaluable` counts, so fix it now). No registry row for the (c) code — confirm by grepping the registry for trial #3 (c).
+- **Q5 (CLAUDE.md "nothing that depends on it proceeds"):** The user's 2026-10-11 instruction is explicit and governs for *this step*. Required: (1) log it verbatim in the ops_log (c) section as the authority; (2) save the exact Codex before-pass prompt you would have sent (and later the after-pass prompt) into the ops_log so the queued pass runs against the same plan and the committed (c) commit, not a moving target; (3) a one-line append-only registry row recording the reviewer substitution (user decision, date, scope "(c)", Codex passes queued) — protocol deviations belong there, not only in a 10k-line log; (4) hard boundary unchanged: (g) freeze/capture/run/evaluate are run-once and need Codex before they happen; deletion/live/funds remain Codex-gated regardless. The user said "다음 단계" singular — stop after (c) and ask whether (d) may proceed under the same substitution.
+
+**Plan corrections and additions**
+
+1. **`complete_days` can't be imported.** `strategies.trial03.harness` is forbidden by the (a) static test (only `exit_schedule` is allowed). Copy `_finite_pos` + `complete_days` from `strategies/trial03/harness.py` @ its commit into `eligibility.py` with the same PROVENANCE-style note you used for the prepare_t3 helpers (conventions A4 pattern). Record the copy in conventions B.
+2. **Compute the 18 boundaries directly**, not by iterating days × GRID: `b0 = (t // H8_MS + 1) * H8_MS`, then `b0 + k*H8_MS` for k in 0..17; assert `b0 + 17*H8_MS == t + 6d - (t + 6d) % H8_MS`-style sanity. Makes "18 by construction" a trivial invariant and keeps the half-open rule visible in the code.
+3. **Explicit departure test:** fill at `t` on a boundary with **no** funding record at `t` → eligible (trial #3's predicate would have refused). This is the test that proves decision 17 is implemented.
+4. **`PositionBusyError` is still correct in `TimeExitSchedule.observe`** — a *fill* while `due` is set is a real invariant violation (one-way mode). Only `busy_check` (the decision-level gate) is excluded for trial #4. Say that distinction in the module docstring so (d) doesn't accidentally re-import `busy_check`.
+5. **(d) carry-forward to note now:** `engine_replay` asserts `eng.pending is None` on the hook bar before and after `on_minute_closed`. Trial #4's hysteresis (next decision only after a print inside the band, ≥ 8h after exit fill) makes this structurally safe, but write it down so the (d) strategy test includes "no decision on the due bar."
+6. **15 settlements test:** mirror trial #3's structural test for 7,200 (`sum(1 for x in bounds if f < x <= f + 7200) == 15` for every `f` in range(480)) plus one full synthetic replay of 7,200+ bars with 15 funding records asserting 15 paid.
+7. **Rules for tests:** load from `docs/trials/trial_04_rules_snapshot/` (the #69 snapshot); the hash-asserting loader comes in (d). `SizingLimits(leverage_range=(3, 30))` is valid since (b).
+8. TDD: write the eligibility tests first, see them fail on an empty predicate, then implement.
+
+**Process — do these now, before writing code**
+
+- Save this advisor text to scratch **and** into the ops_log (c) before-pass section in this same turn. The scratchpad was wiped between sessions; the repo is the only durable record.
+- The ops_log section header should read "before-pass (advisor only — Codex queued per user 2026-10-11)". Paste plan r1 verbatim as trial #3 did.
+- At the (c) stop: conventions B diff, test counts, commit hashes, the queued Codex prompts, and the explicit question "proceed to (d) under the same substitution?" Update `trial04-status` memory.
+
+Nothing here blocks. The one thing that would invalidate (c) later is an inclusive/half-open mismatch between the predicate and what P1/P2 assume in (e) — fix the readings in conventions first and the risk is gone.
+
+### 대기 중인 Codex before-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
+> STEP (c) BEFORE-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (c) plan r1 (logged verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (c) before-pass") and conventions section B (docs/trials/trial_04_conventions.md items 13–21) in /home/cms/project/BTC_Futures_E2E. Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) the readings in B16–B19 against r3 §1 (inclusive mark interval [t, t+6d] = 8,641 minutes; half-open funding interval (t, t+6d] = 18 boundaries, departure from trial #3 Admissibility; minute-open window_end comparison; decision day = day(t)); (2) reason-code order; (3) whether importing strategies/trial03/exit_schedule.TimeExitSchedule(7_200) unchanged reproduces r3's exit-bar order through backtest/engine_replay; (4) the copy of _finite_pos/complete_days from strategies/trial03/harness.py @ 8b8f103; (5) anything in (c) that must be pre-committed and is not. This pass was QUEUED on 2026-10-11 (Codex over quota; user instructed advisor-only confirmation) — review the plan as logged, not later code. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
