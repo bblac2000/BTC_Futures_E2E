@@ -10893,3 +10893,44 @@ Nothing here blocks. The one thing that would invalidate (c) later is an inclusi
 
 ### 대기 중인 Codex before-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
 > STEP (c) BEFORE-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (c) plan r1 (logged verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (c) before-pass") and conventions section B (docs/trials/trial_04_conventions.md items 13–21) in /home/cms/project/BTC_Futures_E2E. Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) the readings in B16–B19 against r3 §1 (inclusive mark interval [t, t+6d] = 8,641 minutes; half-open funding interval (t, t+6d] = 18 boundaries, departure from trial #3 Admissibility; minute-open window_end comparison; decision day = day(t)); (2) reason-code order; (3) whether importing strategies/trial03/exit_schedule.TimeExitSchedule(7_200) unchanged reproduces r3's exit-bar order through backtest/engine_replay; (4) the copy of _finite_pos/complete_days from strategies/trial03/harness.py @ 8b8f103; (5) anything in (c) that must be pre-committed and is not. This pass was QUEUED on 2026-10-11 (Codex over quota; user instructed advisor-only confirmation) — review the plan as logged, not later code. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
+
+## 2026-10-11 — 트라이얼 #4 단계 (c) **after-pass**(advisor만 — Codex는 사용자 지시 2026-10-11에 따라 대기열 · advisor **MERGE**)
+- 한 것: `strategies/trial04/exit_schedule.py`(보유 상수 · 트라이얼 #3 시계 수정 없이 재사용) · `strategies/trial04/eligibility.py`(판정 가능 술어) · 시험 22 + 22 · 커밋 2355cfc(코드) · 05d63ea(사전 고정: 규약 B13~B21 · 계획 r1 · #73).
+- 트라이얼 #3·공유 파일 수정 없음: `git diff a56ed9e..2355cfc --stat` = docs 3개(ops_log · 레지스트리 · 규약) + `strategies/trial04/{eligibility,exit_schedule}.py` + 시험 2개뿐.
+- 검증: 전체 시험 1,588 → 1,632 passed · ruff·pyright 깨끗(2355cfc).
+- **공개(TDD 틈)**: 적격성 시험은 빈 술어에서 먼저 실패를 확인했다(16 실패 · 6은 빈 술어에서도 통과 → 구현 뒤 22 통과). 시간 청산 시험은 완성된 얇은 래퍼에 대해 처음 돌렸다(스텁 먼저가 아님).
+- Codex before-pass·after-pass 둘 다 **대기열**(프롬프트 원문: before = 위 before-pass 절 · after = 아래) · (g) 동결 전에 반드시 실행.
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor after | 구현이 B13~B21과 줄 단위로 일치 · MERGE | 동의 |
+| 2 | advisor 1 | 원문 저장 · ops_log · 범위를 못 박은 대기 Codex 프롬프트 | 동의 — 이 절 |
+| 3 | advisor 2 | TDD 틈 공개 | 동의 — 위 · 사용자 보고 |
+| 4 | advisor 3 | 트라이얼 #3·공유 수정 없음을 한 줄로 증명 | 동의 — 위 |
+| 5 | advisor 4 | 규약 차이를 사용자에게 | 동의 — 보고 |
+| 6 | advisor 5·6 | 메모리 갱신 · 정지하고 (d) 진행 방식 질문 | 동의 |
+| 7 | advisor 넘김 1 | ATR_1d(14)는 15번째 날의 종가가 필요 — (d)에서 코드 전에 규약으로 | 동의 — 규약 B22 |
+| 8 | advisor 넘김 2 | funding 사유는 개수만 센다 — 유효성은 준비 단계 | 동의 — 규약 B23 |
+
+### advisor 원문(verbatim)
+You're at the (c) after-pass: code committed and pushed at `2355cfc`, 44 new tests, full suite 1,632, ruff/pyright clean. I checked the implementation against conventions B13–B21 line by line — every reading matches: `hi > window_end` on the minute open (B16②), `_valid_minutes(t, hi) == 8_641` (B16③), `range(d-14, d)` (B16④), `b0 = (t//8h+1)×8h` with 18 and the `t < bs[0]` half-open assert (B17), copy from harness @ 8b8f103 (B20), `PositionBusyError` kept / `busy_check` not exported (B14). The prefix-sum edge cases I traced (span before input start, span past input end, empty bars, duplicated minute, off-grid bar) all resolve to `mark_incomplete` correctly, and `test_span_running_past_the_input` plus the duplicate test cover the non-obvious ones. The explicit decision-17 departure test exists. **Verdict: MERGE.** Nothing reopens the code.
+
+**Finish before reporting** (none of these change the code):
+
+1. **Save this text to scratch now**, same turn, then build the ops_log (c) after-pass section: header "after-pass (advisor only — Codex queued per user 2026-10-11)", this text verbatim, per-point positions, and the **queued Codex after-pass prompt** pinned to the exact ranges — pre-commitment `a56ed9e..05d63ea`, code `05d63ea..2355cfc` — so the queued pass reviews those commits, not a moving target.
+2. **Disclose the TDD gap honestly**: eligibility was stub-first (16 fail / 6 vacuous pass → 22 pass); the exit-schedule tests were run against the finished thin wrapper, not a stub. State it; don't bury it.
+3. Add one line to the report proving no trial #3 / shared edit: `git diff a56ed9e..2355cfc --stat` shows only `strategies/trial04/{eligibility,exit_schedule}.py` and two test files. Already true from the commit stat — just say it.
+4. **Conventions diff** the user asked for at each step: `git diff a56ed9e..2355cfc -- docs/trials/trial_04_conventions.md` (section B, items 13–21). Show it.
+5. Update `trial04-status` memory: (c) done at `2355cfc`, #73 reviewer substitution, Codex before+after queued, next row #74.
+6. **Stop and ask**: "(d)도 같은 대체(advisor만, Codex 대기열)로 진행합니까?" — the user's instruction was singular.
+
+**Two carry-forwards to write into the report and B21-style memo for (d)** — not (c) defects, but the next step will trip on them if unrecorded:
+
+- **ATR_1d(14) needs 15 days, the predicate checks 14.** The true range of day d−14 uses day d−15's close ("전날 종가"). The anchored sample rule says "결정일 전 14일 완전", so the predicate is right as anchored — but (d)'s ATR computation must define what happens when day d−15's last bar is absent. Decide and record in conventions before writing the ATR code; don't let it become a silent default.
+- **The `funding` reason counts records, it doesn't validate them.** Same as trial #3's `Admissibility`; validity is enforced at prepare (A10 in-window stop). Say so in one line (conventions or (d) memo) so P1's use of the same predicate is understood to rely on prepared data.
+
+Report in the same shape as (b): what changed with commits, test counts (22 + 22, 1,588 → 1,632), the two disclosures above, the conventions diff, and the (d) question. Then STOP.
+
+### 대기 중인 Codex after-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
+> STEP (c) AFTER-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (c) in /home/cms/project/BTC_Futures_E2E. Review exactly these ranges: pre-commitment a56ed9e..05d63ea (conventions B13–B21, plan r1, registry #73) and code 05d63ea..2355cfc (strategies/trial04/exit_schedule.py, strategies/trial04/eligibility.py, tests/test_trial04_exit_schedule.py, tests/test_trial04_eligibility.py). Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) eligibility.py against B15–B20 and r3 §1 (closed mark span [t, t+6d] = 8,641 minutes via prefix sums incl. out-of-input edges; half-open funding (t, t+6d] = 18 boundaries; 14 prior UTC days; window comparisons on the minute open; fixed reason order); (2) that the trial #3 clock is reused unchanged and no trial #3 or shared file was edited; (3) whether the 44 tests actually pin the stated behaviours (15 settlements, boundary-minute fill, exit-bar order long/short, missing exit bar) or pass vacuously; (4) disclosed gaps: exit-schedule tests were not stub-first; B22 (ATR's 15th day) and B23 (funding reason counts records only) are carried to (d). This pass was QUEUED on 2026-10-11 (Codex over quota; user instructed advisor-only confirmation; registry #73) — review those commits, not later code. End with VERDICT: MERGE or FIX-FIRST.
