@@ -160,7 +160,7 @@ def test_placebo_exec_rate_reaches_sizing_quote_and_exit():
 def test_no_non_default_rate_outside_trial03_and_tests():
     """B5 T6: `slippage_rate=` 인자 — 전달(`slippage_rate=slippage_rate`)은 engine_replay·placebo_exec 두 모듈만 · 다른 값은 strategies/trial03과 테스트만 ·
     트라이얼 #3 backtest 모듈(`*_t3.py`)은 앵커 상수 `TF_V1.slippage`만."""
-    allowed_prefix = ("strategies/trial03/", "tests/")
+    allowed_prefix = ("strategies/trial03/", "strategies/trial04/", "tests/")      # trial04: 트라이얼 #4 (d) · 규약 C36(시험만)
     bad = []
     for base in ("backtest", "paper", "ops", "sizing", "exchange", "strategies", "scripts"):
         for p in (ROOT / base).rglob("*.py"):
