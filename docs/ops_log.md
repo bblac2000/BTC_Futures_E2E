@@ -11648,3 +11648,56 @@ You're at the (g) HALF 2 before-pass: #80 pushed, trial #3's HALF 2 log and rows
 - 기록 사본 `docs/trials/trial_04/records/{prepare,runs,p1,evaluation}/` · 단계마다 커밋·푸시 · 단계가 도는 동안 저장소 쓰기 없음 · 정지 사유 없음(rc ≠ 0 없음 · 범위 위반 없음).
 - **레지스트리 #84의 칸 주의**: 판정 문자열 안의 세로줄이 표 칸을 깨므로 행에서는 암 사이를 "/"로 적고 원문은 verdict.txt를 가리켰다(첫 초안은 세로줄 10개라 덧붙이기 전 검사에서 걸렸다 — 트라이얼 #3 #58과 같은 함정).
 - 판정 뒤 처음 본 것(보고 전용 · 판정 불변): L 암에서 결정 시점 사이징 거부 11건(`below_min_qty`) — 가격이 높을 때 최소 수량 0.001 BTC의 명목이 r3가 가정한 MIN_NOTIONAL 50 USDT보다 커서 sl_dist가 큰 진입이 걸러졌다(r3 §1이 "밴드 안이라도 체결 보장 아님"으로 공시한 경로) · P1의 청산 추출 비율 S 0.96 · L 0.99(슬롯 기준 약 10%가 청산 — SL 없는 5일 무작위 방향 · L 최대 30).
+
+## 2026-10-11 — 트라이얼 #4 단계 (g) 후반 **after-pass**(advisor만 — 검토자 한 명 · 레지스트리 #77·#80)
+- advisor: **ACCEPT as executed**(막는 것 없음 · 이미 커밋된 것은 고치지 않는다 · 정정 행 없음).
+- **기록 확인 1 — 시도 기록**: `evaluation_attempt.json` = {evaluator_commit 69f4d83…, started 2026-10-11T04:34:44Z} — 첫(성공한) 판정 실행(04:34:33 → 04:34:47Z) 안의 시각이다. 두 번째 시도는 04:34:47Z 뒤에 시작해 거부됐고 이 기록을 덮어쓰지 않았다.
+- **기록 확인 2 — L 암 `below_min_qty` 11건(판정 뒤 보고 전용 읽기 · 검증됨)**: 11건 모두 원시 수량 = 리스크 10 USDT ÷ (sl_dist × 가격)이 0.00084~0.00098로 **수량 단위 0.001 미만**(내림하면 0) · sl_dist 9.4%~14.5% · 시각 2025-03-07~03-15(8건) · 2025-10-20~10-22(3건). 위 실행 기록의 문구("최소 수량의 명목이 MIN_NOTIONAL보다 커서")는 부정확했다 — 정확히는 **sl_dist × 가격 > 10,000 USDT이면 E_ref 1,000 · 리스크 1%로는 0.001 BTC도 살 수 없다**(r3 §1이 공시한 경로 · Claude Code의 해석).
+- **계획 대 실제(판정 불변)**: ① 병렬 3(F84 기본 2) — 여유 19 GB ≥ 3 × 2.06 + 4 = 10.2 GB ② #82의 "1,867 통과(C1 내용)"는 C3 전체 실행 전에 적었다 — C3 실행도 1,867 통과 ③ F87의 자원·실현 L 분포 전체는 #84 행이 아니라 이 기록과 `records/` 사본에 있다 ④ #84에 없는 매수보유: 일 샤프 0.0499 · 창 수익률 +98.1% · `bh_beats_arm` 두 암 모두 True(보고 전용 — 게이트 아님) ⑤ K8 재시작 없음 · 전송 실패 없음 · 연기 시험으로 인한 규약·코드 수정 없음.
+- **학습 후보(정정 아님 · 닫는 행은 사용자 결정 뒤 별도 단계 — 트라이얼 #3 #60~#62 방식)**: (i) P1은 r3 §4·결정 11대로 SL이 없다 — 원판은 SL 청산 7건·청산 0/79인데 P1 슬롯은 약 8~10%가 청산된다 → 노출은 맞췄지만 위험은 맞추지 않은 벤치마크(#4에서는 플라시보 단계에 가지 않아 영향 없음 · #5 사전등록 설계 항목) (ii) G1·G2는 구조상 도달 불가였다 — L의 net 표준편차 517 bps 대 문턱 20 bps → 필요한 n ≈ (1.96 × 517 / 20)² ≈ 2,600건 · 신호는 연 25건쯤 → #5는 앵커 전에 IS 이전 표준편차로 필요 n을 먼저 계산 (iii) S는 평균 gross가 음수인데 "검정력 부족"이다 — 사전등록 §7-2 순서대로 CI가 0을 걸치고 MDE 359 ≫ 20이기 때문(분류기는 다시 보지 않는다).
+- 수집기(읽기 전용 · 2026-10-11T04:39:56Z): `LAST_RECONCILE.txt` = "2026-10-11T03:30:36Z reconcile 통과 · 31일 · 디스크 332668 · 대장 332669 · pruned 0" · `LAST_DRIVE_VERIFY.txt` = "2026-10-11T03:34:51Z drive-verify 통과 · pruned 날짜 49개" · 메모리 사용 906/1,834 MB · 디스크 56%.
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor 확인 1 | 시도 기록이 어느 시도인지 | 확인 — 첫 성공 실행 |
+| 2 | advisor 확인 2 | below_min_qty 원인을 사실로 적었다 | 동의 — 검증했고 문구를 위에서 바로잡음 |
+| 3 | advisor 편차 | 병렬 3 · 1,867 두 번 · 자원 위치 · 매수보유 · 재시작 없음 | 동의 — 위 기록 |
+| 4 | advisor 학습 후보 셋 | P1 SL 없음 · G1/G2 도달 불가 · S 분류 설명 | 동의 — 후보로만 기록 · 닫는 행은 사용자 결정 |
+| 5 | advisor 레지스트리 | 지금 정정 행 없음 | 동의 |
+| 6 | advisor 금지 | SDK 구현 · strategies 코드 시작 금지 | 동의 |
+
+### advisor 원문(verbatim)
+You're at the HALF 2 after-pass: chain C1 a992044 → H 69f4d83 → C3 d228952 → pins 3f93a02 → verdict 86e7325, every stage rc 0, F88 bounds met, run-once proven, precheck [1,2]/7/[1]/3 intact, no `t4_` tokens in #84, post-evaluate commits limited to records + verdict row + run log (F86 respected). **After-pass verdict: ACCEPT as executed. Nothing blocks.** What follows is what your checks didn't cover — record it in the after-pass, don't edit anything already committed.
+
+**Verify before writing the after-pass (two record checks)**
+
+1. **`evaluation_attempt.json` identity.** You hashed and copied it *after* the second (refused) evaluate. Open `docs/trials/trial_04/records/evaluation/evaluation_attempt.json` and state which attempt it records — the 04:34:33 success, the refusal, or both. If the refusal overwrote the success record, that's a record-keeping gap to note (report.json/record.json remain the verdict evidence), not a verdict change. Trial #3's #58 may have the same shape — check its copy for precedent.
+2. **`below_min_qty` 11 — you wrote the cause as fact in the run log.** Read the 11 `sizing_rejected_decision` events from L_base `events.jsonl` (post-verdict report-only reading is allowed) and confirm price × sl_dist → floored qty < 0.001. If confirmed, say "verified"; if not, correct in the after-pass. Either way, label it as Claude Code's interpretation of a disclosed path (r3 §1), which it is.
+
+**Done vs planned — deviations to state (none change the verdict)**
+
+- jobs 3, not the F84 default 2: 19 GB ≥ 3 × 2.06 + 4 = 10.2 GB — write the arithmetic.
+- #82 says "1,867 (C1 내용)" and was written before the C3 full-suite run; the C3 run also gave 1,867 — state both.
+- F87 "자원" and "실현 L 분포" live in ops_log / records copy, not the #84 row — acceptable, note it. #84 also omits B&H (daily Sharpe 0.0499, `bh_beats_arm` both True) — the constitution says B&H is reported; put it in the after-pass.
+- No K8 restart, no transport failure, no conventions edit from the smoke test — say so explicitly (the before-pass pre-committed these as report items).
+
+**What a second reviewer would object to — record as learning candidates, not corrections**
+
+- **P1 has no `sl` exit** (exit histogram: liquidation/time_exit only) while both arms have 7 SL exits and 0/79 liquidations; P1 slots liquidate ~8–10%. The "exposure-matched" benchmark is not matched in risk. Didn't touch #4 (placebo stage never reached) but it's a design item for #5's pre-registration. Check r3 §7 to confirm P1 was pre-registered SL-less before writing it as a learning.
+- **G1/G2 unreachable by construction.** L: sd_net 517 bps vs 20 bps threshold → n ≈ (1.96·517/20)² ≈ 2,600 trades; the signal yields ~25/yr. S: pre-IS estimate 43, realized 29. This is the constitution's 검정력 부족 vs 효과 부재 distinction — honest, but it means the gate could never pass in a 2-year IS. Learning for #5: compute n_required from the pre-IS sd estimate before anchoring.
+- **S: mean_gross < 0 yet classified 검정력 부족, not 음의 효과.** First question a reader asks. Explain in the report: CI straddles 0 and MDE 359 ≫ 20 under the pre-registered §7-2 order. Do not re-examine the classifier.
+
+**Registry:** no correction row now. Learning/closing rows follow trial #3's #60–#62 pattern as a separate step — propose in the report, user decides.
+
+**Remaining checklist, in order**
+
+1. ops_log after-pass: header "(g) 후반 after-pass (advisor only — sole reviewer per #77/#80)", this text verbatim, positions table, the two record-check results, Codex post-hoc prompt pinned to 1dd8b19..86e7325. Secret scan → commit → push.
+2. Memory `trial04-status.md` → CLOSED REJECT #84 (H 69f4d83 · pins 3f93a02 · verdict 86e7325); SDK request unblocked for *study* only — anything touching paper/live send paths still needs Codex (back 10-16 20:20); trial #5 awaits the user's hypothesis + pre-registration row. Update the MEMORY.md line.
+3. Collector, read-only SSH: `data/LAST_RECONCILE.txt` and `data/LAST_DRIVE_VERIFY.txt` — the 03:30 UTC run has fired; the before-pass committed to carrying this and it answers the user's "were files deleted" question.
+4. Final report (Korean): verdict and what it means for the paper→live goal (nothing from #4 goes to paper; OOS sealed), deviations above, learning candidates, pending user decisions (swap/`t4g.medium` needs Codex; Telegram "10/09 마감" text; meaning of "E2E 학습"), and next actionable items: SDK feasibility study via docs (Context7 on `binance-connector-python`, no `uv add` until the user picks a path), trial #5 pre-registration draft once the hypothesis is given.
+
+Do not start SDK implementation or any `strategies/` code — both are gated (Codex for live paths; registry pre-registration for strategies).
+
+### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77·#80)
+> STEP (g) HALF 2 AFTER-PASS — optional POST-HOC audit (read-only) of commits 1dd8b19..86e7325 in /home/cms/project/BTC_Futures_E2E. Check: (1) H 69f4d83 = the conventions-row commit and no freeze-set file changed after H (tests/test_t4_stages.py and docs only); (2) registry rows #81–#84 against backtest/t4_provenance.require_rows and the records under docs/trials/trial_04/records/; (3) F88 sanity bounds vs source_audit.json; (4) run-once evidence (evaluation_attempt.json, second evaluate refused); (5) that nothing other than records, the verdict row and ops_log changed after --stage evaluate; (6) the three learning candidates (P1 has no SL; G1/G2 required n ≈ 2,600; S classified underpowered with negative mean gross). Per #77/#80 the advisor was the sole reviewer. End with VERDICT: ACCEPT or CORRECTION-ROW-NEEDED.
