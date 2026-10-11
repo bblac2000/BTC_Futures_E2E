@@ -234,9 +234,11 @@ def test_a_refused_attempt_writes_nothing_but_leaves_the_attempt_record(work):
     assert not [p for p in base.iterdir() if p.name.startswith("evaluation_")]
 
 
-def test_the_execution_path_does_not_exist_before_step_g(work):
-    with pytest.raises(E.Refusal, match=r"\(g\)"):
-        E.evaluate(work[0], ROOT, evaluator_commit="0" * 40)
+def test_the_execution_path_refuses_on_the_real_repo_without_freeze_rows(work):
+    """(g) 전반: 실행 경로는 단계 관문과 연결됐다 — 동결 행이 없는 지금의 저장소에서는 관문에서 거부하고 아무것도 쓰지 않는다."""
+    with pytest.raises(E.Refusal, match="ProvenanceError"):
+        E.evaluate(work[0], ROOT, evaluator_commit="0" * 40, fetch=False)
+    assert not (work[0] / "evaluation").exists() and not (work[0] / "_records" / E.ATTEMPT).exists()
 
 
 def test_v_needs_exactly_270_prior_valid_prints():

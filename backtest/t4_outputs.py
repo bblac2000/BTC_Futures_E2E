@@ -1,7 +1,7 @@
 """트라이얼 #4 실행 산출물 계약((f) · 규약 E61) — (g) 단계 실행기가 **이 모듈로 쓰고**, 판정기가 **이 모듈로 읽는다**.
 
 **복사**: `backtest/t3_outputs.py` @ 75c3b6a에서 — 바꾼 것: 암 순서 S · L · 변형 이름(P2_print1 · P2_print3) · 트레이드 파일 `trades_t4.jsonl` ·
-요약 키(window_prints · dist_defined · tc_v3_sha256) · P1 조각·병합에 보고 전용 timing과 적격 분 개수(조각 간 일치 검사). 실패 보존 쓰기는 (g).
+요약 키(window_prints · dist_defined · tc_v3_sha256) · P1 조각·병합에 보고 전용 timing과 적격 분 개수(조각 간 일치 검사) · 실패 보존은 Trial04 필드와 P1의 게이트·timing 넷(F77).
 
 배치(`base` = 트라이얼 #4 IS 디렉터리):
 - `runs/<arm>_<variant>/` (arm ∈ S·L · variant ∈ base·P2_print1·P2_print3·P3_invert) = `trades_t4.jsonl` · `events.jsonl` · `summary.json`
@@ -201,3 +201,38 @@ def check_run_inventory(base: Path) -> None:
     want = expected_run_dirs(base)
     if got != want:
         raise ContractError(f"runs/ 목록 불일치: 빠짐 {sorted(want - got)} · 남음 {sorted(got - want)}")
+
+
+# ── 실패 보존((g) 전반 · 규약 F77) ──────────────────────────────────────────
+FAILURE_FILES = ("_failure_error.txt", "_failure_events.jsonl", "_failure_state.json")
+P1_FAILURE_FILES = ("_failure_draws.json", "_failure_error.txt", "_failure_null.jsonl", "_failure_timing_draws.json",
+                    "_failure_timing_null.jsonl")
+
+
+def write_error(out: Path, e: BaseException) -> None:
+    import traceback
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "_failure_error.txt").write_text("".join(traceback.format_exception(e)))
+
+
+def write_run_failure(out: Path, strategy: Any, cause: BaseException) -> dict[str, Any]:
+    """전략 기록 보존: 이벤트 전부 · 상태·깔때기 요약 · 원인 트레이스백 — 출력 디렉터리에 바로(기록이 해시하고 read_run은 거부)."""
+    out.mkdir(parents=True, exist_ok=True)
+    s = strategy
+    (out / "_failure_events.jsonl").write_text("".join(json.dumps(e, sort_keys=True, default=str) + "\n" for e in s.events))
+    state = {"arm": s.arm, "variant": s.variant.name, "state": s.state, "exit_ts": s.exit_ts, "window_prints": s.window_prints,
+             "ingested": s.ingested, "funnel": dict(s.funnel), "sub": dict(s.sub), "entry": dict(s.entry), "n_events": len(s.events)}
+    (out / "_failure_state.json").write_text(json.dumps(state, sort_keys=True, indent=1) + "\n")
+    write_error(out, cause)
+    return state
+
+
+def write_p1_failure(out: Path, failure: P1.P1Failure, cause: BaseException) -> None:
+    """P1 조각 기록 보존: 끝난 게이트·timing 추출 · 귀무 행 · 원인 트레이스백."""
+    from backtest import p1_core as C
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "_failure_draws.json").write_text(C.canonical_json(failure.draws))
+    (out / "_failure_null.jsonl").write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in failure.null))
+    (out / "_failure_timing_draws.json").write_text(C.canonical_json(failure.timing_draws))
+    (out / "_failure_timing_null.jsonl").write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in failure.timing_null))
+    write_error(out, cause)

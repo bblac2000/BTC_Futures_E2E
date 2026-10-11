@@ -26,6 +26,7 @@ import hashlib
 import io
 import json
 import re
+import sys
 import tempfile
 import zipfile
 from collections import defaultdict
@@ -388,3 +389,112 @@ def oos_range(registry: Path, row_id: int) -> tuple[int, int]:
         if pat.match(line) and "트라이얼 #4 OOS 개봉" in line and "사용자 결정" in line:
             return A.OOS_START_MS - 91 * A.DAY_MS, A.OOS_END_MS
     raise OOSGuard(f"레지스트리 행 #{row_id}에 트라이얼 #4 OOS 개봉 사용자 결정이 없다 — OOS는 닫혀 있다")
+
+
+# ── 고정 로더((g) 전반 · 규약 F74 · C39 — 추가만 · 위 캡처·분석·빌드·verify의 동작은 그대로) ──
+def _pinned_manifest(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], root: Path) -> dict[str, Any]:
+    """데이터 핀(t4_provenance): 매니페스트 SHA256 · 원시 목록 · 산출물 해시 · 감사 개수 + 원시 파일 전부 재해시 + 캡처 범위."""
+    from backtest.t4_provenance import check_pins_against_prepared
+    check_out_dir(out, root)
+    check_is_bounds(*expect_range)
+    check_pins_against_prepared(out, pins)
+    m = verify_manifest(out)
+    meta = json.loads((out / "raw" / "fill_ranges.json").read_text())
+    if (meta["start_ms"], meta["end_ms"]) != expect_range:
+        raise ValueError(f"캡처 범위 {(meta['start_ms'], meta['end_ms'])} ≠ 기대 {expect_range}")
+    return m
+
+
+def load_prepared_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], *, root: Path = ROOT
+                         ) -> tuple[list[BD.Bar1m], list[BD.Funding], list[dict[str, Any]]]:
+    """실행 경로(해시만 · 다시 빌드하지 않음): 디렉터리 · 핀 · 매니페스트 · 범위 · 타임스탬프 · **첫·마지막 봉** · 인쇄 입력 계약을 모두 단언.
+    반환 (봉 · 펀딩 · 인쇄)."""
+    from strategies.trial04.harness import validate_prints
+    start, end = expect_range
+    _pinned_manifest(out, pins, expect_range, root)
+    bars = T2.read_bars(out / "bars_1m.parquet")
+    fundings = [BD.Funding(**f) for f in json.loads((out / "funding.json").read_text())]
+    prints = json.loads((out / "premium_prints.json").read_text())
+    assert_in_range([b.open_ms for b in bars], start, end)
+    assert_in_range([f.funding_ms for f in fundings], start, end)
+    assert_in_range([int(p["T"]) for p in prints], start, end)
+    first, last = start + (-start) % 60_000, end + 1 - 60_000
+    if not bars or bars[0].open_ms != first:
+        raise ValueError(f"첫 봉 {bars[0].open_ms if bars else None} ≠ 범위의 첫 분 {first}")
+    if bars[-1].open_ms != last:
+        raise ValueError(f"마지막 봉 {bars[-1].open_ms} ≠ 범위의 마지막 분 {last}(C39 — 잘린 봉 파일)")
+    validate_prints(prints)
+    last_print = end - end % A.H8_MS
+    if not prints or int(prints[-1]["T"]) != last_print:
+        raise ValueError(f"마지막 인쇄 {prints[-1]['T'] if prints else None} ≠ 범위의 마지막 경계 {last_print}")
+    return bars, fundings, prints
+
+
+def load_kline_daily_pinned(out: Path, pins: dict[str, Any], expect_range: tuple[int, int], *, root: Path = ROOT
+                            ) -> list[dict[str, Any]]:
+    """매수보유 입력(kline 일 종가) — 같은 핀 검사 + 날이 유일·오름차순 · 날·분 시각이 범위 안."""
+    start, end = expect_range
+    _pinned_manifest(out, pins, expect_range, root)
+    rows = json.loads((out / "kline_close_daily.json").read_text())
+    days = [int(r["day"]) for r in rows]
+    if days != sorted(set(days)):
+        raise ValueError("kline 일 종가의 날이 유일·오름차순이 아니다")
+    assert_in_range([d * A.DAY_MS for d in days], start - start % A.DAY_MS, end)
+    assert_in_range([int(r["minute_ms"]) for r in rows], start, end)
+    if any(int(r["minute_ms"]) // A.DAY_MS != int(r["day"]) for r in rows):
+        raise ValueError("kline 일 종가의 분 시각이 그 날에 속하지 않는다")
+    return rows
+
+
+# ── CLI((g) 전반 · 규약 F75 · F79 — 관문 뒤에만 캡처) ───────────────────────
+def gate(commit: str | None) -> tuple[Path | None, str | None]:
+    """캡처·verify·--gate-check 공통 관문: 동결(H) + 레지스트리 규약 행·동결 행. 반환 (저장소, None) 또는 (None, 사유)."""
+    from backtest.t4_provenance import ProvenanceError, child_gate, stage_repo
+    try:
+        repo = stage_repo()
+        child_gate(repo, commit or "")
+    except ProvenanceError as e:
+        return None, str(e)
+    return repo, None
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description="트라이얼 #4 IS 데이터 준비(원시 캡처 → 감사 → 빌드)")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--verify", action="store_true", help="캡처·덮어쓰기 없이 raw/에서 다시 빌드해 대조")
+    ap.add_argument("--gate-check", action="store_true", help="관문만 검사(캡처 없음) — 통과 0 · 실패 6")
+    ap.add_argument("--evaluator-commit", help="동결 커밋 H(캡처·verify 전 필수)")
+    a = ap.parse_args(argv)
+    out = Path(a.out)
+    rng = is_range()
+    repo, why = gate(a.evaluator_commit)
+    if repo is None:
+        print(f"🚫 관문 실패(rc 6): {why}", file=sys.stderr)
+        return 6
+    if a.gate_check:
+        print("gate ok")
+        return 0
+    check_out_dir(out, repo)
+    if a.verify:
+        m = verify_rebuild(out, rng, root=repo)
+        print(json.dumps({"verified": True} | {k: v for k, v in m.items() if k != "raw"} | {"raw_files": len(m["raw"])}, sort_keys=True,
+                         indent=1))
+        return 0
+    if (out / "manifest.json").exists() or (out / "raw").exists():
+        print("🚫 이미 준비된(또는 부분) 출력이 있다 — 다시 캡처하지 않는다(--verify로 대조만)", file=sys.stderr)
+        return 5
+    from exchange.ccxt_rest import CcxtRestClient
+    from exchange.client import ReadOnlyClient
+    capture(out / "raw", ReadOnlyClient(CcxtRestClient()), BD.ARCHIVE_DIR, fetch_premium_http, *rng, root=repo)
+    try:
+        m = build(out, rng, root=repo)
+    except SourceStop as e:
+        print(f"🚫 {e}", file=sys.stderr)
+        return 3
+    print(json.dumps({k: v for k, v in m.items() if k != "raw"} | {"raw_files": len(m["raw"])}, sort_keys=True, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -2,14 +2,15 @@
 
 **복사**: `backtest/evaluate_t3.py` @ 75c3b6a에서 — 바꾼 것: 앵커 = trial04(N = 8 · 스트림 S 먼저) · V = 완전한 날 ∧ 그날 00:00 경계 앞의 유효
 인쇄 ≥ 270(인쇄 입력에서 재계산) · `t4` 결정 기록 키 · **펀딩 독립 재계산**(펀딩 입력) · P1 슬롯 ↔ 원판 대조 · P1-timing은 보고 블록으로만 ·
-보고 필드(r3 §7-3) · `evaluate()`는 (g)에서 동결·행·핀 관문과 함께 만든다(여기서는 거부).
+보고 필드(r3 §7-3) · `evaluate()` = (g) 전반에서 동결·행·핀 관문과 연결.
 
 - 입력 계약 = `backtest.t4_outputs`(빠짐·남음·스키마 불일치 → 거부) + 준비 입력(봉 · 펀딩 · 인쇄 · kline 일 종가 — (g) CLI가 고정 로더로 준다).
 - 트레이드마다 원장 항등식(E63): 지갑·수수료·펀딩·체결은 **34자리**(엔진 실행 문맥)에서 엔진 기록값과 정확히 같아야 하고, gross/net
   문자열은 `returns.trade_return`을 **기본 28자리 문맥**에서 다시 불러 정확히 같아야 한다 · 비용 격자 ×1.0 = 기록된 net · 불일치 → 거부.
 - gross(E59 [PROPOSED]) = 가격만(펀딩 전) — 공유 정의 그대로 · `gross_incl_funding_bps`는 보고 전용.
 - 판정: `verdict_t4.verdict_is`(두 암 함께 · G-B SR* 공유) · **timing 블록은 판정 입력을 만든 뒤에만 읽는다**(E65).
-- 한 번만(E67): `evaluation/`이나 시도 기록이 있으면 거부 · 모든 실패 = 거부(아무것도 쓰지 않음) · 결과는 임시 디렉터리 → 이름 바꾸기.
+- 한 번만(E67 · F78): `evaluation/`이나 시도 기록이 있으면 거부 · 모든 실패 = 거부(아무것도 쓰지 않음) · 결과는 임시 디렉터리 → 이름 바꾸기 ·
+  실행 경로 `evaluate()`는 단계 관문(동결·행·핀·영수증·기록)을 모두 통과한 뒤에만 계산한다.
 """
 from __future__ import annotations
 
@@ -455,7 +456,7 @@ def _run_once(base: Path, commit: str, before: dict[str, str], fn: Callable[[], 
             _, report = fn()
     except Refusal:
         raise
-    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, FloatingPointError, O.ContractError, P1.P1Error) as e:
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError, FloatingPointError, O.ContractError, P1.P1Error, RuntimeError) as e:
         raise Refusal(f"{type(e).__name__}: {e}") from e
     if _input_hashes(base) != before:
         raise Refusal("판정 중 입력 파일이 바뀌었다")
@@ -484,8 +485,28 @@ def _preconditions(base: Path) -> None:
 
 
 def evaluate(base: Path, repo: Path, *, evaluator_commit: str, fetch: bool = True) -> tuple[str, dict[str, Any]]:
-    """실행 경로는 (g)에서 만든다(동결·레지스트리 행·데이터 핀·verify 영수증·단계 기록 관문 + 고정 로더) — 그 전에는 거부한다(E67)."""
-    raise Refusal("트라이얼 #4 판정 실행 경로는 단계 (g)에서 동결 관문과 함께 연결한다 — 지금은 판정하지 않는다")
+    """한 번만(실행 경로 · F78). 데이터 인자가 없다 — 관문(동결·행·핀·verify 영수증·모든 실행/P1/병합 기록)을 여기서 다 통과한 뒤
+    고정 로더로 봉·펀딩·인쇄·kline 일 종가를 읽고 청산 수수료는 #69 `load_rules()`. 모든 실패 = 거부(아무것도 쓰지 않음)."""
+    from backtest import prepare_t4 as PT
+    from backtest.t4_provenance import ProvenanceError, load_pins
+    from backtest.t4_stages import StageFailed, Stages
+    from strategies.trial04.harness import InputError, RulesSnapshotMismatch, load_rules
+    _preconditions(base)
+    st = Stages(evaluator_commit, base=base, repo=repo, fetch=fetch)
+    try:
+        prov = st.receipt_ok(st.begin())
+        record_shas = st.check_all_records(prov)
+        pins, pc = load_pins(repo, fetch_first=False)
+        bars, fundings, prints = PT.load_prepared_pinned(st.prep, pins, PT.is_range(), root=repo)
+        kd = PT.load_kline_daily_pinned(st.prep, pins, PT.is_range(), root=repo)
+        liq_fee = load_rules().symbol_rules.liquidation_fee
+    except (StageFailed, ProvenanceError, InputError, PT.OOSGuard, RulesSnapshotMismatch, OSError, ValueError, KeyError) as e:
+        raise Refusal(f"{type(e).__name__}: {e}") from e
+    receipt = json.loads((st.records / "verify_receipt.json").read_text())
+    before = _input_hashes(base)
+    extra = {"fingerprint": prov["fingerprint"], "rows": prov["rows"], "pins": pins, "pins_commit": pc, "verify_receipt": receipt,
+             "stage_records_sha256": record_shas}
+    return _run_once(base, evaluator_commit, before, lambda: compute(base, bars, fundings, prints, kd, liq_fee), extra)
 
 
 def evaluate_with_fixture(base: Path, *, bars: Sequence[Bar1m], fundings: Sequence[Funding], prints: Sequence[dict[str, Any]],
