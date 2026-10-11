@@ -11868,3 +11868,56 @@ The gate you built the envelope on is MDE ≤ 2θ = 40. Passing it only avoids t
 Six candidates: one passes the 2θ gate on its own (C1, with the caveats above), one only with the multi-symbol lever (C2), four fail by arithmetic, and C6 can't be assessed before the L2 floor. That's the honest state of the space, not a steer — say so, and keep "no recommendation".
 
 **Order:** addendum → commit → after-pass block in ops_log (this text verbatim, positions table) → secret scan → push → chat: envelope with the 4× caveat first, table second, levers third, E2E paragraph once, then the ask (pick one / open a lever / wait). One line in `trial04-status.md` that the candidate doc exists and awaits the user. No registry row and no pre-registration draft until the user picks.
+
+## 2026-10-11 — 트라이얼 #5(C1 · T-SETTLE) 브리프 r1 **before-pass**(advisor만 — 검토자 한 명 · 레지스트리 #91)
+> 사용자(원문 · 2026-10-11): "다로 진행"(#90) · 질문지 답 "정산 앞" · "두 암" · "advisor만"(#91)
+- advisor: **FIX-FIRST 2 → PROCEED**(자료 미열람 · `strategies/` 코드 없음).
+
+### 입장표
+| # | advisor | Claude Code |
+|---|---|---|
+| 1 | 상대 분위(R)는 사용자가 고른 기제(펀딩 회피 축소)를 검정하지 않는다 — R 대 A(예상 펀딩의 절대 문턱) 가운데 하나를 사용자가 고른다 · AND 금지 · 둘 다 세어 보고 고르기 금지 | 동의 — 질문 하나로 묻는다 |
+| 2 | 게이트 P1은 시각을 맞춘 귀무(같은 시각 슬롯 · 같은 sl_dist · SL 승계 · 무작위 날) · 무조건 P1은 보고 전용 | 동의 |
+| 3 | P2 재정의 · sl_dist 밴드(바닥은 마진 캡) · 원장에 펀딩 없음 · SR* 집합 N = 10 · 신호는 [DERIVED] · 2021 자료 유무 확인 | 동의 — 초안에 결정으로 적는다 |
+| 4 | 보정 규율: 스크립트를 먼저 커밋·해시 · 출력은 n · sd · 깔때기 · 사이징 불가 비율 · 투영 MDE뿐 · 평균·부호·트레이드 목록은 어디에도 남기지 않는다 · 한 번 실행 | 동의 |
+
+#### 브리프 r1
+> 트라이얼 #5 브리프 r1 — T-SETTLE(ts_v1) · 자료를 보기 전
+> 결정 시각: 정산 시각 B(00/08/16 UTC)의 4시간 전 D = B − 240분 · 체결 = D + 1분 mark 시가(#4 C25 관례).
+> 신호: p_D = (B − 480분, D]의 1분 premiumIndex 종가 240개 평균(유효 ≥ 238 · 발화는 240 전부) — 진행 중인 펀딩 구간.
+> 분포: 같은 통계의 직전 유효 270개 · S: p_D ≥ Q0.90 → 숏 / L: p_D ≤ Q0.10 → 롱(상대적 쏠림) · 진입 시 부호·예상 펀딩율 보고.
+> 청산: 체결 + 235분 시간 청산(정산 4분 전 · 펀딩 없음) · SL = 1.5 × ATR_15m(14).
+> 사이징·비용: B2 L ∈ [3, 30] · E_ref 1,000 · 리스크 1% · 22 bps.
+> 플라시보: P1 무작위 타이밍(h 235분) · SL 승계 = 예(#88 ②) · "같은 시각 · 무작위 날" 귀무 추가 · P2 지연 · P3 부호 반전.
+> 게이트: r3와 같은 구조(G0 n ≥ 48 · θ 20 · N = 10 · §7-2 부호 우선).
+> 보정(IS 이전 2022-01 → 2023-12): 암별 개수와 트레이드 net 표준편차만(평균·부호는 출력·저장하지 않는다) → 투영 MDE → 관문 · 사이징 불가 구간 비율(#88 ③).
+> 창: IS 2024-01-01 → 2025-12-31 · OOS 2026-01-01 → 앵커일 − 1.
+> 우려: ① 평상시 펀딩은 0.01% 고정(헌법 L13) — 상대 분위는 "펀딩을 피하려는 축소" 기제와 어긋날 수 있다 ② 1~5 bps 펀딩을 피하려 왕복 10 bps를 낼 유인이 약하다 ③ 무조건적 정산 전 표류가 있으면 무작위 타이밍 귀무를 시각만으로 이긴다.
+
+### advisor 원문(verbatim)
+You're at the trial #5 before-pass: #90/#91 recorded, brief r1 written, no data read. **Verdict: FIX-FIRST on two points, then PROCEED to calibration.** Your concerns ①②③ are the right ones; ①+② are one design fault and ③ is a gate fault. Log this verbatim (advisor sole reviewer per #91).
+
+**1. The rule as written doesn't test the mechanism the user picked (your ①②)**
+
+The user chose "정산 앞" with the mechanism "펀딩을 피하려는 포지션 축소". That mechanism depends on the *magnitude* of the projected funding payment, and funding is not the premium: per v6 the rate is premium + clamp(interest − premium, ±0.05%), so it sits at 0.01% whenever premium ∈ [−0.04%, +0.06%]. With pre-IS median premium −0.043%, a trailing Q0.90 of premium in a quiet regime can still map to funding = 0.01% — nobody reduces a position to dodge 1 bp, and your S arm would be testing T-CARRY-at-4h, not avoidance pressure. Your L arm (Q0.10 → premium ≈ −0.1% → shorts pay ~9 bps) would carry the mechanism; S wouldn't — the #4 sign split again, built in. #4's decision 1 rejected absolute thresholds because the premium there was a *crowding proxy* calibrated in a bear window; here the magnitude *is* the cause, so that reasoning doesn't carry.
+
+Two consistent designs: **R** — trailing deciles of the running premium (what you wrote; tests relative crowding before settlement; mechanism may be absent in quiet regimes); **A** — absolute threshold on the *projected funding* computed with the published formula (interest from fundingInfo snapshot, cap read not hardcoded; tests the stated mechanism; fires rarely in quiet regimes → power risk, which the #88 gate will catch honestly). One primary only — not AND (rejected list), not both calibrated and then picked on counts. This is a user decision: one AskUserQuestion, R vs A, with those two consequences, before any calibration. If the chosen one fails the gate, that's a logged draft row (#64→#66 pattern) and the other becomes a new draft.
+
+**2. The gate null must be clock-matched (your ③)**
+
+An unconditional random-timing P1 is beaten by a pure pre-settlement drift. Pre-register the P1 *gate* as: same clock slot as the original trade's D, same sl_dist (pair_k), SL inherited (#88 ② = yes, as you wrote), random eligible *day*. That is still exposure-matched random timing — tighter, not a new layer. Keep the unconditional one report-only if you want. Pool check: 731 × 3 starts, 235-min windows never overlap across slots → 1,000 draws of ~150–220 slots is fine. This also answers the E2E §3-2 hour-of-day ban in the pre-registration: the clock is the hypothesis's mechanism, and the gate null holds it fixed.
+
+**3. Pre-commit before calibration (small, but write them now)**
+
+- **P2 is undefined** for a fixed-clock signal — delaying by a "print" lands in the next interval. Redefine as entry at D + k min within the window (fixed k, no grid) or drop P2 with a stated reason.
+- **sl_dist band**: 1.5×ATR_15m makes L = 30 nearly always; the floor is the margin cap, not minQty: notional = 10/sl_dist, margin = notional/30 > 400 USDT when sl_dist < ~0.083%. Compute and state the implied band; that's #88 ③ for this trial (upper side via minQty is irrelevant at these sl_dists — say so).
+- **Ledger**: no funding boundary inside [fill, fill+235] by construction — state it, and that liquidation/SL also precede B.
+- **SR* set at N = 10**: list the eight pinned values (now incl. #4S −0.0773, #4L 0.1299) plus the two new arms.
+- **Signal definition**: mean of 1m premiumIndex closes over (B−480, D] is a proxy for the exchange's time-weighted average — label it [DERIVED], valid ≥ 238/240, fire only at 240.
+- **Data check before calibration**: a 270-value trailing window for decisions from 2022-01 needs premium data from 2021-10; r3 listed zips 2022–2025. Check `trial_04_calibration/premium_listing.json` for 2021 months; if absent, calibration decisions start 2022-04 and say so.
+
+**4. Calibration discipline (#88 ① changes what pre-IS reveals)**
+
+sd requires a P&L replay on pre-IS, which #4 never did. Contain it: script committed and hashed *before* it runs; outputs per arm = n, sd_net, funnel counts, sizing-infeasible fraction, projected MDE vs 40 — nothing else; the mean, the sign, and the per-trade list are not printed, not written to any file, not logged. One run, outputs hashed, registry row with the script and output SHA256s before the draft is written.
+
+**Process:** before-pass to ops_log (verbatim) → the R/A question → calibration script → row → run once → gate → draft r1 with the items above as decisions. No `strategies/` code and no IS reads until anchor.
