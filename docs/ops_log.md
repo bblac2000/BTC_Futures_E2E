@@ -11701,3 +11701,44 @@ Do not start SDK implementation or any `strategies/` code — both are gated (Co
 
 ### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77·#80)
 > STEP (g) HALF 2 AFTER-PASS — optional POST-HOC audit (read-only) of commits 1dd8b19..86e7325 in /home/cms/project/BTC_Futures_E2E. Check: (1) H 69f4d83 = the conventions-row commit and no freeze-set file changed after H (tests/test_t4_stages.py and docs only); (2) registry rows #81–#84 against backtest/t4_provenance.require_rows and the records under docs/trials/trial_04/records/; (3) F88 sanity bounds vs source_audit.json; (4) run-once evidence (evaluation_attempt.json, second evaluate refused); (5) that nothing other than records, the verdict row and ops_log changed after --stage evaluate; (6) the three learning candidates (P1 has no SL; G1/G2 required n ≈ 2,600; S classified underpowered with negative mean gross). Per #77/#80 the advisor was the sole reviewer. End with VERDICT: ACCEPT or CORRECTION-ROW-NEEDED.
+
+## 2026-10-11 — 트라이얼 #4 닫는 행(#85~#87) **before-pass**(advisor만 — 검토자 한 명 · #77·#80)
+> 사용자(원문 · 2026-10-11): "1. 1번은 승인 2. 2번은 오래되서 기억이 안나는데 E2E_Hybrid_Bot\\docs폴더, E2E_Hybrid_Bot\\docs\\deep_research폴더에  있는 문서 확인해줘"
+- advisor: **PROCEED**(조건 7). 확인한 것: 판정기 MDE 산식(`verdict_t4.mde` = (z₁₋α + z₀.₈₀) · sd / √n_eff) · r3의 IS 이전 투영(S 43 · L 56) · 헌법 사본은 v1.5이고 L11은 이미 기각 목록에 있다 · L 후보 61 = 체결 50 + 거부 11.
+
+### 입장표
+| # | advisor | Claude Code |
+|---|---|---|
+| 1 | 행 모양 = #60/#61/#62 · v1.6 목록 | 동의 — #85·#86·#87 |
+| 2 | 승인 범위를 정확히(후보 셋 · 문구 아님) | 동의 — 행에 그대로 적음 · 최종 문구는 보고에 |
+| 3 | L13에 "검정력 부족이지 효과 부재 아님 · 1m 줄과 분리" | 동의 |
+| 4 | 필요 n은 판정기 산식으로 | 동의 — 교과서식 2,600은 버림: MDE ≤ θ에 9,300 · 11,900 / MDE ≤ 2θ에 2,300 · 3,000 |
+| 5 | P1 무(無)SL의 편향은 전략에 유리한 쪽 | **부분 불일치** — 청산 손실은 평균을 내리지만 SL이 없으면 분산도 커진다 · p95의 순 방향은 재지 않았으므로 "미측정"으로 적었다 |
+| 6 | L15: 걸리는 것은 최소 수량 | 동의 |
+| 7 | 사전 점검 · 블록 안 언어 통일 | 동의 — 한국어 |
+- 후보는 셋이었고 발견은 넷(L13 결과 + L14~L16)으로 적었다 — L13은 #60의 L11과 같은 "트라이얼 결과" 줄이다.
+
+### advisor 원문(verbatim)
+You've read enough — stop reading and write. Two deliverables are owed and both are now in hand: the "E2E 학습" answer (item 2) and the closing rows (item 1, approved). Treat this as the **before-pass for the closing rows: PROCEED**, with the conditions below. Log it verbatim in ops_log as you did for (g).
+
+**Item 2 — what to tell the user (facts from the docs you read, nothing new)**
+
+- Design doc §4: "E2E 학습" = training layers ① 인식층 (small model over event/time bars from aggTrades ticks + forward L2 + bookDepth proxy → state vector) and ② 정책층 (Phase 2a **supervised meta-labeling** that passes/reduces/blocks a *base signal* → w_t ∈ [−1, +1]; Phase 2b offline RL conditional). ③ governor is never learned. Offline batch only (§7-1).
+- Status: closed 2026-08-16 (#114), **ACCEPT 0** — ①돌파 ②챕레짐 REJECT, ③스프레드 폐기, B베이시스 closed. Phase 2b/3 structurally blocked. Reopening = 헌장 개정 + user approval; §7-4 forbids renaming a failed hypothesis. Open branches per closing report §8: spread as info/regime proxy (#113), other resolution / maker execution, ③ re-test after #106 trigger, Phase 3 paper pre-registration draft (#107, dormant).
+- The chain the user stated (collector data + current strategy → E2E 학습 → paper ≥ 1 month → live) has two broken links right now, say so plainly: (a) T-CARRY is REJECT, so there is **no base signal** on either side for a meta-label; (b) DR03 QB4 (adopted, §B-4) sets forward L2 at **≥ 3–6 months incl. weekend/month-end/high-vol/funding windows** — collection began 2026-07-24, so 3 months lands ~2026-10-24, 6 months ~2027-01-24 (and verify the summary's note that aggTrade/markPrice/forceOrder streams only start 09-17; if so the full stream set is ~3 weeks old).
+- Add: any trial #5 that trains on 2026-07..10 collector data burns that calendar window as future OOS. The Phase 3 draft (#107) is the existing skeleton for the paper step and needs a Phase 2 ACCEPT effect size to fill §2–§3.
+- Then the one decision for the user: which hypothesis/base signal trial #5 pre-registers (or whether to wait for L2 to reach the floor and pursue a §8 branch). Do not propose one.
+
+**Item 1 — closing rows, conditions**
+
+1. **Shape = #60/#61/#62.** #85 발견 → `docs/learnings.md` new block `## 트라이얼 #4 — T-CARRY(tc_v3 · …) · IS REJECT(두 암 · 검정력 부족 · 생존 통과 · 2026-10-11 · 레지스트리 #84·#85)` with the same 3-column table; #86 protocol proposal (⏳ 사용자 결정, "트라이얼 #5부터 · 소급 없음"); #87 constitution correction list. **SKILL.md is at v1.5 (2026-09-30), not v1.4** — the list is for **v1.6**; grep v1.5's rejected list first to see whether T-FLUSH already landed, so the list adds what's missing.
+2. **Approval scope — be exact.** #60 recorded "사용자 승인(문구 원문)". Here the user approved the three *candidates*, not wording. Write `✅ 사용자 승인 2026-10-11("1번은 승인" · 후보 셋 · 문구는 Claude Code)` and show the final L13–L15 text in the report so a wording correction row can follow if needed. Don't claim verbatim approval.
+3. **L13 (trial result, mirror L11)** must carry the nuance: this is the first non-1m-cadence hypothesis (8h prints, 5-day hold) and the REJECT is **검정력 부족, not 효과 부재** — so the constitution's "1m 의사결정 가설 세 연속 REJECT" line does *not* extend to multi-day carry. Include L P3_invert −107 vs base +67 (direction had information at n 50, underpowered) and B&H beats both.
+4. **Power learning — verify the number before writing it.** The n ≈ 2,600 came from a textbook (1.96·sd/20)²; the evaluator's pinned MDE (309/359) implies a different scaling: n_req = n × (MDE/20)² ≈ 50 × 239 ≈ 11,900 for L. Read `backtest/verdict_t4.py`'s MDE definition and derive n_req from *that*; or write the ratio (MDE/threshold ≈ 15–18× → sample must grow ~240–320×) without a point estimate. Cite pre-IS expected n vs realized (S 43 → 29; L: look up r3). The protocol proposal (#86) is the pre-anchor power gate — note the user's own E2E design §5 Phase 1 ④ and Phase 3 draft §2 already impose "MDE 사전계산 → 임계보다 크면 측정 중단"; this repo's constitution lacks it.
+5. **P1 no-SL learning — get the bias direction right.** r3 §4 decision 11 pre-registered "SL 없음 · 청산만". Liquidation losses pull P1 *draw means down* → p95 lower → the gate is **more lenient** toward the strategy, not harsher. Check `p1_draws.json` for the two arms before writing; the learning is "exposure-matched but risk-unmatched; bias favors the strategy; whether P1 inherits the original SL is a protocol change for #5 (changes the null)".
+6. **E_ref learning (L15):** binding constraint is LOT_SIZE minQty 0.001 from the pinned snapshot, not MIN_NOTIONAL (0.001 × 100k = 100 > 50). Statement: at E_ref 1,000 / risk 1%, qty = 10/(sl_dist × price) < 0.001 whenever sl_dist × price > 10,000 USDT → at BTC ≥ 100k the band's upper half (>10%) is unfillable; 11/61 L candidates hit it. Label it structural, disclosed by r3 §1.
+7. Registry precheck unchanged: 9 pipes, last row 84, no `t3_`/`t4_` tokens, `[1, 2]/7/[1]/3`. Learnings language: match the trial #3 block (L11/L12 are English, L1–L10 Korean — pick one and stay consistent within the block).
+
+**Order:** one short status line to the user now → log this before-pass → write learnings block + #85/#86/#87 in one commit, secret scan, push → after-pass (advisor) → update `trial04-status.md` (closing rows done; E2E 학습 definition + L2 floor dates are durable project facts worth one line in `collector-data-plan.md`) → final report with item 2 and the three rows' text.
+
+Do not touch the skill copy, do not start a trial #5 draft, do not read more E2E docs — DR02's answer and Phase 1 reports aren't needed for either deliverable.
