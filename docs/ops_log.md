@@ -11449,3 +11449,77 @@ Put it as a decision request: (1) read-only memo now, or (2) defer to after tria
 
 ### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77)
 > STEP (f) AFTER-PASS — optional POST-HOC audit (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (f) in /home/cms/project/BTC_Futures_E2E. Review exactly: pre-commitment 6f4b743..75c3b6a (conventions E57–E68, plan r1) and code 75c3b6a..dbd199d (backtest/verdict_t4.py, backtest/t4_outputs.py, backtest/evaluate_t4.py, tests/test_verdict_t4.py, tests/test_evaluate_t4.py, tests/fixtures/t4_eval_fixture.py, and a test-only edit in tests/test_prepare_t4.py: backtest.stats_t2 added to the import allowlist and backtest/t4_*.py added to the scanned files). Anchored text: docs/trials/trial_04_preregistration_r3.md §3, §3-1, §4, §7, §7-2, §7-3 (#70). Check: (1) verdict_t4.py against E57–E58 (gates, SR* over six pinned + two arms with n_trials 8, priority order, sign-first classification, exact labels); (2) the [PROPOSED] reading E59 (G1 gross = price only); (3) evaluate_t4.py: V recompute from prints (E62), ledger identities and the independent funding recompute over (entry_ms, exit minute] (E63), P1 remerge and slot-vs-source checks (E64), that ArmInputs is built without the timing block (E65), run-once frame and evaluate() refusing until (g) (E67); (4) t4_outputs.py contract (E61); (5) whether the 106 tests pin the behaviours (13 mutations: 11 killed, 2 survivors fixed by two added tests); (6) the positional draws_total change made because the trial #3 repo-wide static test forbids the keyword outside t3_outputs.py — is evading by position acceptable or should the guard be extended. Per registry #77 the advisor is the sole reviewer for (c)–(f); this prompt is kept for a post-hoc audit when Codex quota returns. End with VERDICT: MERGE or FIX-FIRST.
+
+## 2026-10-11 — 트라이얼 #4 단계 (g) 전반 **before-pass**(advisor만 — 검토자 한 명 · 레지스트리 #77·#78)
+> 사용자(원문 · 2026-10-11): "읽기 승인, (g) 전반은 advisor 방식으로 진행"
+- 레지스트리 #78(E59 확정 · (g) 전반 검토 방식 · 후반은 범위 밖) — 커밋 d8df880.
+- advisor: **PROCEED**(Q1~Q5 답 · 틈 9건) · 사전 고정: 규약 F71~F79(시험 작성 전 · 이 절과 같은 커밋).
+- 계획 r1에서 바뀐 것(advisor): 핀에 버린 워밍업 펀딩 행 수를 더한다(F73) · 동결 집합의 import 폐포 시험(F72) · 실제 레지스트리에 대한 t4 파서 시험 · 준비 시험 도우미를 `tests/fixtures/t4_prepare_fixture.py`로 · 전반 끝의 거부 확인 셋(F79).
+- Codex 프롬프트는 선택적 사후 감사용(아래).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor Q1 | C7′ 그대로 완전 · 집합 열거 시험 + import 폐포 시험 | 동의 — F72 |
+| 2 | advisor Q2 | 버전화 로직은 그대로 복사 · 실제 레지스트리 시험(t4 행 없음 · near 0 · t3는 [1, 2]) | 동의 — F71 · 시험 |
+| 3 | advisor Q3 | 인쇄 개수 셋 + 버린 워밍업 펀딩 행 수 · 감사에서 도출 | 동의 — F73 |
+| 4 | advisor Q4 | prepare_t4는 추가만 · 로더 단언(첫·마지막 봉 · 인쇄 계약 · 마지막 인쇄) | 동의 — F74 |
+| 5 | advisor Q5 | 전반/후반 경계를 명령으로 · 거부 확인 셋 | 동의 — F79 |
+| 6 | advisor 틈 1 | 이름 바꾸기 위생 시험 | 동의 — 시험 |
+| 7 | advisor 틈 2 | 실패 보존은 Trial04 필드 · P1 네 속성 | 동의 — F77 |
+| 8 | advisor 틈 3 | InputError · OOSGuard → 거부 | 동의 — F78 |
+| 9 | advisor 틈 4·5 | 표준출력 위생 · Decimal 문맥 · P1 CLI의 원판 기록 앞뒤 검사 | 동의 — F76 · 시험 |
+| 10 | advisor 틈 6 | 준비 도우미를 픽스처 모듈로 · 사슬 행은 t4 토큰 | 동의 |
+| 11 | advisor 틈 7·8 | 끝에서 끝 시험(실제 evaluate) · 시간 초과·빈 디렉터리·새 핀·분할 · --only 유지 | 동의 |
+| 12 | advisor 틈 9 | 변이 다섯 | 동의 — 구현 뒤 |
+
+#### 계획 t4g1_plan r1
+> (g) 전반 계획 r1 — 합성 시험만, 실데이터·동결 행·캡처 없음(사용자 2026-10-11: "읽기 승인, (g) 전반은 advisor 방식으로 진행" · 레지스트리 #78)
+> G1 backtest/t4_provenance.py: 트라이얼 #3 출처 모듈의 복사본 — 키·환경 변수·경로를 t4_ 이름공간으로 · 동결 집합은 계획 r3 C7′ 그대로(트라이얼 #4 모듈 8개 ·
+>    공유 모듈 9개 · strategies/trial03/exit_schedule.py · pyproject.toml · uv.lock · strategies/trial04/*.py · paper/*.py · sizing/*.py · exchange/*.py) ·
+>    데이터 핀 = 매니페스트 해시 · 원시 목록 해시 · 준비 산출물 5개의 해시 · 인쇄 개수 3종(전체 · 무효 · 유효하지만 불완전) · 동결 행 버전화(v1..N) 로직은 그대로.
+> G2 backtest/prepare_t4.py 추가분: 고정 로더 load_prepared_pinned(봉·펀딩·인쇄) · load_kline_daily_pinned · 관문 gate · CLI main · 로더 단언: 핀·매니페스트·범위 ·
+>    마지막 봉 = 2025-12-31 23:59(C39) · 인쇄 입력 계약(validate_prints) · 마지막 인쇄 = 2025-12-31 16:00.
+> G3 실행 CLI: strategies/trial04/run.py · backtest/p1_t4_run.py — 관문 → 핀 → verify 영수증 → 고정 로더 → 실행 → 계약으로 쓰기 · 둘 다 Decimal 문맥을 먼저
+>    고정(D55) · 표준출력은 개수만 · 실패 보존 쓰기(write_error · write_run_failure · write_p1_failure)를 t4_outputs.py에 더한다.
+> G4 backtest/t4_stages.py: 단계 실행기(prepare → pins → verify → runs → p1 → p1-merge → evaluate)의 복사본 — 암 S·L · 변형 이름 · 출력 파일 목록(병합 5개)만 바꾼다.
+> G5 evaluate_t4.evaluate() 연결: 거부하던 자리에 실제 경로(단계 관문 → 영수증 → 모든 기록 대조 → 핀 → 고정 로더 → _run_once) · 동결 행이 없는 지금의 저장소에서는
+>    관문에서 거부된다.
+> G6 시험: 트라이얼 #3 단계 시험을 옮긴다 — 임시 git 저장소에 규약 → 동결 → 핀의 커밋 사슬 · 가짜 실행기로 끝에서 끝까지 돌려 판정이 한 번만 되는지 · 변조·누락·
+>    부분 출력·코드 변동 거부 · CLI 실패 보존 · 표준출력 위생 · 시험을 먼저 옮겨 실패를 확인한 뒤 모듈을 옮긴다.
+> 범위 밖(후반): 규약 확정 행 · 동결 목록 파일과 동결 행 · 실데이터 캡처 · 핀 행 · verify · 실행 · P1 · 병합 · 판정.
+> 질문: Q1 동결 집합에 backtest/t4_outputs.py가 들어 있는지 등 C7′ 목록에서 빠지거나 넘치는 것 · Q2 트라이얼 #3의 버전화 로직(v1..N · 승인 행)을 그대로 가져올지
+>    단순하게 둘지 · Q3 핀에 넣을 인쇄 개수 3종이 적절한지 · Q4 prepare_t4.py는 (a)에서 커밋된 파일인데 지금 로더와 CLI를 더해도 되는지(아직 동결 전) ·
+>    Q5 전반에서 실제 저장소에 대해 해도 되는 것과 안 되는 것의 경계(--gate-check는 실패 경로만 확인).
+
+### advisor 원문(verbatim)
+You're at the (g) HALF 1 before-pass: #78 pushed, trial #3's provenance/stages/CLIs/tests read, plan r1 in chat only, no code. The plan is the right shape — a namespace port of a gate design that already survived two Codex cycles. **Verdict: PROCEED**, with the answers below fixed in conventions F before tests and the HALF 1 / HALF 2 boundary written down as concrete commands.
+
+**Q1–Q5**
+
+- **Q1 → C7′ is complete; `t4_outputs.py` is in it.** Exact: 8 t4 modules (`prepare_t4, p1_t4, p1_t4_run, t4_outputs, t4_provenance, t4_stages, evaluate_t4, verdict_t4`) + 9 shared (`stats, stats_t2, p1_core, placebo_exec, engine_replay, returns, data, replay, prepare_t2`) + `pyproject.toml`, `uv.lock` + globs `strategies/trial04/*.py`, `paper/*.py`, `sizing/*.py`, `exchange/*.py` + `strategies/trial03/exit_schedule.py`. Rules snapshot stays out (hash-asserted by `load_rules`); `data_pins.json` stays out by design. Pin it two ways: a test that `freeze_set(ROOT)` equals the enumerated expectation, and an **import-closure test** — AST-walk the three entry points (`strategies.trial04.run`, `backtest.p1_t4_run`, `backtest.evaluate_t4`) transitively over in-repo modules and assert every reached file is in the freeze set. That is what catches a future `from backtest import something_new`.
+- **Q2 → copy the v1..N logic unchanged.** It's tested, and a "simple" version is a new design with less coverage. The rename list: `_FREEZE_KEY` → `t4_`, `near_freeze_assignments` regex → `t4_(?:freeze|fingerprint)`, `manifest_rel` → `trial_04_freeze_manifest[_v<n>].json`, `CONVENTIONS_REL`, `PINS_REL`, `EVALUATOR_FILE`, env vars `T4_STAGE_REPO/ORIGIN`. Add a test against the **real registry file**: `t4.freeze_versions(reg)` raises "동결 행이 없다" and `t4.near_freeze_assignments(reg) == 0` today (and t3's parser still sees exactly [1, 2] — no cross-contamination). Add both to your pre-append precheck from now on.
+- **Q3 → three print counts + one more.** `prints`, `prints_invalid`, `prints_valid_incomplete` from `source_audit["premium"]`, plus the dropped warm-up funding row count from `price[DROP_KEY]` (A10 is a disclosed data-handling decision; trial #3 pinned the OI equivalents). `make_pins` derives them from the audit and `check_pins_against_prepared` recomputes and compares — never typed by hand.
+- **Q4 → fine, append-only.** A11 already says loaders/pins are (g). Rule for F: no change to `capture/analyze/build/verify_rebuild` behavior — the (a) tests must pass byte-for-byte; only new functions (`_pinned_manifest`, `load_prepared_pinned` → bars/fundings/prints, `load_kline_daily_pinned`, `gate`, `main`). Loader assertions: pins, manifest, range, `bars[0] == DATA_START 00:00`, `bars[-1] == 2025-12-31 23:59` (C39), `validate_prints`, last print T = 2025-12-31 16:00.
+- **Q5 → the boundary, as commands.** Allowed on the real repo after HALF 1 is committed (clean tree): `prepare_t4 --gate-check --evaluator-commit $(git rev-parse HEAD) --out var/t4/IS/prepared` → rc 6 "동결 행이 없다"; `t4_stages --stage prepare` → rc 2, same reason; then `test ! -e var/t4` — record all three in ops_log as HALF 1's refusal evidence. Forbidden: anything that creates `var/t4/`, `data_pins.json`, a freeze manifest file, or any row with a `t4_…=` token; any network capture. The pins/freeze/conventions **rows** are HALF 2 by #78.
+
+**Plan gaps to close before tests**
+
+1. **Port-hygiene test (highest value for a rename port):** `t4_provenance.py`, `t4_stages.py`, `p1_t4_run.py`, `strategies/trial04/run.py` contain no `t3_`, `T3_`, `trial03`/`trial_03` (except the `exit_schedule` import), and the stage constants read `ARMS=("S","L")`, `VARIANTS=(base, P2_print1, P2_print3, P3_invert)`, `RUN_OUTPUTS` with `trades_t4.jsonl`, `PREP_OUTPUTS` = 6 files, `MERGE_OUTPUTS` = 5 files.
+2. **Failure writers:** `write_run_failure` must use Trial04's fields (`state, exit_ts, window_prints, ingested`, funnel/sub/entry — there is no `cooldown_end`); `write_p1_failure` must preserve all four `P1Failure` attributes (gate + timing draws/null). Test both with a mid-run failure.
+3. **Exception mapping:** `evaluate()` and `_run_once` must convert `harness.InputError` and `prepare_t4.OOSGuard` to `Refusal` (trial #3 had no equivalents).
+4. **Stdout hygiene:** both CLIs print counts only; port the `FORBIDDEN` regex test. Both set `decimal.setcontext(decimal.Context())` first (D55).
+5. **P1 CLI:** base-run record check before and after the computation (t3 pattern); `run_range(arm, trades, bars, fundings, lo, hi)` — prints not needed there.
+6. **Test fixtures:** don't import from `tests/test_prepare_t4.py`; move the capture/build helpers (`FakeRest`-equivalent, premium zip builders) into `tests/fixtures/t4_prepare_fixture.py` so the `FakeRunner` and the chain fixture can use them. Chain fixture rows use `t4_conventions=`, `t4_conventions_commit=`, `t4_freeze_H/manifest=`, `t4_fingerprint=`, pins `t4_manifest=`, `t4_raw_inventory=`, `t4_prepared/<name>=`.
+7. **End-to-end test** must run the real `evaluate()` through `Stages` on the temp repo (patching the three loaders and `compute` as t3 did) and prove run-once. Also port `child_timeout`, `crashed_run_leaves_empty_dir`, `newer_pins_on_origin`, `partition_recorded_once`.
+8. **Memory-measure path:** keep `--only` for runs and P1 (K10); HALF 2 will need it on this data size.
+9. Mutations after: rename a key back to `t3_` in `freeze_versions` (chain test must fail), swap env var name, drop one file from `FREEZE_FILES`, `MERGE_OUTPUTS` with 3 files, `EVALUATOR_FILE` pointing at `evaluate_t3.py`.
+
+**Process**
+
+- Conventions F (items 71+): namespace key list, freeze set enumerated, pin fields, rc codes (6 gate / 5 existing output / 3 SourceStop / 7 run failure / 8 pre-run), stdout rule, the HALF 1 / HALF 2 boundary and the three refusal commands. Commit → ops_log before-pass "advisor only — sole reviewer per #77/#78" with plan r1 (paste it from your message verbatim) and this text → post-hoc Codex prompt pinned to the range.
+- TDD stub-first for the new modules; the (a) `test_prepare_t4.py` suite must still pass unchanged.
+- At the HALF 1 stop: full suite at HEAD, the three refusal outputs, conventions diff, and — still unanswered from the last report — the **Binance SDK decision** (the user replied only to items 1 and 2), the **03:30 UTC integrity result** (it has fired by now — read the two files, don't say "unknown"), swap/`t4g.medium`, and the HALF 2 question restated as #78 framed it: Codex after Oct 16 20:20, or the user's separate written override. Do not start HALF 2.
+
+### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77·#78)
+> STEP (g) HALF 1 BEFORE-PASS — optional POST-HOC audit (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (g) first-half plan r1 (verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (g) 전반 before-pass") and conventions section F (docs/trials/trial_04_conventions.md items 71–79) in /home/cms/project/BTC_Futures_E2E, as committed in the pre-commitment commit that follows d8df880. Scope: backtest/t4_provenance.py, backtest/t4_stages.py, backtest/p1_t4_run.py, strategies/trial04/run.py, loaders + gate + CLI appended to backtest/prepare_t4.py, failure writers in backtest/t4_outputs.py, evaluate() wiring in backtest/evaluate_t4.py — synthetic tests only. Check: (1) F71 namespace list and whether copying the trial #3 versioned-freeze logic unchanged is sound; (2) F72 freeze set completeness vs plan r3 C7′ and the import-closure test idea; (3) F73 pin fields; (4) F74 loader assertions (first/last bar, print contract); (5) F79 HALF 1 / HALF 2 boundary — anything in HALF 1 that touches real data, var/t4, pins, freeze manifests or t4 token rows. Per registry #77/#78 the advisor is the sole reviewer; this prompt is kept for a post-hoc audit when Codex quota returns. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
