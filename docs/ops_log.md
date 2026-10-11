@@ -11265,3 +11265,62 @@ Report in the (d) shape: what changed with commits, 33 tests + golden, suite cou
 
 ### 대기 중인 Codex after-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
 > STEP (e) AFTER-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (e) in /home/cms/project/BTC_Futures_E2E. Review exactly these ranges: pre-commitment 719012b..0405c00 (conventions D43–D53, plan r1) and code 0405c00..e3d6f21 (backtest/p1_t4.py new, tests/test_p1_t4.py, tests/fixtures/t4_p1_fixture.py, tests/fixtures/golden_p1_trial04.json, and one test-only clause in tests/test_slippage_param.py for backtest/*_t4.py + TC_V3.slippage). strategies/trial04/eligibility.py is unchanged — verify by diff. Anchored text: docs/trials/trial_04_preregistration_r3.md §4 (#70). Check: (1) p1_t4.py against D43–D52 and r3 §4 (h = 7,200 for every slot; eligibility = the sample-rule predicate; gate = p1_core.p1_draw_generic with spawn(1000)[d]; report-only timing = structural copy without the direction draw, spawn(2000)[1000 + d]; failure > 10 applies to the gate only; timing is a separate block); (2) the local executor D49 against the base replay (entry-bucket funding excluded, due-bar order, missing bar = error) and whether the byte-identical base-reproduction test D50 (both arms × funding15 / no funding / due-bar gap liquidation) is sufficient evidence of a single execution model; (3) the disclosed asymmetry D45 and the single sizing at the quote D48; (4) whether the 33 tests pin the behaviours (seven mutations were reported killed) and that the golden digests are implementation-generated regression pins; (5) merge invariants. Disclosed: three expectations corrected after implementation (atr_prev_close count, liquidation identity computed under exec_context, an arm check added to the fixture path in the module) and one test added after (due-bar high/low). This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (e), registry #75) — review those commits, not later code. End with VERDICT: MERGE or FIX-FIRST.
+
+## 2026-10-11 — 대기 Codex 검토 6건의 **advisor 대체**(사용자 지시 · 레지스트리 #76·#77)
+> 사용자(원문 · 2026-10-11): "codex 사용 가능한지 확인하고 안되면  (f)를 먼저 advisor 방식으로 진행" → "Codex 검토 6건((c)·(d)·(e)의 착수 전·사후)도 advisor 방식으로 진행" → "advisor가 검토한내용으로  문제 없으면 진행"
+- Codex 가용성 확인(#76): (c) before-pass 프롬프트를 보냄 · 스레드 01a12892-a1ed-7ad0-88d1-58ce5da6298c · 오류 "You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Oct 16th, 2026 8:20 PM." · 재시도 없음.
+- **공개(검토자 한 명)**: (c)~(f)는 advisor 한 명이 검토한다 — advisor는 계획 작성에도 관여했고 대화 전체를 보므로 독립된 두 번째 검토자보다 약하다 · 여섯 프롬프트는 위 절들에 그대로 두고 한도 복구 뒤 사후 감사로 돌릴 수 있다(사전 고정 값은 바꾸지 못한다) · (g)의 Codex 관문 문구는 그대로.
+- advisor 판정(아래 원문): (c) before PROCEED · (c) after MERGE(변이 시험 조건) · (d) before PROCEED · (d) after MERGE · (e) before PROCEED · (e) after MERGE.
+- (c) after 조건 실행 — `strategies/trial04/eligibility.py` 변이 7개 × `tests/test_trial04_eligibility.py`(22개): M1 `hi > window_end` → `>=`: 1 실패 · M2 mark 구간 반열림: 1 실패 · M3 앞 13일: 2 실패 · M4 닫힌 펀딩 구간(b0 = 올림): 9 실패 · M5 중복 펀딩 허용: 1 실패 · M6 `t < window_start` → `<=`: 1 실패 · M7 사유 순서 atr_days ↔ funding: 1 실패 → **전부 잡힘** · 원본 복원 뒤 22 통과 · 코드 변경 없음.
+- Claude Code 입장: 여섯 판정 모두 동의 · advisor가 한 번 통과시킨 것을 다시 묻는 구조의 한계는 위 공개대로.
+
+### 프롬프트별 대응표
+| 대기 프롬프트 | advisor 판정 | 근거가 있는 곳 |
+|---|---|---|
+| (c) before | PROCEED | (c) before-pass 절(B16~B19 읽기 · 사유 순서 · 시계 재사용 · 복사) |
+| (c) after | MERGE | (c) after-pass 절 + 위 변이 7개 |
+| (d) before | PROCEED | (d) before-pass 절 · C25·C26은 사용자 확인(#75) |
+| (d) after | MERGE | (d) after-pass 절(변이 6개) |
+| (e) before | PROCEED | (e) before-pass 절 |
+| (e) after | MERGE | (e) after-pass 절(변이 7개 · 원판 재현 6건) |
+
+### advisor 원문(verbatim)
+You're at the moment the user converted the six queued Codex passes to advisor passes, with registry #76 pushed and the trial #3 evaluator read but no (f) plan written. Handle the conversion first, then (f).
+
+**How to execute "6건도 advisor 방식으로"**
+
+Don't make six more advisor calls. I've already reviewed all of (c)–(e) before and after; the Codex prompts' check items are the same items. **This text is the advisor's answer to all six prompts** — log it once, verbatim, under a dedicated ops_log section, with a per-prompt table mapping each check item to where it was answered (the existing advisor before/after sections) plus the one new item below.
+
+Record it honestly, in registry #77 and the ops_log header: for (c)–(f) there is **one reviewer**, not two. The Codex prompts were written for an independent reviewer; the advisor also helped write the plans and sees the full transcript, so this substitution is weaker than a second reviewer. The six prompts stay in ops_log and remain runnable as a **post-hoc audit** when quota returns (Oct 16 20:20); a post-hoc FIX-FIRST can add a correction row but cannot change pre-committed values. The user's message covers the six queued reviews only — keep the (g) Codex gate wording from #73–#76 unchanged in #77 and ask explicitly in the (f) stop report whether (g) also proceeds advisor-only if Codex is still down.
+
+**Per-prompt verdicts**
+
+| pass | verdict | basis / new item |
+|---|---|---|
+| (c) before | PROCEED | B16–B19 vs r3 §1, reason order, clock reuse, harness copy — all in the (c) before text; nothing un-precommitted |
+| (c) after | MERGE **after one check** | Codex item (3) "pin or vacuous": (d) ran 6 mutations and (e) ran 7, but **(c) ran none**, and 6 eligibility tests passed on the empty stub. Run ~6 mutations on `eligibility.py` and confirm each is killed by one test: `hi > window_end`→`>=`; `EVAL_SPAN_MIN + 1`→`EVAL_SPAN_MIN` (half-open mark); `range(d-14, d)`→`range(d-13, d)`; `b0 = (t//H8+1)*H8`→ceil (closed funding interval); `fund[b] != 1`→`< 1`; swap atr_days/funding order. Takes seconds. A survivor is a real finding; otherwise record the results |
+| (d) before | PROCEED | C25/C26 since confirmed by user (#75); funnel order, decision_bar_missing, ATR d−15, P2/P3 — in the (d) before text |
+| (d) after | MERGE | 6 mutations killed; C25–C38 line-by-line in the (d) after text |
+| (e) before | PROCEED | D43–D53; eligibility.py untouched; timing structural copy |
+| (e) after | MERGE | 7 mutations killed; byte-identical base reproduction 2 arms × 3 cases; `eligibility.py` diff empty |
+
+**Records to write this turn**
+
+- Registry #77: user instruction verbatim; six passes → advisor; sole-reviewer disclosure; Codex post-hoc audit option; (g) gate unchanged; the (c) mutation results.
+- ops_log section with this text verbatim and the table above.
+- Memory `trial04-status`: replace "six queued Codex prompts MUST run before (g)" with the substitution and the post-hoc option.
+- No code change unless a mutation survives.
+
+**Then (f)** — write the plan and call me for the before-pass. The plan must address where trial #4 differs from trial #3's evaluator, so list these explicitly:
+
+1. **§7-2 sign-first ①** is new: net CI entirely below 0 → "효과 부재(음의 효과)" *before* the MDE checks; CI undefined → skip ①. Read the v1.5 research-protocol reference for the exact label strings before writing `verdict_t4.classify`.
+2. **G-B**: SR* = `expected_max_sr(6 pinned + defined {SR̂_S, SR̂_L}, n_trials=8)`; α = 0.00625; CI quantiles from `A.CI_LO_Q`; streams S-first per `A.BOOTSTRAP_STREAMS`.
+3. **V** (C35): complete mark day ∧ distribution defined at that day's 00:00 print — recomputed from prints, not r30 counts; cross-check against each run's `dist_defined`.
+4. **P2** = `max(P2_print1, P2_print3)`; variant names differ from trial #3.
+5. **Ledger identities** with C26 fee notional and funding sign; liquidation identity per D51; `entry_ms == decided_ms + 1` still holds.
+6. **Report fields** r3 §7-3: funnel (print-level), realized L distribution, exit reasons, price vs funding P&L per trade, funding received/paid counts, p_T sign at entry per arm, per-year net, cost grid, **P1 liquidated-draw ratio**, buy-and-hold.
+7. **t4_outputs** contract: P1 part dict needs the new fields (`timing_draws_json`, `timing_null`, `n_eligible`, `n_eligible_atr_prev_close_ok`); merged summary carries `timing` as a separate block; **a test that the evaluator's `ArmInputs` is built without reading `timing`** (D54); report uses `t4.ref`, never `decision_mark` (C41).
+8. Run-once / freeze gating wiring belongs to (g) (`t4_provenance`), but `evaluate()`'s preconditions and `_run_once` shape should be ported in (f) as trial #3 did.
+9. Carry C39 (last bar = 2025-12-31 23:59) into the (g) loader list.
+
+Report after the conversion: #77, the (c) mutation table, the six verdicts, and that (f) is next — then the (f) before-pass. Still carry the 03:30 UTC integrity result, 10-10 FAIL, and the swap/instance decision in the (f) stop report. Do not start (g).
