@@ -11921,3 +11921,12 @@ An unconditional random-timing P1 is beaten by a pure pre-settlement drift. Pre-
 sd requires a P&L replay on pre-IS, which #4 never did. Contain it: script committed and hashed *before* it runs; outputs per arm = n, sd_net, funnel counts, sizing-infeasible fraction, projected MDE vs 40 — nothing else; the mean, the sign, and the per-trade list are not printed, not written to any file, not logged. One run, outputs hashed, registry row with the script and output SHA256s before the draft is written.
 
 **Process:** before-pass to ops_log (verbatim) → the R/A question → calibration script → row → run once → gate → draft r1 with the items above as decisions. No `strategies/` code and no IS reads until anchor.
+
+## 2026-10-11 — 작업 정지 · VPS 전부 정지 · **프로젝트 종료**(레지스트리 #92·#93)
+> 사용자(원문 · 순서대로): "작업 정지해줘 VPS도 수집중단" → (범위 질문에) "전부 정지" → "인스턴스 종료" → "호가창(L2)으로도 마땅한 전략이 없는거지?" → "프로젝트 종료해줘"
+- 그 전 결정(질문지 답 · 기록만): C1 신호 형태 = "A: 예상 펀딩 절대 문턱" · 문턱 = "0.05% (Recommended)".
+- VPS(호스트 `ip-172-31-38-160` · 사용자 유닛 · 삭제 없음): E2E 서비스 3 + 타이머 6 `disable --now` 06:28:45 → 06:28:57Z(전: 전부 enabled/active → 후: disabled/inactive · 남은 e2e 프로세스 없음) · 페이퍼 봇 `btcfut-bot.service` + 타이머 3 `disable --now` 06:33:15 → 06:33:22Z(저널 "Stopped btcfut-bot.service" · 남은 봇 프로세스 없음).
+- 정지 직전 상태: 마지막 Drive 동기화 06:22:17Z(원격 shard 746,343) · reconcile 통과 03:30:36Z · drive-verify 통과 03:34:51Z · prune 02:31:50Z(oldest_local 2026-09-11) · 로컬 raw 40 GB · 디스크 56%.
+- 하지 않은 것: 인스턴스 중지/종료(이 PC에 AWS CLI 없음 · 종료(Terminate)는 삭제라 사용자에게 중지와의 차이를 알리고 콘솔에서 직접 하도록 남김) · 파일 삭제 · E2E_Hybrid_Bot 저장소 문서 수정.
+- 트라이얼 #5: 브리프 r1 before-pass(위) 뒤 보정 스크립트를 썼으나 **실행 전 중단** — 자료 미열람 · 스크립트는 미실행 표시와 함께 보존.
+- 검토: 종료 기록은 advisor 호출 없이 적었다(사용자의 정지 지시 뒤 · 기록 전용). Codex 검토 없이 수집기 호스트를 바꾼 것은 사용자 직접 지시에 따른 것이며 #92에 공시.
