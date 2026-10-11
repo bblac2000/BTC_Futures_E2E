@@ -11073,3 +11073,54 @@ You're at the (d) before-pass, plan r1 written, no code. Plan structure is right
 
 ### 대기 중인 Codex before-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
 > STEP (d) BEFORE-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (d) plan r1 (verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (d) before-pass") and conventions section C (docs/trials/trial_04_conventions.md items 24–36) in /home/cms/project/BTC_Futures_E2E, as committed in the pre-commitment commit named in that ops_log section. Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) C25 [PROPOSED] SL reference = fill-bar mark open read at the decision instant, vs r3 §1 "SL = 체결 기준가 ∓ 2.0 × ATR" and decision 4 — is it lookahead-free under the anchored timing, and is the one-key lookup guard sufficient; (2) C26 [PROPOSED] liq_fee_on_liq_price=True; (3) the funnel order C29 and the decision_bar_missing / print_incomplete / hysteresis readings (C28, C29, C32) against r3 §1 and user decision 1; (4) ATR_1d(14) and the d−15 close rule C30; (5) P2/P3 variants C34 against r3 §4; (6) anything that must be a user decision or pre-commitment and is not. This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (d), registry #74) — review the plan as logged, not later code. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
+
+## 2026-10-11 — 트라이얼 #4 단계 (d) **after-pass**(advisor만 — Codex는 사용자 결정 #74에 따라 대기열 · advisor **MERGE**)
+- 한 것: `strategies/trial04/{config,features,strategy,harness}.py` · 시험 9 + 48 · 픽스처 `tests/fixtures/t4_scenario.py` · 커밋 a9c84a0(코드) · f887f88(사전 고정: 규약 C24~C36 · 계획 r1).
+- 트라이얼 #3·공유 런타임 수정 없음: 커밋 a9c84a0 = trial04 모듈 4 · 시험 파일 3(그중 `tests/test_slippage_param.py`는 허용 목록 한 줄 · 시험만 · C36) · 픽스처 1 · 규약.
+- 검증: 전체 시험 1,632 → 1,689 passed · ruff·pyright 깨끗 · 변이 6개(청산 시각 무시 · 천장 포함 · 기준가 = 결정 종가 · 불완전 인쇄가 결정 · 체결 실패 → WAIT · P3 거울상 없음) 모두 시험이 잡음.
+- **공개**: (i) 두 모듈 모두 스텁에서 먼저 실패 확인(수집 오류). (ii) 구현 뒤 기대값 하나를 고쳤다(끝 상태 WAIT → IDLE — 시나리오의 뒤쪽 띠 안 인쇄가 WAIT를 푼다) · 시험 하나(SL 기준가 = 체결 봉 시가)를 구현 뒤에 더했다. (iii) 두 시험 파일의 타입 오류 수정은 내 편집 스크립트가 실패했는데도 디스크에 반영돼 있었다(출처 불명확 — 대화 압축 경계의 앞선 시도로 추정) · 커밋된 내용은 pyright 0 · 1,689 통과로 확인했고 분위수 시험 세 곳 모두 `is not None` 단언이 있음을 `git show a9c84a0`로 확인.
+- 스크래치 디렉터리가 사라졌다 — advisor 원문은 이 절에 바로 적는다(이후도 같다).
+- Codex before-pass·after-pass 대기열: (c) 둘 + (d) 둘 = 프롬프트 네 개가 ops_log에 있다 · (g) 동결 전에 반드시 실행.
+- [PROPOSED] 둘(C25 · C26)은 사용자 확인 대기((g) 전).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor after | 구현이 C24~C38과 일치 · MERGE | 동의 |
+| 2 | advisor 1 | 원문을 ops_log에 바로 · 범위를 못 박은 대기 Codex 프롬프트 | 동의 — 이 절 |
+| 3 | advisor 2 | 공개 세 가지(스텁 먼저 · 사후 수정 · 편집 출처 틈) | 동의 — 위 |
+| 4 | advisor 3·4 | 공유 수정 없음 한 줄 · 규약 차이 | 동의 — 위 · 사용자 보고 |
+| 5 | advisor 5·6 | 메모리 갱신 · 정지((e) 시작 안 함) | 동의 |
+| 6 | advisor 보고 | C25·C26 사용자 확인 · 10-10 품질 · 03:30 대사 · 스왑/증설 결정 | 동의 — 사용자 보고 |
+| 7 | advisor 넘김 (g) | 마지막 봉 = 2025-12-31 23:59 단언 | 동의 — C39 |
+| 8 | advisor 넘김 (e) | P1은 FillRef를 재사용하지 않는다 | 동의 — C40 |
+| 9 | advisor 넘김 (f) | 보고 기준가는 t4 기록의 ref | 동의 — C41 |
+
+### advisor 원문(verbatim)
+You're at the (d) after-pass: code committed and pushed at `a9c84a0`, 57 new tests (9 + 48), full suite 1,689, ruff/pyright clean. I read `strategy.py`, `harness.py`, `features.py`, `config.py` against C24–C38. Every reading matches: fill-bar open via the one-key `FillRef` (C25), `liq_fee_on_liq_price=True` (C26), `validate_prints` contract (C27), classify-then-ingest and time-driven ingestion with `decision_bar_missing` (C28/C29①), funnel order exactly as C29, `d−15` close → `atr_prev_close` with no H−L fallback (C30), `_note` returns None so state is untouched (C31), strict `t_print > exit_ts` and inside-band release (C32), observe → events → advance → classify (C33), P2 fixed SL / eligibility at original `t` / P3 mirror about `ref` (C34), V at the 00:00 print (C35), `assert_entries_in_v` (C37). The due-bar arithmetic (`≡ +1 min mod 8h`) means no print ever lands on an exit or fill bar, so the replay's `pending is None` asserts are safe by construction. Six mutations each killed by exactly one test; the SL-reference pin catches the decision-close reading. **Verdict: MERGE.** Nothing reopens the code.
+
+**Finish before reporting**
+
+1. **Scratchpad is gone** — write this text straight into the ops_log (d) after-pass section this turn; the repo is the durable record. Header "after-pass (advisor only — Codex queued per #74)". Queued Codex after-pass prompt pinned to pre-commit `5fd80d3..f887f88` and code `f887f88..a9c84a0`.
+2. **Disclose honestly, in order:** (i) both modules were stub-first this time (collection error on the stubs is the "see it fail"); (ii) one expectation was corrected after implementation (end state WAIT → IDLE — legitimate: the scenario's trailing inside-band prints release WAIT) and one test (SL reference) was added after; (iii) the type-error fixes in the two test files landed on disk without a visible successful edit command (your edit script errored, yet pyright then passed) — committed content is verified by pyright 0 / 1,689 pass, but note the provenance gap; glance at the other two quantile-test sites in `git show a9c84a0:tests/test_trial04_features.py` since you only looked at one.
+3. **No trial #3 / shared-runtime edit:** the commit stat already proves it — 4 trial04 modules, 3 test files, 1 fixture, conventions, and the `test_slippage_param.py` allowlist (test-only, C36). Say it in one line.
+4. **Conventions diff** `5fd80d3..a9c84a0 -- docs/trials/trial_04_conventions.md` (C24–C38) — show it.
+5. **Memory:** (d) done at `a9c84a0`; Codex before+after queued for (c) and (d), all four prompts in ops_log, must run before (g); next row #75; stopped before (e). Update `advisor-text-save-immediately` to "scratch if available, else straight into ops_log".
+6. **Stop.** Do not start (e).
+
+**The report must carry**
+
+- **C25 and C26 as [PROPOSED] awaiting the user's veto before (g)** — the SL reference (fill-bar mark open, not decision close) and the liquidation-fee notional. State the stakes in one line each.
+- **10-10 quality verdict** and **the 10-11 03:30 UTC integrity run** (`data/LAST_RECONCILE.txt`, `LAST_DRIVE_VERIFY.txt`, read-only) — the user asked whether files were deleted; that run answers it.
+- Swap / `t4g.medium` decision still pending (host change → user + Codex).
+
+**Carry-forwards to write into C39-style memos now, not later**
+
+- **(g) input contract:** bars must cover through `IS_END`. The harness's `expect` counts only prints with `T ≤ last bar` — lenient by design for synthetic inputs, but on real data a truncated bar file would leave trailing prints silently unclassified and the funnel total short of 2,190. `load_prepared_pinned` or `validate_inputs` at (g) should assert the last bar is 2025-12-31 23:59.
+- **(e):** `FillRef` is deliberately T+1-keyed, so the P1 executor cannot reuse it — it reads `mark_open[t]` at its own random `t` (plan r4 C1″ already says this; make the non-reuse explicit so nobody "fixes" the guard).
+- **(f):** the intent's `decision_mark` is bar T's close while sizing used `ref` (T+1 open); report fields take `ref` from the `t4` record, never `decision_mark`.
+
+Report in the (c) shape: what changed with commits, 9 + 48 tests, 1,632 → 1,689, the three disclosures, conventions diff, the two [PROPOSED] items, VPS status, and the explicit question "proceed to (e) under the same substitution?" Then STOP.
+
+### 대기 중인 Codex after-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
+> STEP (d) AFTER-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (d) in /home/cms/project/BTC_Futures_E2E. Review exactly these ranges: pre-commitment 5fd80d3..f887f88 (conventions C24–C36, plan r1) and code f887f88..a9c84a0 (strategies/trial04/{config,features,strategy,harness}.py, tests/test_trial04_{features,strategy}.py, tests/fixtures/t4_scenario.py, tests/test_slippage_param.py allowlist, conventions C37–C38). Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) strategy.py against C25–C34 and r3 §1/§4 (funnel order, classify-then-ingest, decision_bar_missing, hysteresis, P2/P3); (2) the [PROPOSED] readings C25 (SL reference = fill-bar mark open through the one-key FillRef) and C26 (liq_fee_on_liq_price=True); (3) features.py ATR_1d(14) incl. the d−15 close rule and the 270-print trailing quantile; (4) harness input contracts and run invariants incl. C37 (entry day outside V = run failure) and the lenient print count noted in C39; (5) whether the 57 tests pin the behaviours or pass vacuously (six mutations were reported killed); (6) that no trial #3 or shared runtime file changed. Disclosed: one expectation corrected after implementation (end state WAIT → IDLE) and one test added after (SL reference). This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (d), registry #74) — review those commits, not later code. End with VERDICT: MERGE or FIX-FIRST.
