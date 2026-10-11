@@ -174,7 +174,9 @@ def test_no_non_default_rate_outside_trial03_and_tests():
                                        and rel in ("backtest/engine_replay.py", "backtest/placebo_exec.py"))
                         t3_const = (rel.startswith("backtest/") and rel.endswith("_t3.py") and isinstance(k.value, ast.Attribute)
                                     and ast.unparse(k.value) == "TF_V1.slippage")          # 트라이얼 #3 모듈 · 앵커 상수만
-                        if k.arg == "slippage_rate" and not (passthrough or t3_const):
+                        t4_const = (rel.startswith("backtest/") and rel.endswith("_t4.py") and isinstance(k.value, ast.Attribute)
+                                    and ast.unparse(k.value) == "TC_V3.slippage")          # 트라이얼 #4 모듈 · 앵커 상수만(규약 D53)
+                        if k.arg == "slippage_rate" and not (passthrough or t3_const or t4_const):
                             bad.append(f"{rel}:{n.lineno}")
     assert bad == []
 
