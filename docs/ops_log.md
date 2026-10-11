@@ -11324,3 +11324,79 @@ Record it honestly, in registry #77 and the ops_log header: for (c)–(f) there 
 9. Carry C39 (last bar = 2025-12-31 23:59) into the (g) loader list.
 
 Report after the conversion: #77, the (c) mutation table, the six verdicts, and that (f) is next — then the (f) before-pass. Still carry the 03:30 UTC integrity result, 10-10 FAIL, and the swap/instance decision in the (f) stop report. Do not start (g).
+
+## 2026-10-11 — 트라이얼 #4 단계 (f) **before-pass**(advisor만 — 검토자 한 명 · 레지스트리 #77)
+> 사용자(원문 · 2026-10-11): "advisor가 검토한내용으로  문제 없으면 진행"
+- advisor: **PROCEED**(Q1~Q4 답 · 막힘 1 · 추가 8) · 사전 고정: 규약 E57~E68(시험 작성 전 · 이 절과 같은 커밋) · [PROPOSED] 하나: E59(G1의 gross = 가격만 · 펀딩 제외) — (g) 전 사용자 확인 대상.
+- 계획 r1에서 바뀐 것(advisor): 판정기가 **펀딩 입력**을 받아 트레이드마다 펀딩을 독립 재계산한다(E63) · 슬롯의 h·sl_dist를 원판과 대조한다(E64) · `evaluate()`는 (f)에서 거부한다(E67) · `backtest.stats_t2`는 복사하지 않고 import하며 (a)의 정적 시험 허용 목록에 더한다(E66).
+- Codex 프롬프트는 #77에 따라 **선택적 사후 감사용**으로만 남긴다(아래).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor Q1 | gross = 가격만 · [PROPOSED] · 보고 전용 gross_incl_funding | 동의 — E59 |
+| 2 | advisor Q2 | ①은 CI가 정의되면 MDE와 무관하게 먼저 · sd = 0 음수 평균 시험 · 라벨 넷 고정 | 동의 — E58 · 시험 |
+| 3 | advisor Q3 | 펀딩 입력 추가 · 트레이드별 펀딩 독립 재계산 · 받음/냄/0 개수 | 동의 — E63 · E68 |
+| 4 | advisor Q4 | 변형 0건 = 0.0 · n 보고 · 시험 | 동의 — E60 |
+| 5 | advisor 막힘 | stats_t2는 import · 정적 시험 허용 목록 | 동의 — E66 |
+| 6 | advisor 추가 1·7 | ArmInputs에 timing 없음 · P1_timing은 판정 입력 뒤에 | 동의 — E65 |
+| 7 | advisor 추가 2 | 슬롯 h·sl_dist ↔ 원판 대조 | 동의 — E64 |
+| 8 | advisor 추가 3 | 조각 간 적격 분 개수 일치 | 동의 — E61 |
+| 9 | advisor 추가 4 | dist_defined 여덟 실행 동일 + 재계산 | 동의 — E62 |
+| 10 | advisor 추가 5 | 한 번만 틀은 옮기되 evaluate()는 (g) | 동의 — E67 |
+| 11 | advisor 추가 6 | 복사 출처 주석 | 동의 |
+| 12 | advisor 추가 8 | 요약의 tc_v3·규칙 해시를 앵커와 대조 | 동의 — E61 |
+| 13 | advisor 절차 | (g) 분할 권고: HALF 1은 advisor만 가능 · HALF 2(한 번만·되돌릴 수 없음)는 Codex 뒤 — 사용자 서면 결정 | 동의 — (f) 보고에서 묻는다 |
+
+#### 계획 t4f_plan r1
+> (f) 계획 r1 — 판정 핵심 · 산출물 계약 · 판정기 계산(사용자 2026-10-11: "advisor가 검토한내용으로  문제 없으면 진행" · 레지스트리 #76·#77)
+> F1 backtest/verdict_t4.py(순수 함수 · 트라이얼 #3 판정 핵심의 복사 + 차이): 암 순서 S, L · 판정 문자열 `S: … | L: …` · G0 n ≥ 48 ∧ n/(1 + 4·max(ρ̂, 0.15)) ≥ 30 ·
+>    G1·G2 평균 > 0 ∧ CI 하한 > 0 · flat 평균 net > 0 · G-B PSR(0) > 0.5 ∧ n ≥ 30 ∧ SR̂ − SR* > 0, SR* = expected_max_sr(고정 6개 + 정의된 두 암, n_trials 8) ·
+>    플라시보 P1 원판 ≤ p95 · P2 원판 ≤ max(+1 인쇄, +3 인쇄) · P3 원판 ≤ 반전 → 기각 · P1 실패 > 10 또는 계산 불가 → 폐기 · 우선순위 §7 그대로 ·
+>    §7-2 분류(REJECT에만 · 부호 우선): ① 순 CI 상한 < 0 → "효과 부재(음의 효과)" ② MDE 없음 또는 > 20 → "검정력 부족" ③ MDE < 5 ∧ CI 상한 < 10 → "효과 부재"
+>    ④ 그 밖 → "결론 보류형 REJECT" · CI 정의 안 됨 → ① 건너뜀 · 판정 입력에 P1-timing 필드 없음(D54) · OOS·전진 함수도 사전확약으로 옮김.
+> F2 backtest/t4_outputs.py(산출물 계약 · 쓰기와 읽기 한 모듈): runs/<암>_<변형>/ = trades_t4.jsonl · events.jsonl · summary.json(변형 base · P2_print1 ·
+>    P2_print3 · P3_invert) · 요약 키 funnel · sub · entry · window_prints · dist_defined · v_days · n_trades · tc_v3 해시 · 규칙 해시 · P1 조각에 timing 필드와
+>    적격 분 개수 2종 · 병합 디렉터리에 게이트 파일과 timing 파일을 따로 · 빠짐·남음·스키마 불일치 → 판정 거부.
+> F3 backtest/evaluate_t4.py(계산 + 한 번만 실행하는 틀): V 재계산(완전한 mark 날 ∧ 그날 00:00 경계 앞의 유효 인쇄 ≥ 270 — 인쇄 입력에서 독립 계산 · 8개 실행
+>    기록과 대조) · 트레이드 원장 항등식(지갑·수수료·펀딩·체결을 34자리 엔진 문맥에서 · 청산은 C26 · gross/net 문자열 재계산 · 비용 격자 ×1.0 = 기록 net) ·
+>    암 통계(일 블록 부트스트랩 — 스트림 S 먼저 · ρ̂ · SR̂ · PSR) · P1(조각에서 다시 병합해 병합 파일과 대조 · 게이트 null만으로 p95) · 보고(판정 아님: 인쇄 깔때기 ·
+>    실현 레버리지 분포 · 청산 사유 · 가격 손익 대 펀딩 손익 · 펀딩 받음/냄 개수 · 진입 시 p_T 부호 · 연도별 net · 비용 격자 · P1 청산 추출 비율 · P1-timing 블록 ·
+>    매수보유) · 보고 기준가는 t4.ref(C41) · _preconditions · _run_once · 보고서 직렬화는 트라이얼 #3 모양대로 · 동결·핀·단계 기록 관문 연결(evaluate())은 (g).
+> F4 시험(합성 · 스텁 먼저): 판정 핵심(우선순위 · 게이트 · 분류표 · SR* · 문자열 · 비유한 입력 거부) · 계약(파일 목록·스키마 변조 거부) · 판정기(두 암 × 네 변형 +
+>    P1 40추출 픽스처로 원장 변조 거부 · V 불일치 거부 · timing 값을 바꿔도 판정 입력·문자열이 같음 · 결정론 · 프로세스 간 보고서 해시).
+> 질문: Q1 gross의 정의 — 공유 정의(returns.py)는 mark 가격 변화만이고 펀딩이 빠져 있다 · 캐리 가설에서 G1이 펀딩 없이 평가된다 · §10이 "통계 원장"을
+>    가져온다고 했으니 공유 정의 + 공시가 맞는지, 사용자 결정 사항인지 · Q2 MDE 정의 안 됨 → "검정력 부족"(트라이얼 #3)과 ①의 관계 · Q3 펀딩 받음/냄 개수에
+>    펀딩 입력을 판정기에 추가해도 되는지 · Q4 변형 실행 트레이드 0건의 평균 0.0 관례 유지.
+
+### advisor 원문(verbatim)
+You're at the (f) before-pass. The conversion is done right — #77 with the sole-reviewer disclosure, mutations 7/7 killed, memory updated. The (f) plan matches trial #3's evaluator shape and the anchored §3/§7 text. **Verdict: PROCEED**, with the readings below fixed in conventions E before tests, and one concrete blocker you'll hit on the first import.
+
+**Q1–Q4**
+
+- **Q1 → price-only gross, [PROPOSED], user confirms before (g).** The literal reading is unambiguous: §10 inherits the "통계 원장" from trials #1–#3, and `returns.py` defines gross as sign×Δmark/entry_mark with funding excluded; §0 says funding is "가격 손익과 따로 보고". So G1 tests price reversal alone; carry enters only through net (G2). That matters for a carry hypothesis — a pure-carry edge could fail G1 — so it belongs in the same class as C25/C26: implement the literal reading, mark [PROPOSED], state the stakes in one sentence, and add a **report-only** `gross_incl_funding_bps = gross_bps − funding_paid/(qty×entry_fill)×10⁴` per trade and arm mean so the user can see the difference before deciding. If the user chooses otherwise, it's a reading change recorded as a conventions item + registry row before (g), not a value change.
+- **Q2 → ① is evaluated whenever the CI is defined, regardless of MDE.** Order: ① CI defined ∧ hi < 0 → "효과 부재(음의 효과)"; ② MDE None or > 20 → "검정력 부족"; ③ MDE < 5 ∧ hi < 10 → "효과 부재"; ④ else "결론 보류형 REJECT". CI undefined → skip ① → usually ② (trial #3 behavior preserved). Test the degenerate case that makes the order matter: sd = 0 with a negative mean gives CI lo = hi = mean < 0 and MDE None → must be ①, not 검정력 부족. Pin the four label strings exactly as the constitution writes them (line 37) with a test.
+- **Q3 → yes, add `fundings` to `compute()`**, and use it for more than counts: recompute each trade's `funding_paid` as Σ signed_qty×mark×rate over settlements with bucket minute in `(entry_ms, exit_minute]` (34-digit context) and refuse on mismatch with the recorded value. That is the identity your design has been missing — P1 and base both depend on the engine's funding path and nothing checks it independently. Counts: received = paid_i < 0, paid = > 0, zero separately.
+- **Q4 → keep 0.0, disclose, report n per variant.** Add a test that a variant with 0 trades neither crashes nor rejects. With n ≥ 48 base trades it's practically unreachable; the convention just needs a text.
+
+**Blocker you will hit:** the (a) static import test rejects any module name containing `_t2` — `backtest.stats_t2` is forbidden for `backtest/*_t4.py`. Do **not** copy the bootstrap/Sharpe/ρ/p95 functions (a second statistics implementation breaks cross-trial comparability of SR*/CI). Add `"backtest.stats_t2"` to that test's `allowed` set (test-only, same pattern as `exit_schedule`), note in conventions E that it is a shared stats module (plan C7′ already lists it in the freeze set).
+
+**Plan additions**
+
+1. `ArmInputs` for trial #4 must have **no timing field** — static test on the dataclass fields plus the behavioral pair: tamper `timing_null` → identical verdict string and report `inputs`; tamper gate `null` → refusal (remerge mismatch).
+2. Evaluator check: every placed gate/timing slot has `h == 7_200` and `str(sl_dist) == str(sorted_base_source[pair].sl_dist)` — catches P1 run against stale base trades. Trial #3 didn't have it; it's a tightening.
+3. Contract layer (`write_p1_merged`): all parts must agree on `n_eligible` and `n_eligible_atr_prev_close_ok` (same inputs ⇒ same counts); refuse otherwise.
+4. Cross-check `dist_defined` identical across all 8 runs and equal to the recompute (valid prints with T < d·DAY ≥ 270, from the prints input alone).
+5. Port `_preconditions` (incl. `decimal.setcontext(decimal.Context())`), `_run_once`, `_input_hashes`, `report_bytes` as-is. Do **not** ship a callable `evaluate()` without the freeze gate — define it in (g), or have it raise explicitly in (f). The fixture path checks preconditions only, and says so.
+6. Provenance comments on the three copied modules (`verdict_t3`/`evaluate_t3`/`t3_outputs` @ commit) listing what changed: arm order S/L, n_trials 8, ALPHA from trial04 anchor, sign-first ①, variant names, `t4` record keys, `dist_defined`, P1 part/merged fields.
+7. Report block for timing (p95, failed, liquidated-draw ratio) lives under `report["arms"][a]["P1_timing"]`, built after `ArmInputs` — never read by `verdict_is`.
+8. `summary.json` must carry `tc_v3_sha256`/`rules_sha256` and the evaluator must compare them to the anchor (trial #3 pattern).
+
+**Process**
+
+- Conventions E (items 57+) → commit → ops_log before-pass "advisor only — sole reviewer per #77" with plan r1 and this text verbatim. Still write the (f) Codex prompt into ops_log as the optional post-hoc audit text, pinned to the pre-commit range — consistent with #77.
+- TDD stub-first for all three modules; mutations after (classify order, G-B star, P2 max, V count 269/270, ledger funding identity).
+- At the (f) stop: the two [PROPOSED] items (Q1 here, plus none else new), the 03:30 UTC integrity result (check `date -u` first), 10-10 FAIL, swap/instance decision, and the (g) question. **Recommend the split explicitly:** (g) HALF 1 (t4_provenance, t4_stages, CLIs — reversible code) can proceed advisor-only; HALF 2 (capture, pins, freeze row, runs, evaluate — run-once, irreversible) should wait for Codex (Oct 16 20:20) unless the user overrides in writing. Do not start (g).
+
+### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77)
+> STEP (f) BEFORE-PASS — optional POST-HOC audit (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (f) plan r1 (verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (f) before-pass") and conventions section E (docs/trials/trial_04_conventions.md items 57–68) in /home/cms/project/BTC_Futures_E2E, as committed in the pre-commitment commit that follows 6f4b743. Anchored text: docs/trials/trial_04_preregistration_r3.md §3, §3-1, §4, §7, §7-2, §7-3 (#70); constitution v1.5 research-protocol line 37. Check: (1) E57–E58 against r3 §3/§7/§7-2 (gates, SR* over six pinned + two arms with n_trials 8, priority order, sign-first classification with the four exact labels); (2) the [PROPOSED] reading E59 (G1 gross = price only, funding excluded; report-only gross_incl_funding); (3) E62 V recompute from prints; (4) E63 ledger identities incl. the independent funding recompute; (5) E64–E65 P1 checks and that the verdict never reads the timing block; (6) E67 (no callable evaluate() before the (g) freeze gate). Per registry #77 the advisor is the sole reviewer for (c)–(f); this prompt is kept for a post-hoc audit when Codex quota returns — findings can add correction rows but cannot change pre-committed values. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
