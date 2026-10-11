@@ -1,0 +1,19 @@
+{
+ "outputs": {
+  "p1_draws.json": "e302547cc3db69d5020605aea6b384b62cea43be8f5f057d5d66a37f13891c6c",
+  "p1_null.jsonl": "921a5f0b74362c9ae17f40a3dc18e42452f693ac4fcdda8762bf2d9329d94729",
+  "p1_summary.json": "91d9486ecd925d3859b93793ee2ed9b310ff820d7330e1c0b0e1a3be20c5e6af",
+  "p1_timing_draws.json": "4b5620679d668738716345e2e5a481d5df0c6ea37b02adebc84ccfde39579415",
+  "p1_timing_null.jsonl": "d0194d6af2ea8704e5d328f6cbf03d0322cc0e1ef1ae723f0b497b55c699a7ca"
+ },
+ "provenance": {
+  "evaluator_commit": "69f4d839564d6710a8abde28fe82727153646f65",
+  "fetched_at": "2026-10-11T04:34:12+00:00",
+  "fingerprint": "fc5c9df7fdeaa13b3199fa7cc5b42555f677502fa6043c2c46633a57b0434277",
+  "manifest_sha256": "0520e6fca8242892372b76a1ef2cc55b23fa1283360595076cf0301154cfcb9c",
+  "origin": "6ac93e088878422107f162663c3980c8df330dc2",
+  "pins_commit": "3f93a02286bef022fa1434eef63b522ff97da77e",
+  "variant": "P1_merge_S"
+ },
+ "returncode": 0
+}

@@ -1,0 +1,19 @@
+{
+ "outputs": {
+  "p1_draws.json": "2d2002d5d4dc10edcefbae17163b7fc380c8183e98849243cc37a701ecddff11",
+  "p1_null.jsonl": "07c66534d4fb4fd06c754e545bf680ec8fdece050f9600c5b5a86de392ffe39d",
+  "p1_summary.json": "216d1b8706fb4a556c42c1ae2b445b36cd1d29310f8084c3613698ee0680e6bc",
+  "p1_timing_draws.json": "87806b1b6852bd4bd40cd6a081400ce41bf3b16f1d5dd75a8ff46a69689125ca",
+  "p1_timing_null.jsonl": "277c2785b5bccfe39fbcdff491eeff2bc8c40486d3579ae2d4def89f08d60a23"
+ },
+ "provenance": {
+  "evaluator_commit": "69f4d839564d6710a8abde28fe82727153646f65",
+  "fetched_at": "2026-10-11T04:34:12+00:00",
+  "fingerprint": "fc5c9df7fdeaa13b3199fa7cc5b42555f677502fa6043c2c46633a57b0434277",
+  "manifest_sha256": "0520e6fca8242892372b76a1ef2cc55b23fa1283360595076cf0301154cfcb9c",
+  "origin": "6ac93e088878422107f162663c3980c8df330dc2",
+  "pins_commit": "3f93a02286bef022fa1434eef63b522ff97da77e",
+  "variant": "P1_merge_L"
+ },
+ "returncode": 0
+}
