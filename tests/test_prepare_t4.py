@@ -214,8 +214,9 @@ def test_capture_build_verify_roundtrip(tmp_path):
 
 def test_no_other_trial_import_in_any_trial04_file():
     """strategies/trial04/*.py · backtest/*_t4.py 전부 — 다른 트라이얼 모듈 import 금지(허용: strategies.trial03.exit_schedule — 단계 (c))."""
-    allowed = {"strategies.trial03.exit_schedule"}
-    files = sorted((ROOT / "strategies" / "trial04").glob("*.py")) + sorted((ROOT / "backtest").glob("*_t4.py"))
+    allowed = {"strategies.trial03.exit_schedule", "backtest.stats_t2"}      # stats_t2 = 공유 통계 모듈(규약 E66 · 복사하지 않는다)
+    files = (sorted((ROOT / "strategies" / "trial04").glob("*.py")) + sorted((ROOT / "backtest").glob("*_t4.py"))
+             + sorted((ROOT / "backtest").glob("t4_*.py")))                       # t4_outputs 등((f)부터)
     assert (ROOT / "backtest" / "prepare_t4.py") in files
     for f in files:
         tree = ast.parse(f.read_text(encoding="utf-8"))
