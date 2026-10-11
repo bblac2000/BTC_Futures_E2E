@@ -11124,3 +11124,90 @@ Report in the (c) shape: what changed with commits, 9 + 48 tests, 1,632 → 1,68
 
 ### 대기 중인 Codex after-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
 > STEP (d) AFTER-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (d) in /home/cms/project/BTC_Futures_E2E. Review exactly these ranges: pre-commitment 5fd80d3..f887f88 (conventions C24–C36, plan r1) and code f887f88..a9c84a0 (strategies/trial04/{config,features,strategy,harness}.py, tests/test_trial04_{features,strategy}.py, tests/fixtures/t4_scenario.py, tests/test_slippage_param.py allowlist, conventions C37–C38). Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) strategy.py against C25–C34 and r3 §1/§4 (funnel order, classify-then-ingest, decision_bar_missing, hysteresis, P2/P3); (2) the [PROPOSED] readings C25 (SL reference = fill-bar mark open through the one-key FillRef) and C26 (liq_fee_on_liq_price=True); (3) features.py ATR_1d(14) incl. the d−15 close rule and the 270-print trailing quantile; (4) harness input contracts and run invariants incl. C37 (entry day outside V = run failure) and the lenient print count noted in C39; (5) whether the 57 tests pin the behaviours or pass vacuously (six mutations were reported killed); (6) that no trial #3 or shared runtime file changed. Disclosed: one expectation corrected after implementation (end state WAIT → IDLE) and one test added after (SL reference). This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (d), registry #74) — review those commits, not later code. End with VERDICT: MERGE or FIX-FIRST.
+
+## 2026-10-11 — 트라이얼 #4 단계 (e) **before-pass**(advisor만 — Codex는 사용자 결정 #75에 따라 대기열)
+> 사용자(원문 · 2026-10-11): "읽기 2건 승인, (e)도 같은 방식으로 진행"
+- 레지스트리 #75(C25·C26 확정 · (e) 검토 방식) — 커밋 719012b.
+- advisor: **PROCEED**(Q1~Q4 답 · 틈 7건 · 실행기 문장) · 사전 고정: 규약 D43~D53(시험 작성 전 · 이 절과 같은 커밋).
+- 계획 r1에서 바뀐 것(advisor Q1): `eligibility.py`에 벡터 메서드를 더하지 않는다 — 스칼라 술어를 창 분 격자에 한 번씩 부른다(규약 D44).
+- 속도 측정(합성 · 계획용): 7,200봉 플라시보 1건 0.016초(`placebo_exec.run_time_exit` 기준) → 최적화 없음.
+- Codex before-pass는 대기열(아래 프롬프트 그대로).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor Q1 | eligibility.py를 건드리지 않고 스칼라 술어로 적격 목록을 만든다 | 동의 — D44(계획 E2 변경) |
+| 2 | advisor Q2 | atr_prev_close는 P1에 적용하지 않는다 · 공시 + 보고 전용 개수 | 동의 — D45 |
+| 3 | advisor Q3 | timing 방향: S → 1 · L → 0 | 동의 — D47 |
+| 4 | advisor Q4 | 귀무 행은 추출별 합계만(보고 전용) | 동의 — D52 |
+| 5 | advisor 틈 1 | 슬리피지 시험에 *_t4.py + TC_V3.slippage 절 | 동의 — D53 |
+| 6 | advisor 틈 2 | 원판 재현 시험(바이트 동일) | 동의 — D50 |
+| 7 | advisor 틈 3 | timing = 구조 복사 · p1_rng(replace(cfg, draws=2000), 1000 + d) · 가짜 RNG 구조 시험 | 동의 — D47 · 시험 |
+| 8 | advisor 틈 4 | eligible_for(h)는 h = 7,200만 | 동의 — D43 |
+| 9 | advisor 틈 5 | 골든 + 프로세스 간 결정론 | 동의 — 시험 |
+| 10 | advisor 틈 6 | 실패 > 10은 게이트에만 · timing은 별도 블록 | 동의 — D47 |
+| 11 | advisor 틈 7 | import 범위(p1_core · sizing_decision · mark_bar · trial04) | 동의 |
+| 12 | advisor 실행기 | 체결 봉 on_bar 호출 · 종료 분 순서 · 봉 누락 = 오류 · 한 번 사이징 공시 · 청산 항등식 | 동의 — D48·D49·D51(오류 형은 P1Error) |
+
+#### 계획 t4e_plan r1
+> # Trial #4 step (e) plan r1 — backtest/p1_t4.py (user 2026-10-11: "읽기 2건 승인, (e)도 같은 방식으로 진행" — registry #75)
+> E1 Source pairs: from the arm's base run trades take (trade_id, entry_ms, sl_dist = t4["sl_dist"]) only. Every slot holds 7,200 min
+>    (even if the source stopped out early). p1_core.SourceTrade gets exit_ms = entry_ms + 7,200 min so h = 7,200; p1_core unchanged.
+> E2 Eligible minutes: add a vector eligible_minutes() to Eligibility (same result as the predicate for the whole window grid, numpy);
+>    test equality with the scalar predicate on every minute of a synthetic window. atr_prev_close is a strategy-side reason, not the
+>    sample rule, so it is not part of P1 eligibility.
+> E3 Gate P1 draw: p1_core.p1_draw_generic as is (pair → direction → placement, ≤ 1,000 attempts per slot, occupancy [t, t+7,200min)),
+>    seed SeedSequence(P1_SEEDS[arm]).spawn(1000)[d].
+> E4 Report-only P1-timing: local draw routine without the direction draw (pair → placement, direction = the arm's), seed
+>    spawn(2000)[1000 + d]; same occupancy and sizing functions as the gate; results in a separate field the verdict never reads.
+> E5 Local executor (plan r4 C1″): sizing = placebo_exec.sizing_decision (6 bps quote, source sl_dist, LIMITS); Engine.restore_position
+>    (unreachable SL); wallet = E_ref − entry commission; entry-minute-bucket funding excluded; minutes t … t+7,199: funding → on_bar;
+>    due minute t+7,200: funding → liquidate_if_open_beyond(open) → close_now(open, TIME_EXIT); a missing bar in the span is an error
+>    (eligibility guarantees presence); FillRef not used (C40).
+> E6 Null point: per successful draw the mean net_bps per trade, exit-reason counts (time_exit, liquidation), price and funding sums.
+> E7 Part run and merge: run_range (rules = #69 load_rules, config = anchor), tests-only fixture path, merge invariants (draws 0..999
+>    exactly once, null rows = successful draws, reasons sum = n). Zero source trades → not-computable marker.
+> E8 Tests (synthetic, stub first): vector eligibility = predicate; seed stream identity (children 0, 999, 1000, 1999;
+>    spawn(2000)[:1000] == spawn(1000)); timing draw makes no direction call; initial wallet; entry-minute funding not paid (exact and
+>    offset); due-minute funding first; due-minute open-gap liquidation; intrabar liquidation mid-hold; h 7,200 even for an early-stopped
+>    source; same exit instant as the base for the same t; wallet identities (plan r4 C9″); merge checks; determinism.
+> Speed: one 7,200-bar placebo trade measured at 0.016 s → ~50 trades × 1,000 draws × 2 kinds per arm ≈ 30 CPU-minutes; no optimisation.
+> Questions: Q1 may eligible_minutes() be added to eligibility.py committed in (c) (not frozen yet); Q2 is excluding atr_prev_close from
+>    P1 eligibility the right reading; Q3 P1-timing direction code: arm S = SHORT, L = LONG fixed; Q4 scope of the price/funding
+>    decomposition in the null point.
+
+### advisor 원문(verbatim)
+You're at the (e) before-pass with plan r1 drafted (in chat only — the scratchpad is gone) and no code. The plan matches r3 §4 and plan r4 C1″. **Verdict: PROCEED**, with the answers below fixed in conventions D before any test, one concrete gap closed (the slippage allowlist), and one test added that is worth more than the rest combined.
+
+**Q1–Q4**
+
+- **Q1 → don't touch `eligibility.py`.** The predicate is arm-independent and cheap: materialize the eligible set once per part by calling the scalar `Eligibility(...)(t)` for every minute of the window grid (≈1.05M calls; measure, expect ~20–30 s). That keeps B15 literally true ("the predicate is one function"), leaves the (c) module untouched, and removes the vector≠scalar proof burden. Reuse the same list for the gate and timing draws. Only if measurement says it's unacceptable, add a vector method — and then the test must show equality with the scalar on every minute of several synthetic windows (holes, duplicate minute, missing/duplicate funding, 13 vs 14 days, window edges), and the queued Codex (e) prompt must name the (c)-file diff.
+- **Q2 → agree, with disclosure.** r3 §4 (a) defines P1 eligibility as the §1 sample rule; d−15's close is an ATR prerequisite (C30, strategy-side), and P1 takes `sl_dist` from the source trade, computing no ATR. So P1's eligible set is a superset of the base's by exactly the minutes where `atr_prev_close` would block the base. Write it into D as a disclosed asymmetry (trial #3 did the same for the exit-side boundary) and add a **report-only** count per part: `n_eligible` and `n_eligible_without_atr_prev_close` (one 23:59-bar check per day — cheap). Expect ~0.
+- **Q3 → yes.** `p1_core` encodes LONG=0, SHORT=1; arm S → 1, L → 0, matching `ARM_DIRECTION`. Test both arms' funding sign (short receives).
+- **Q4 → per-draw sums only, report-only.** Per null row: `mean_net_bps` (the only field the gate reads), `exits`, plus `price_pnl_sum`, `funding_cf_sum`, `commission_sum` over time-exit slots and `liquidated_net_sum`. No per-slot rows (50 × 1,000 × 2 × 2 would bloat the artifacts). The C9″ identity is tested per slot inside the executor tests, not stored.
+
+**Gaps to close before tests**
+
+1. **`tests/test_slippage_param.py` will fail on `backtest/p1_t4.py`.** The current clause only admits `backtest/*_t3.py` with `TF_V1.slippage`. Add the parallel clause for `*_t4.py` with `TC_V3.slippage` (test-only, plan C6 second half), and in `p1_t4.py` always write the literal `TC_V3.slippage` — never a parameter — or the AST check rejects it.
+2. **Base-reproduction test (the one that matters).** Run the P1 executor at a base trade's own `(t = fill bar, direction, sl_dist)` on a synthetic scenario where the base's SL never fires (flat price; also one with 15 funding records; also one with a due-bar open-gap liquidation). Assert `wallet_after`, `net_bps`, exit `ts_ms` and `funding_paid` are **byte-identical** to the base trade from `harness.run_arm`. This proves there is no second execution model — the engine sizes both at the 6 bps quote, resets to E_ref, and follows the same due-bar order. If this test cannot pass, (e) is wrong, whatever else passes.
+3. **Timing routine = structural copy.** Write `draw_timing` as a copy of `p1_core.p1_draw_generic` with the `dir_k` draw removed and a provenance comment naming the commit. Get its RNG by reusing `p1_core.p1_rng(replace(cfg, draws=2000), 1000 + d)` — no `p1_core` edit. Test structurally with a scripted fake RNG: the gate consumes `[pair, dir] × n` then placement calls; timing consumes `[pair] × n` then placement calls; and the first `pair` of both equals under the same stream.
+4. **`eligible_for(h)` must assert `h == 7_200`** and raise otherwise — any other h means a source-construction bug.
+5. **Golden + cross-process determinism** as trial #3 (`t3_p1_fixture.py` pattern): two-trade synthetic source, draws 0..19, gate and timing, committed digests, subprocess check.
+6. **Failure > 10 → 폐기 applies to the gate P1 only.** Timing's failure count is reported, never judged. Merged output: `null` (gate) and a separate `timing` block the verdict must never read — write that into D now and pin it with a test in (f).
+7. Imports: only `p1_core`, `placebo_exec.sizing_decision`/`mark_bar` (not `run_time_exit` — its exit semantics differ), and trial04 modules. The (a) static test already forbids `p1_t3`/`trial03`.
+
+**Executor details worth writing into D (so the tests have a text to pin)**
+
+- Entry-bucket funding excluded (exact and offset timestamps in minute t); buckets in `(t, t_due]` settled before that minute's processing; due minute: funding → `liquidate_if_open_beyond(open)` → `close_now(open, TIME_EXIT)`, no `on_bar`; `on_bar` *is* called for bar t itself (the base evaluates the fill bar intrabar too).
+- Missing bar inside `[t, t_due]` = `RunInvariantError` (eligibility guarantees presence; this is a consistency check, not a skip as in trial #1–#3's executor).
+- Sizing: single sizing at the quote (base sizes twice: at `ref`, then at the quote; the final qty is the same path) — disclose, as trial #3 did.
+- Liquidation identity: `wallet_after == E_ref − N/L − fee_notional × liquidation_fee` with `fee_notional = qty × liq_price_est` (C26).
+
+**Process**
+
+- The plan exists only in your last message: paste it verbatim into the ops_log (e) before-pass section together with this text, write conventions D (items 43+), commit the pre-commitment, then the queued Codex (e) before-pass prompt pinned to that range and naming `backtest/p1_t4.py`, the slippage-test edit, and whether `eligibility.py` changed.
+- TDD both files stub-first, as in (d).
+- At the (e) stop: the 10-11 03:30 UTC integrity result (the user's "were files deleted" question), the 10-10 FAIL (one day — below the E2E §3-4 three-day halt), the swap/`t4g.medium` decision still pending, and the question "proceed to (f) under the same substitution?" Do not start (f).
+
+### 대기 중인 Codex before-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
+> STEP (e) BEFORE-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (e) plan r1 (verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (e) before-pass") and conventions section D (docs/trials/trial_04_conventions.md items 43–53) in /home/cms/project/BTC_Futures_E2E, as committed in the pre-commitment commit that follows 719012b. Anchored text: docs/trials/trial_04_preregistration_r3.md §4 (#70) and plan r4 C1″/C9″ (ops_log 2026-09-30). Scope to be implemented: backtest/p1_t4.py (new), tests, a test-only clause in tests/test_slippage_param.py for backtest/*_t4.py + TC_V3.slippage; strategies/trial04/eligibility.py is NOT changed (the eligible set is materialised by calling the scalar predicate). Check: (1) D43–D47 against r3 §4 (h = 7,200 for every slot, eligibility = the §1 sample rule, gate draw order pair → direction → placement with spawn(1000)[d], report-only timing with spawn(2000)[1000 + d] and no direction draw, failure > 10 applies to the gate only); (2) the disclosed asymmetry D45 (atr_prev_close not applied to P1); (3) the local executor D49 against r3 decision 11/17 and the base replay's due-bar order; (4) whether the base-reproduction test D50 is sufficient evidence of a single execution model; (5) anything that must be pre-committed and is not. This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (e), registry #75) — review the plan as logged, not later code. End with VERDICT: PROCEED or FIX-PLAN-FIRST.

@@ -53,3 +53,16 @@
 40. **(e)로 넘기는 메모 — `FillRef` 재사용 금지**: `FillRef`는 일부러 T + 1분 키만 허용한다. P1 실행기는 자기 무작위 시작 t의 mark 시가를 직접 읽는다(계획 r4 C1″) — 이 가드를 풀어서 맞추지 않는다.
 41. **(f)로 넘기는 메모 — 보고 필드의 기준가**: 의도의 `decision_mark`는 시작 T 봉의 종가(기록용)이고 사이징·SL은 `ref`(T + 1분 시가)를 썼다 — 판정기·보고는 `t4` 기록의 `ref`를 쓴다(`decision_mark` 아님).
 42. **C25·C26 사용자 확인(2026-10-11 · 레지스트리 #75)**: "읽기 2건 승인" — 두 항목의 [PROPOSED]는 확정으로 읽는다(문구는 그대로 둔다 — 이 파일은 (g)에서 해시로 고정).
+
+## D. P1 무작위 타이밍 ((e) · 계획 r4 C1″·C5·C8′·C9″ · 시험 작성 전에 고정 2026-10-11)
+43. **원판 쌍**: 그 암 **기본 실행**의 트레이드에서 (trade_id · entry_ms · 결정 시점 sl_dist = `t4["sl_dist"]`)만 쓴다 · **모든 슬롯의 h = 7,200분**(원판이 SL로 일찍 끝났어도 · r3 결정 11) — `p1_core.SourceTrade`에는 exit_ms = entry_ms + 7,200분을 넣는다(`p1_core` 무수정) · `eligible_for(h)`는 h ≠ 7,200이면 오류 · 원판 0건 → 계산 불가 표지(추출 없음).
+44. **적격 분 = 판정 가능 술어 그대로**(B15): 조각마다 창 안 분 격자 전체에 스칼라 `Eligibility(...)(t)`를 한 번씩 불러 적격 목록(오름차순)을 만든다 — `eligibility.py`는 고치지 않는다 · 게이트와 timing이 같은 목록을 쓴다 · 점유 = 반열린 [t, t + 7,200분).
+45. **공시된 비대칭**: ATR의 d − 15 종가(C30 `atr_prev_close`)는 표본 규칙이 아니라 전략 쪽 ATR 전제다 — P1은 원판 sl_dist를 쓰고 ATR을 계산하지 않으므로 이 조건을 적용하지 않는다(P1 적격 집합 ⊇ 원판) · 조각마다 `n_eligible`과 `n_eligible_atr_prev_close_ok`를 **보고 전용**으로 적는다.
+46. **게이트 P1 추출** = `p1_core.p1_draw_generic` 그대로(슬롯 전부 먼저: 쌍 → 방향(0 LONG · 1 SHORT) → 배치 · 슬롯당 최대 1,000회 · 겹침 없음 ∧ 사이징 수락) · 난수 = `SeedSequence(P1_SEEDS[arm]).spawn(1000)[d]`.
+47. **보고 전용 P1-timing** = 같은 절차에서 방향 추출만 없앤 **구조 복사**(`p1_core.p1_draw_generic` @ 이 커밋 · 방향 = 암의 방향: S → 1 · L → 0) · 난수 = `SeedSequence(P1_SEEDS[arm]).spawn(2000)[1000 + d]`(`p1_core.p1_rng(replace(cfg, draws=2000), 1000 + d)`) · 같은 적격 목록·점유·사이징 함수 · **실패 > 10 → 폐기는 게이트 P1에만** 적용하고 timing의 실패 수는 보고만 · 병합 결과에서 timing은 별도 블록 — 판정은 읽지 않는다((f)에서 시험으로 고정).
+48. **배치 사이징** = `placebo_exec.sizing_decision(mark_open[t], 방향, sl_dist, #69 규칙, LIMITS, E_ref, REGIME, slippage_rate=TC_V3.slippage)` — 6 bps 예상 체결가에서 한 번(원판은 기준가에서 한 번 · 예상 체결가에서 한 번 — 최종 수량은 같은 경로 · 공시).
+49. **로컬 실행기**(트라이얼 #1~#3의 `run_time_exit`를 쓰지 않는다 — 종료 의미가 다르다): 48의 사이징 → `Engine.restore_position`(SL은 닿을 수 없는 값: 롱 0 · 숏 매우 큼 · TP 없음) → 지갑 = E_ref − 진입 수수료(수량 × 예상 체결가 × taker) → **체결 분 버킷의 펀딩 기록은 제외**(정각·오프셋 시각 모두 — 결정 17) → 분 t … t + 7,199: 그 분의 펀딩 정산 → `on_bar`(체결 봉 t 자신도 — 원판도 체결 봉을 봉 안에서 판정한다) → 종료 분 t + 7,200: 그 분의 펀딩 정산 → `liquidate_if_open_beyond(시가)` → 살아 있으면 `close_now(시가, TIME_EXIT)`(그 봉의 `on_bar`는 부르지 않는다) · **[t, t + 7,200분] 안에 봉이 없으면 `P1Error`**(술어가 보장 — 건너뛰지 않는다) · `FillRef`는 쓰지 않는다(C40).
+50. **원판 재현 시험이 기준**: 원판 트레이드 자신의 (t = 체결 봉 · 방향 · sl_dist)로 실행기를 돌리면 SL이 닿지 않은 원판과 `wallet_after` · `net_bps` · 청산 시각 · 펀딩 합이 **바이트 동일**해야 한다(평평한 가격 · 펀딩 15건 · 종료 봉 시가 갭 청산) — 두 번째 체결 모델이 없다는 증명.
+51. **청산 항등식**(C26): `wallet_after = E_ref − N/L − (수량 × 추정 청산가) × liquidationFee`(N = 수량 × 예상 체결가 · 누적 펀딩은 격리 지갑에서 이미 나갔다 — 엔진 `_liquidate`).
+52. **귀무 행**(성공한 추출마다 · 게이트와 timing 같은 모양): `draw` · `n` · `mean_net_bps`(게이트가 읽는 유일한 값 · Decimal 문자열) · `exits{time_exit, liquidation}` · 보고 전용 합계 `price_pnl_sum` · `funding_cf_sum`(= −Σ 지불) · `commission_sum`(시간 청산 슬롯) · `liquidated_net_sum` — 슬롯별 행은 저장하지 않는다.
+53. **공유 시험 수정(시험만 · 계획 C6)**: `tests/test_slippage_param.py`에 `backtest/*_t4.py` + `TC_V3.slippage` 절을 더한다 — `p1_t4.py`는 슬리피지를 항상 리터럴 `TC_V3.slippage`로 쓴다(매개변수로 받지 않는다).
