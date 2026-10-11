@@ -11783,3 +11783,51 @@ L14 asserts "이 저장소 헌법에는 그 관문이 없다" and #86 ① is bui
 3. Final report (Korean): item 2 from my previous message — the design-doc definition, ACCEPT 0 / closed #114, the two broken links in the user's stated chain (no base signal; L2 under the floor), the OOS-burn caveat for training on 2026-07..10, the open §8 branches — then the decision list: #86 (new), trial #5 hypothesis, VPS swap (Codex), SDK docs-only study, Telegram text. Do not propose a hypothesis.
 
 No more E2E reading; everything the report needs is already in the transcript.
+
+## 2026-10-11 — 트라이얼 #5 후보 목록 **before-pass**(advisor만 — 검토자 한 명 · #77·#80)
+> 사용자(원문 · 2026-10-11): "후보 목록 정리해줘" · 앞선 결정: #88("1번 승인" — #86 제안 셋) · #89("1번은 A로 진행" — SDK 보류).
+- advisor: **PROCEED**(틀 6항). 읽은 것(IS·IS 이전 자료 없음): 닫힌 트라이얼의 판정 보고서에서 트레이드 net 표준편차(#2 A 157.8 · B 126.2 / #3 L 124.4 · S 118.9 / #4 S 457.4 · L 517.4) · 로컬 CSV 머리줄(5심볼 같은 열) · 헌법 §7 기각 목록.
+- 산출물: `docs/trials/trial_05_candidates_2026-10-11.md`(레지스트리 행은 사용자가 고른 뒤).
+
+### 입장표
+| # | advisor | Claude Code |
+|---|---|---|
+| 1 | 가능 범위(필요 n)를 먼저 | 동의 — 문서 1절(k = 3.381 / 3.417) |
+| 2 | 구조 지렛대는 후보가 아니라 결정 사항 | 동의 — 3절 · 메이커 실행을 "테이블 밖" 항목으로 하나 더 적음 |
+| 3 | 후보마다 겹침·차이·산수·관문·실패 사유·중단 조건 | 동의 — 관문 미달 후보도 남김 |
+| 4 | IS·IS 이전 자료로 후보를 세지 않는다 · 추천 표시 없음 | 동의 |
+| 5 | E2E와의 긴장을 한 번 | 동의 — 4절 |
+| 6 | 문서로 남기고 행은 선택 뒤 | 동의 |
+
+### advisor 원문(verbatim)
+You're at the before-pass for the trial #5 candidate list (user: "후보 목록 정리해줘"; you promised "기각된 것과 겹치지 않는 후보 + 근거 + 예상 표본 수"). **PROCEED**, with the frame below — the frame matters more than the candidates, because #88's power gate has already closed most of the space and the list should say so first rather than pad.
+
+**1. Lead with the feasibility envelope (arithmetic from the pinned evaluator, no data reads)**
+
+`verdict_t4.mde` = (z₁₋α + z₀.₈₀)·sd/√(n/1.6). #88 says projected MDE > 2θ (= 40 bps) → do not anchor. So n_req ≈ 1.6·(3.34·sd/40)² ≈ 0.011·sd². Per-trade sd from your own closed trials: ~120 bps at 4h hold (t3 report, you just read it), 457–517 at 5 days (t4). Back out t2's sd from registry #41 (MDE 22.7, n 732, that trial's α and ρ floor) instead of guessing the intraday-daily point. Then for each hold class state n_req and whether 731 IS days can produce it with one position at a time: 4h → ~160 trades (0.2/day, feasible), ~1 day → several hundred (near one trade per day, marginal), 5 days → thousands (impossible single-symbol). Add the other wall from §7: ≤30-min signals die on 22 bps. That leaves hours-to-one-day holds at ≥1 trade per few days — write that sentence explicitly, and say that trials #1–#3 lived in that band and all three came out gross ≈ 0. Honest framing beats a six-item list.
+
+**2. The structural levers are decision items, not candidates — list them separately**
+
+- Multi-symbol (ETH/SOL/XRP/BNB are on disk): the single lever that raises n without lengthening hold. It overrides open-decisions #5 (BTCUSDT) → user decision + constitution change; per-symbol rules must come from runtime/snapshot, never BTC values. Before claiming it: one `head -1` per symbol CSV to confirm the same columns (funding, mark OHLC) — don't promise data you haven't seen.
+- Longer IS (local data back to 2019-09): allowed for a *new* hypothesis (L8 forbids it only for reruns), roughly ×3 on n; carries regime/cost-model tags.
+- θ = 20 and the gates are pre-committed protocol — do not propose changing them; name it only as "not on the table without a v1.6 decision".
+- N counter: now 8; every new arm raises SR* for all future trials. Prefer one-arm designs and say why.
+
+**3. Per-candidate record (use the project's own DR01 Q7 idiom)**
+
+One-line hypothesis · mechanism · §7 overlap check *with the stated difference* (you must name the row it resembles — the agent must not be the one who forgets T-FLUSH/T-CARRY/#1/#2) · decision cadence and hold · expected trades per 2-year IS **by arithmetic from stated frequency assumptions** · sd class and projected MDE vs 2θ (pass/fail) · data source (local 1m / collector Drive copies / new capture) · most plausible failure reason · stop-before-measure condition. Candidates that fail the gate stay in the table, marked, so the user sees why they're out.
+
+**4. What not to do**
+
+- No IS-window reads, and no pre-IS counting across candidates now — ranking six ideas on pre-IS data is a forking-paths search. Calibration (counts only, pre-IS) happens after the user picks, as trial #4 did.
+- No parameter grids, no "recommended" tag. Filtering by the gate is allowed; ranking by expected success is not — the user chooses (your own words earlier).
+- Nothing from the rejected list renamed: funding level alone, OI/flush at 30 min, premium 8h extremes, daily breakout, S/R mean reversion, Donchian, vol/chop regime, spread gate, CVD/order-flow lead, VPIN. If a candidate reuses an ingredient (OI, premium, funding clock), the difference must be scale/mechanism, written down.
+- Hour-of-day effects: E2E Phase 1-A §3-2 banned hour-of-day as a filter for the "착시 P&L" reason — if a funding-clock candidate appears, cite that and state why it's a hypothesis rather than a filter.
+
+**5. Say the E2E tension once, plainly**
+
+Phase 2a meta-labeling needs a base signal with thousands of events (E2E trained on 28,835 trades / 84 clusters); the power-feasible band here yields ~160–700 trades in two years. So trial #5 cannot double as the E2E base signal, and the realistic E2E route remains the §8 branches after the L2 floor (~10-24 / 01-24) with a charter revision. One paragraph, no proposal.
+
+**6. Process**
+
+Log this before-pass verbatim in ops_log (advisor sole reviewer per #77/#80) → write `docs/trials/trial_05_candidates_2026-10-11.md` (the project already keeps decision material as docs: E2E's 전략분기_결정자료) → secret scan, commit, push → after-pass → chat summary with the envelope first, the table second, the lever decisions third. No registry row until the user picks; then the pick row cites the doc's SHA256. Do not start a pre-registration draft or any `strategies/` code.
