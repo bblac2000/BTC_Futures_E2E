@@ -11831,3 +11831,40 @@ Phase 2a meta-labeling needs a base signal with thousands of events (E2E trained
 **6. Process**
 
 Log this before-pass verbatim in ops_log (advisor sole reviewer per #77/#80) → write `docs/trials/trial_05_candidates_2026-10-11.md` (the project already keeps decision material as docs: E2E's 전략분기_결정자료) → secret scan, commit, push → after-pass → chat summary with the envelope first, the table second, the lever decisions third. No registry row until the user picks; then the pick row cites the doc's SHA256. Do not start a pre-registration draft or any `strategies/` code.
+
+## 2026-10-11 — 트라이얼 #5 후보 목록 **after-pass**(advisor만 — 검토자 한 명 · #77·#80)
+- advisor: **ACCEPT**(공시 1 · 표시 3 · 지렛대 주 1) — 문서 끝에 "보강" 절로 덧붙였다(본문 불변 · 선택 행은 보강 뒤 SHA256을 적는다). 검산: MDE = 40 · k = 3.381(N = 9)에서 참 효과 20 bps의 검출 확률 0.198.
+- 정정: before-pass 문서 집계에서 "미달 4"가 아니라 미달 3(C3·C4·C5) + 평가 불가 1(C6)이다(advisor 문장은 넷을 묶었다 — 뜻은 같다).
+
+### 입장표
+| # | advisor | Claude Code |
+|---|---|---|
+| 1 | 2θ 관문 통과는 θ 검출력 약 20% — 두 수를 함께 | 동의 — 보강 1 |
+| 2 | C1에도 결과 동기 ⚠️ | 동의 — 보강 2 |
+| 3 | C1 진입 창 모호 | 동의 — 보강 3(본문 문구가 가설과 어긋났다) |
+| 4 | C1 한 암 묶기는 가정 | 동의 — 보강 4 |
+| 5 | 더 긴 IS는 보정 구간을 먹는다 | 동의 — 보강 5 |
+| 6 | 집계를 그대로 말하고 권고 없음 | 동의 — 보강 6 |
+
+### advisor 원문(verbatim)
+You're at the after-pass for the candidate document (b535fad pushed; before-pass logged; no registry row, correct). **After-pass verdict: ACCEPT, with one material disclosure the user needs before choosing and three flags — append them as a dated addendum, not a rewrite.** No row pins the doc yet, so an edit is allowed; keep it visible as "보강(after-pass · 2026-10-11)" so the pick row cites the post-addendum SHA256.
+
+**1. Disclosure that changes how the user reads the table (section 1)**
+
+The gate you built the envelope on is MDE ≤ 2θ = 40. Passing it only avoids the *검정력 부족 label*. With MDE 40, a true effect of θ = 20 bps is detected with roughly 20% power (se ≈ 40/3.38 ≈ 11.8; z = 20/11.8 − 2.54 ≈ −0.85). To detect θ itself at 80% power, MDE ≤ θ → **n × 4**: 4h-hold ≈ 660, same-day ≈ 720–1,200. That shrinks the "feasible band" to roughly one trade per day or more, and C1's 440 goes from comfortable to "passes the label gate, underpowered for θ". Write both numbers per hold class (n for MDE ≤ 2θ, n for MDE ≤ θ). The user chose the 2θ rule in #88 — don't change it, but they should see what it buys.
+
+**2. Flags on the candidates**
+
+- **C1 needs the same ⚠️ as C2.** Both reuse T-CARRY's trigger (8h premium decile), and both were drafted after #84's numbers were seen; marking only C2 as result-motivated is inconsistent. The mechanism difference is real — say it, and keep the flag.
+- **C1's entry window is ambiguous.** The hypothesis says "정산 시각 앞 몇 시간", the cadence says "인쇄마다 결정 · 보유 2~4시간" — a print *is* a settlement boundary, so "decide at print, hold 2–4h" is *after* a settlement, not before the next one. Pre-registration must pick one window; P1's null must match it. Note it now so the pick isn't made on an unresolved design.
+- **C1 one-arm pooling:** trial #4's two arms had opposite-sign means (S −35 / L +67). Pooling by premium sign into one arm assumes a symmetric effect; if it isn't, the arms cancel. State it as a pre-registration decision (one arm saves N; two arms separate the effects).
+
+**3. Lever note (section 3)**
+
+"더 긴 IS" back to 2019/2020 consumes the pre-IS window that #88 ①'s projected-MDE gate needs for its sd estimate (trial #4 calibrated on 2021-06 → 2023-12). Extending IS and keeping a usable calibration window are in tension — say which years would remain for calibration before offering it as ×3 on n.
+
+**4. In the chat summary, say the count plainly**
+
+Six candidates: one passes the 2θ gate on its own (C1, with the caveats above), one only with the multi-symbol lever (C2), four fail by arithmetic, and C6 can't be assessed before the L2 floor. That's the honest state of the space, not a steer — say so, and keep "no recommendation".
+
+**Order:** addendum → commit → after-pass block in ops_log (this text verbatim, positions table) → secret scan → push → chat: envelope with the 4× caveat first, table second, levers third, E2E paragraph once, then the ask (pick one / open a lever / wait). One line in `trial04-status.md` that the candidate doc exists and awaits the user. No registry row and no pre-registration draft until the user picks.
