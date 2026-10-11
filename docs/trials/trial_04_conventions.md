@@ -66,3 +66,6 @@
 51. **청산 항등식**(C26): `wallet_after = E_ref − N/L − (수량 × 추정 청산가) × liquidationFee`(N = 수량 × 예상 체결가 · 누적 펀딩은 격리 지갑에서 이미 나갔다 — 엔진 `_liquidate`).
 52. **귀무 행**(성공한 추출마다 · 게이트와 timing 같은 모양): `draw` · `n` · `mean_net_bps`(게이트가 읽는 유일한 값 · Decimal 문자열) · `exits{time_exit, liquidation}` · 보고 전용 합계 `price_pnl_sum` · `funding_cf_sum`(= −Σ 지불) · `commission_sum`(시간 청산 슬롯) · `liquidated_net_sum` — 슬롯별 행은 저장하지 않는다.
 53. **공유 시험 수정(시험만 · 계획 C6)**: `tests/test_slippage_param.py`에 `backtest/*_t4.py` + `TC_V3.slippage` 절을 더한다 — `p1_t4.py`는 슬리피지를 항상 리터럴 `TC_V3.slippage`로 쓴다(매개변수로 받지 않는다).
+54. **(f)로 넘기는 메모 — 판정이 읽는 P1 값**: 판정은 병합 결과의 `null[].mean_net_bps`와 `evaluable`(+ `computable` · `failed`)만 읽는다 · `timing` 블록은 절대 읽지 않는다 — 판정기 입력에 대한 시험으로 고정.
+55. **(g)로 넘기는 메모 — P1 조각 CLI의 문맥**: `mean_net_bps`와 보고 전용 합계는 주변 Decimal 문맥에서 계산된다 — 조각 CLI는 트라이얼 #3처럼 `decimal.setcontext(decimal.Context())`를 먼저 한다(조각 간 바이트 동일의 전제).
+56. **(g)로 넘기는 메모 — 실행 예산(합성 측정 2026-10-11)**: 적격 분 훑기 1.05M 호출 ≈ 2.4초(조각마다) · 실행기 7,200봉 ≈ 0.016초 × 약 50슬롯 × 1,000추출 × 2종 ≈ 암마다 27분 CPU — 최적화하지 않는다.

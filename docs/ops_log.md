@@ -11211,3 +11211,57 @@ You're at the (e) before-pass with plan r1 drafted (in chat only — the scratch
 
 ### 대기 중인 Codex before-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
 > STEP (e) BEFORE-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (e) plan r1 (verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (e) before-pass") and conventions section D (docs/trials/trial_04_conventions.md items 43–53) in /home/cms/project/BTC_Futures_E2E, as committed in the pre-commitment commit that follows 719012b. Anchored text: docs/trials/trial_04_preregistration_r3.md §4 (#70) and plan r4 C1″/C9″ (ops_log 2026-09-30). Scope to be implemented: backtest/p1_t4.py (new), tests, a test-only clause in tests/test_slippage_param.py for backtest/*_t4.py + TC_V3.slippage; strategies/trial04/eligibility.py is NOT changed (the eligible set is materialised by calling the scalar predicate). Check: (1) D43–D47 against r3 §4 (h = 7,200 for every slot, eligibility = the §1 sample rule, gate draw order pair → direction → placement with spawn(1000)[d], report-only timing with spawn(2000)[1000 + d] and no direction draw, failure > 10 applies to the gate only); (2) the disclosed asymmetry D45 (atr_prev_close not applied to P1); (3) the local executor D49 against r3 decision 11/17 and the base replay's due-bar order; (4) whether the base-reproduction test D50 is sufficient evidence of a single execution model; (5) anything that must be pre-committed and is not. This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (e), registry #75) — review the plan as logged, not later code. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
+
+## 2026-10-11 — 트라이얼 #4 단계 (e) **after-pass**(advisor만 — Codex는 사용자 결정 #75에 따라 대기열 · advisor **MERGE**)
+- 한 것: `backtest/p1_t4.py`(신규) · 시험 33 + 골든 · 픽스처 `tests/fixtures/t4_p1_fixture.py` · 커밋 e3d6f21(코드) · 0405c00(사전 고정: 규약 D43~D53 · 계획 r1).
+- 트라이얼 #3·공유 런타임·`eligibility.py` 수정 없음: 커밋 e3d6f21 = `p1_t4.py` 신규 · 시험 파일 3(그중 `tests/test_slippage_param.py`는 한 절 · 시험만 · D53) · 픽스처 1 · 골든 1 · `git diff 0405c00..HEAD -- strategies/trial04/eligibility.py` 빈 출력.
+- 검증: 전체 시험 **1,722 passed**(HEAD · advisor 지적대로 다시 실행 — 커밋 전 1,720은 종료 봉 시험 2개 전의 수) · ruff·pyright 깨끗 · 변이 7개(체결 분 펀딩 지불 · 종료 봉을 on_bar로 · timing이 방향 추출 · 원판 실현 h 사용 · timing 스트림 = 게이트 스트림 · 병합이 timing 검사 생략 · 종료 분 펀딩을 청산 뒤로) 모두 시험이 잡음 · 원판 재현 6건(암 2 × 펀딩 15건/펀딩 없음/종료 봉 갭 청산) 바이트 동일.
+- **공개**: (i) 스텁에서 먼저 실패 확인(수집 오류). (ii) 구현 뒤 시험 기대값을 고친 것 둘 — `atr_prev_close` 개수(두 번 고침: 날 0이 불완전하면 술어의 앞 14일 검사가 날 14를 빼므로 9일 × 1,440 − 1,440이 맞다) · 청산 항등식을 엔진 실행 문맥(34자리) 안에서 계산하도록. 모듈 쪽 고침 하나 — 픽스처 경로에서 알 수 없는 암이 `KeyError` 대신 `P1Error`가 되도록 검사 추가. (iii) 골든 다이제스트는 구현이 낸 값이다(회귀 고정 — 독립 기준이 아님 · 트라이얼 #3과 같음). (iv) 시험 하나를 구현 뒤에 더했다(종료 봉의 고가·저가 미판정). 규약은 바뀌지 않았다.
+- advisor 지적(작은 것): `rng_gate`는 스트림 동일성 시험용 — 한 줄 주석을 달았다(실행 경로의 게이트는 `p1_core.p1_rng`를 직접 쓴다).
+- 넘김: 규약 D54((f) 판정은 timing을 읽지 않는다) · D55((g) 조각 CLI의 Decimal 문맥) · D56((g) 실행 예산).
+- Codex 대기열: (c)·(d)·(e) × before/after = 프롬프트 여섯 개가 ops_log에 있다 · (g) 동결 전에 반드시 실행.
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor after | 구현이 D43~D53과 일치 · MERGE | 동의 |
+| 2 | advisor 1 | HEAD에서 전체 시험 다시 | 동의 — 1,722 |
+| 3 | advisor 2 | 원문·범위를 못 박은 Codex 프롬프트 | 동의 — 이 절 |
+| 4 | advisor 3 | 공개 네 가지 | 동의 — 위(단 "암 검사"는 시험 기대값이 아니라 모듈 고침으로 정확히 적었다) |
+| 5 | advisor 4·5 | 공유 수정 없음 한 줄 · 규약 차이 | 동의 — 위 · 사용자 보고 |
+| 6 | advisor 6·7 | 메모리 · 정지((f) 시작 안 함) | 동의 |
+| 7 | advisor 작은 것 | rng_gate 주석 | 동의 — 반영 |
+| 8 | advisor 넘김 | (f) timing 미열람 시험 · (g) Decimal 문맥 · (g) 예산 | 동의 — D54~D56 |
+| 9 | advisor 보고 | 03:30 대사 결과 · 10-10 FAIL · 스왑/증설 · (f) 질문 | 동의 — 사용자 보고 |
+
+### advisor 원문(verbatim)
+You're at the (e) after-pass: code committed and pushed at `e3d6f21`, 33 P1 tests + golden, ruff/pyright clean, 7 mutations each killed by one test. I checked `p1_t4.py` against D43–D53 line by line — every reading matches: `exit_ms = entry_ms + H_MS` and `eligible_for` rejecting `h ≠ 7_200` (D43); scalar predicate over the window grid, `eligibility.py` untouched (D44); `count_atr_prev_close_ok` report-only (D45); `p1_draw_generic` as-is (D46); `draw_timing` structural copy with the direction draw removed, `p1_rng(replace(cfg, draws=2000), 1000+d)`, separate `timing` block with `failed` only (D47); `sizing_decision` with the literal `TC_V3.slippage` (D48, D53); `start_after_minute = bisect_left(ms, t+60_000)` excluding the entry bucket, `t..due−1` settle→`on_bar`, due settle→`liquidate_if_open_beyond`→`close_now(TIME_EXIT)`, missing bar → `P1Error` (D49); byte-identical base reproduction across both arms × three cases (D50); liquidation identity under `exec_context` (D51); null-row shape (D52). The `hole` case in the eligibility test pins decision 17 on the P1 side too. **Verdict: MERGE.** Nothing reopens the code.
+
+**Finish before reporting**
+
+1. **Rerun the full suite at HEAD.** Your 1,720 count predates the due-bar test (+2 parametrized); the committed state was never run whole. Expect 1,722 — report the actual number, as (c)/(d) did.
+2. ops_log (e) after-pass section with this text verbatim, header "after-pass (advisor only — Codex queued per #75)", queued Codex after-pass prompt pinned to pre-commit `719012b..0405c00` and code `0405c00..e3d6f21`, naming `backtest/p1_t4.py`, the slippage clause, and "`eligibility.py` unchanged — verify by diff".
+3. **Disclose, in order:** (i) stub-first, collection error; (ii) after implementation, three test expectations were corrected — the `atr_prev_close` count (twice: the predicate's `atr_days` check removes day 14 when day 0 is incomplete, so the second correction encodes the right reasoning), the liquidation identity moved into `exec_context` (34-digit engine context), and the arm check added to the fixture path; (iii) the golden digests were generated from the implementation — a regression pin, not an independent oracle (same as trial #3); (iv) one test added after (due-bar high/low). None of these changed a convention.
+4. **No trial #3 / shared-runtime / `eligibility.py` edit:** commit stat = `p1_t4.py` new, 3 test files, 1 fixture, one `test_slippage_param.py` clause (test-only, D53). One line.
+5. Conventions diff `719012b..e3d6f21 -- docs/trials/trial_04_conventions.md` = D43–D53 (fixed at `0405c00`; nothing added in the code commit) — show it.
+6. Memory: (e) done at `e3d6f21`; six queued Codex prompts ((c),(d),(e) × before/after) once this after-pass is logged — all must run before (g); next row #76; stopped before (f).
+7. **Stop.** Do not start (f).
+
+**Nit the queued Codex will likely raise — fix or pre-empt now:** `rng_gate` is defined only for the stream-identity test; the production gate path goes through `p1_core.p1_rng` inside `p1_draw_generic`. Either delete it and have the test call `C.p1_rng` directly, or give it a one-line docstring saying it is test-only and the gate uses `p1_core` directly. Not blocking.
+
+**Carry-forwards — write as D54+ memos now**
+
+- **(f):** the verdict reads only `null[].mean_net_bps` and `evaluable`; it must never read `timing`. Pin with a test on the evaluator's input (D47 already says so; (f) proves it).
+- **(g):** the P1 part CLI (`p1_t4_run.py`) must set `decimal.setcontext(decimal.Context())` as trial #3's did — `mean_net_bps` and the report-only sums are computed in the ambient context, so byte-identity across parts depends on it.
+- **(g):** eligibility scan projected 2.4 s for 1.05M calls; executor ~0.016 s × ~50 slots × 1,000 draws × 2 kinds ≈ 27 min per arm — no optimization, state the budget.
+
+**The report must carry**
+
+- The 10-11 **03:30 UTC integrity result** — check `date -u` first; if `LAST_RECONCILE.txt` / `LAST_DRIVE_VERIFY.txt` still show 10-04, say the run hasn't fired yet and when it will, rather than "unknown". This is the user's "were files deleted" question.
+- 10-10 FAIL (one day; below the E2E §3-4 three-consecutive-day halt), collectors active, swap / `t4g.medium` decision pending.
+- The question: "(f)(판정기)도 같은 대체로 진행합니까?"
+
+Report in the (d) shape: what changed with commits, 33 tests + golden, suite count at HEAD, the four disclosures, conventions diff, carry-forwards, VPS status, the (f) question. Then STOP.
+
+### 대기 중인 Codex after-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
+> STEP (e) AFTER-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (e) in /home/cms/project/BTC_Futures_E2E. Review exactly these ranges: pre-commitment 719012b..0405c00 (conventions D43–D53, plan r1) and code 0405c00..e3d6f21 (backtest/p1_t4.py new, tests/test_p1_t4.py, tests/fixtures/t4_p1_fixture.py, tests/fixtures/golden_p1_trial04.json, and one test-only clause in tests/test_slippage_param.py for backtest/*_t4.py + TC_V3.slippage). strategies/trial04/eligibility.py is unchanged — verify by diff. Anchored text: docs/trials/trial_04_preregistration_r3.md §4 (#70). Check: (1) p1_t4.py against D43–D52 and r3 §4 (h = 7,200 for every slot; eligibility = the sample-rule predicate; gate = p1_core.p1_draw_generic with spawn(1000)[d]; report-only timing = structural copy without the direction draw, spawn(2000)[1000 + d]; failure > 10 applies to the gate only; timing is a separate block); (2) the local executor D49 against the base replay (entry-bucket funding excluded, due-bar order, missing bar = error) and whether the byte-identical base-reproduction test D50 (both arms × funding15 / no funding / due-bar gap liquidation) is sufficient evidence of a single execution model; (3) the disclosed asymmetry D45 and the single sizing at the quote D48; (4) whether the 33 tests pin the behaviours (seven mutations were reported killed) and that the golden digests are implementation-generated regression pins; (5) merge invariants. Disclosed: three expectations corrected after implementation (atr_prev_close count, liquidation identity computed under exec_context, an arm check added to the fixture path in the module) and one test added after (due-bar high/low). This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (e), registry #75) — review those commits, not later code. End with VERDICT: MERGE or FIX-FIRST.

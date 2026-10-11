@@ -106,6 +106,7 @@ def eligible_for_factory(mins: Sequence[int]) -> C.EligibleFor:
 
 # ── 스트림 · 추출 ────────────────────────────────────────────────────────────
 def rng_gate(cfg: C.P1Config, d: int) -> np.random.Generator:
+    """스트림 동일성 시험용 — 실행 경로의 게이트는 `p1_core.p1_draw_generic` 안에서 `p1_core.p1_rng`를 직접 쓴다(같은 스트림)."""
     return C.p1_rng(cfg, d)
 
 
