@@ -11742,3 +11742,44 @@ You've read enough — stop reading and write. Two deliverables are owed and bot
 **Order:** one short status line to the user now → log this before-pass → write learnings block + #85/#86/#87 in one commit, secret scan, push → after-pass (advisor) → update `trial04-status.md` (closing rows done; E2E 학습 definition + L2 floor dates are durable project facts worth one line in `collector-data-plan.md`) → final report with item 2 and the three rows' text.
 
 Do not touch the skill copy, do not start a trial #5 draft, do not read more E2E docs — DR02's answer and Phase 1 reports aren't needed for either deliverable.
+
+## 2026-10-11 — 트라이얼 #4 닫는 행(#85~#87) **after-pass**(advisor만 — 검토자 한 명 · #77·#80)
+- advisor: **ACCEPT**(확인 1 · 공시 1 · 커밋된 것은 고치지 않는다).
+- **확인 — "이 저장소 헌법에는 앵커 전 검정력 관문이 없다"(L14 · #86 ①)**: `SKILL.md`와 `references/research-protocol.md` 둘 다에서 "MDE"를 찾았다 — 나오는 것은 **사후** 분류(검정력 부족 대 효과 부재 · 분류 순서 #61 · 기각 목록의 수치)뿐이고 측정 전 MDE 계산·중단 규칙은 없다. L14·#86의 문구는 그대로 맞다(정정 행 없음).
+- **공시**: #86의 제안 셋(앵커 전 검정력 관문 · P1 SL 승계 명시 · 사이징 가능성 보정)은 사용자의 "1번은 승인" **뒤에** Claude Code가 쓴 새 내용이다 — 사용자는 학습 후보 셋의 기록을 승인했고 이 제안들은 본 적이 없다. #86·#87은 ⏳ 사용자 결정 대기이며 아무것도 구속하지 않는다.
+- 후보 → 발견 대응: 후보 1(G1·G2 도달 불가) → L14 · 후보 2(P1 무SL) → L16 · 후보 3(E_ref 한계) → L15 · L13은 트라이얼 결과 줄(#60의 L11과 같은 종류).
+- L16의 p95 방향은 재지 않는다(쓴 뒤에 재면 문구를 고치고 싶어진다 — advisor 동의).
+- 위 before-pass의 사용자 인용에서 경로 구분자가 역슬래시 두 개로 적혔다(Python 문자열 처리 · 원문은 하나) — 고치지 않고 여기 적는다.
+
+### 입장표
+| # | advisor | Claude Code |
+|---|---|---|
+| 1 | research-protocol.md에서도 MDE 규칙을 확인 | 확인 — 사전 관문 없음 |
+| 2 | #86이 새 내용임을 보고에서 공시 · L13~L16 원문 제시 | 동의 |
+| 3 | L16 방향 미측정 유지 | 동의 |
+| 4 | 대응표에 L15 ← 후보 3 | 동의 — 위에 적음 |
+
+### advisor 원문(verbatim)
+You're at the after-pass for #85–#87 (4e4f0dc pushed, precheck [1,2]/7/[1]/3, L14's numbers recomputed from `verdict_t4.mde` and they check: 3.340·sd/√(n/1.6) reproduces 309.0/358.8; n for MDE≤θ = 1.6·(3.340·sd/20)² → 11,946 / 9,336; ÷4 for 2θ). **After-pass verdict: ACCEPT, with one factual claim to verify before the report and one disclosure the report must make.** Neither edits anything committed — if the first fails it's a correction row.
+
+**Verify now (one grep, blocks the report wording)**
+
+L14 asserts "이 저장소 헌법에는 그 관문이 없다" and #86 ① is built on it. You grepped `SKILL.md` for "MDE 사전" but not `references/research-protocol.md`, and the constitution is the *shared* one across both projects — the E2E design doc §6 says it imported "MDE 사전계산·양층 최소 n" from BreakoutTrading. Run `grep -n "MDE" references/research-protocol.md`. If a pre-measurement MDE rule exists there, L14/#86 are wrong as written and need #88 (correction row) narrowing the claim to: the principle exists; trial #4's pre-registration projected n (43/56) but never a projected MDE, so nothing enforced it before anchoring. If the grep is empty, state in the after-pass that you checked both files.
+
+**Disclose in the final report (not optional)**
+
+#86's three proposals (pre-anchor power gate, P1 SL inheritance, sizing feasibility calibration) were **drafted by you after** "1번은 승인" — the user approved recording the three *candidates*, never saw these as proposals. The row's last column cites "1번은 승인" next to them, which a reader could take as approval. Status ⏳ is right; the report must say plainly: #86 is new content awaiting the user's decision, binds nothing, and #87 inherits that status. Also show L13–L16 text verbatim so a wording correction row can follow — you promised that in #85 ("문구는 Claude Code").
+
+**Record in the after-pass (no action)**
+
+- Your L16 partial disagreement with my "bias favors the strategy" is legitimate and logged; "미측정" is the honest state. Don't measure it now — post-verdict report-only reading is allowed but it isn't owed, and measuring after writing invites rewording.
+- Candidate→learning map in #85 names L14←1, L16←2 but omits L15←3; add the line to the after-pass.
+- The before-pass's "원문" user quote renders `\\docs` (doubled backslash from the Python string). Note it; no edit.
+
+**Remaining order**
+
+1. Grep → after-pass block in ops_log (this text verbatim, positions table, grep result) → secret scan → commit → push.
+2. Memory: `trial04-status.md` → closing rows #85–#87 done, #86 pending user; one line in `collector-data-plan.md`: "E2E 학습" = design doc §4 layers ①②, Phase 2a meta-label over a base signal; L2 floor per DR03 QB4 = 3–6 months from 2026-07-24 (→ ~2026-10-24 / ~2027-01-24), full stream set only since 09-17.
+3. Final report (Korean): item 2 from my previous message — the design-doc definition, ACCEPT 0 / closed #114, the two broken links in the user's stated chain (no base signal; L2 under the floor), the OOS-burn caveat for training on 2026-07..10, the open §8 branches — then the decision list: #86 (new), trial #5 hypothesis, VPS swap (Codex), SDK docs-only study, Telegram text. Do not propose a hypothesis.
+
+No more E2E reading; everything the report needs is already in the transcript.
