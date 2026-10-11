@@ -1,0 +1,44 @@
+{
+ "children_max_rss_kb": 4030700,
+ "provenance": {
+  "evaluator_commit": "69f4d839564d6710a8abde28fe82727153646f65",
+  "fetched_at": "2026-10-11T04:07:09+00:00",
+  "fingerprint": "fc5c9df7fdeaa13b3199fa7cc5b42555f677502fa6043c2c46633a57b0434277",
+  "manifest_sha256": "0520e6fca8242892372b76a1ef2cc55b23fa1283360595076cf0301154cfcb9c",
+  "origin": "3f93a02286bef022fa1434eef63b522ff97da77e",
+  "pins_commit": "3f93a02286bef022fa1434eef63b522ff97da77e",
+  "rows": {
+   "conventions_commit": "a9920444e24262432aacb18515de5d3230dbeb79",
+   "conventions_sha256": "a578636573788687b48872d4f7cb14f6018f3763b4c8ecf1a8ffbb75eb877a06",
+   "fingerprint": "fc5c9df7fdeaa13b3199fa7cc5b42555f677502fa6043c2c46633a57b0434277",
+   "freeze_manifest_sha256": "dba2366515af0f79177b6a3170480ce1e28da9fd06b803045894d6e79781c862",
+   "freeze_version": "1"
+  },
+  "variant": "verify"
+ },
+ "run": {
+  "args": [
+   "--verify",
+   "--evaluator-commit",
+   "69f4d839564d6710a8abde28fe82727153646f65"
+  ],
+  "ended_utc": "2026-10-11T04:07:54.665981Z",
+  "git_head": "3f93a02286bef022fa1434eef63b522ff97da77e",
+  "module": "backtest.prepare_t4",
+  "numpy": "2.5.3",
+  "outputs": {
+   "bars_1m.parquet": "d3483144b4d6f004d2c6fa5b0818194ea7ec2f5487b35ad186abef7492bfa6ac",
+   "funding.json": "c0d449ed84a08acf0545ef0ea2f1883e209b88d94ed736748442c412d315b9be",
+   "kline_close_daily.json": "c36080cc5c962bb8c6e8c2545db0bfaf0c7ab4adf0f96c531406490811ce9040",
+   "manifest.json": "0520e6fca8242892372b76a1ef2cc55b23fa1283360595076cf0301154cfcb9c",
+   "premium_prints.json": "5e87f959454896b1ec0315272912d8ab5699dd897778bbb89c7d8fb69f9ae94c",
+   "source_audit.json": "8afa453c9477120f6d36cf42bfb67ae1fbff783f785c8775ba86b293339a87ff"
+  },
+  "python": "3.12.13",
+  "returncode": 0,
+  "started_utc": "2026-10-11T04:07:09.635321Z",
+  "stderr": "",
+  "stdout": "{\n \"bars_1m.parquet\": \"d3483144b4d6f004d2c6fa5b0818194ea7ec2f5487b35ad186abef7492bfa6ac\",\n \"code_commit\": \"d22895200d6823cfe5e19da2a31f0ceace85f80b\",\n \"funding.json\": \"c0d449ed84a08acf0545ef0ea2f1883e209b88d94ed736748442c412d315b9be\",\n \"kline_close_daily.json\": \"c36080cc5c962bb8c6e8c2545db0bfaf0c7ab4adf0f96c531406490811ce9040\",\n \"premium_prints.json\": \"5e87f959454896b1ec0315272912d8ab5699dd897778bbb89c7d8fb69f9ae94c\",\n \"raw_files\": 59,\n \"source_audit.json\": \"8afa453c9477120f6d36cf42bfb67ae1fbff783f785c8775ba86b293339a87ff\",\n \"verified\": true,\n \"window\": \"IS+warmup(2023-10-02) \\u00b7 trial #4\"\n}\n"
+ },
+ "wall_s": 45.2
+}
