@@ -10948,3 +10948,128 @@ Report in the same shape as (b): what changed with commits, test counts (22 + 22
 - 수정 흔적 감사(읽기 전용 · 변경 0): `~/E2E_Hybrid_Bot` git 깨끗 · HEAD 989a23c(2026-09-17) · 10-06 이후 바뀐 홈 파일 = rclone 토큰 갱신뿐 · systemd 유닛 파일 변경 없음 · crontab 없음 · 대장에서 그 시간대에 고쳐진 기존 행 0 · sudo 기록 없음(이 점검의 `sudo -n true` 1건 제외) · `/home/btcfut`은 ubuntu로 읽을 수 없음(그 세션이 봇 저장소를 고칠 수 없었다) · 패키지 변경은 무인 업그레이드(10-08 커널 정리 · 10-10 07:43 libxml2 · libpng).
 - 한계: 실행된 명령 자체는 기록에 없다(감사 로그 미설정) · 조각 파일이 지워졌는지는 주간 대사(2026-10-11 03:30 UTC)와 Drive 검증이 확인한다 · 10-10 품질 판정 파일은 이 기록 시점에 아직 없음.
 - 규칙(사용자): 수집 데이터 작업은 **Google Drive 백업 사본만** 쓴다 — 수집 호스트에서 분석·무거운 작업을 돌리지 않는다. 재발 방지 후보(스왑 추가 · 인스턴스 증설)는 호스트 변경이라 사용자 결정 + Codex 검토 사항 — 손대지 않았다.
+
+## 2026-10-11 — 트라이얼 #4 단계 (d) **before-pass**(advisor만 — Codex는 사용자 결정 #74에 따라 대기열)
+> 사용자(질문지 답 · 2026-10-11): (d) 검토 = "advisor만, Codex 대기열" · 이어서 "진행".
+- advisor: 두 번 시간 초과 뒤 세 번째 호출에서 응답 · **PROCEED**(읽기 Q1~Q8 답 · 계획 틈 7건).
+- 사전 고정: 규약 C24~C36(시험 작성 전) — 이 절과 같은 커밋. [PROPOSED] 둘(C25 SL 기준가 · C26 청산 수수료 명목)은 (d) 보고에서 사용자 확인을 받는다((g) 전).
+- 트라이얼 #3 (d) 코드에는 레지스트리 행이 없었다(grep 확인 — 규약 확정 행 #52는 (g)) → (d) 코드에 새 행 없음.
+- Codex before-pass는 대기열(아래 프롬프트 그대로).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor Q1 | SL 기준가 = 체결 봉 mark 시가(C) · 조회는 T + 1분 키 하나만 · [PROPOSED] | 동의 — C25 |
+| 2 | advisor Q2 | liq_fee_on_liq_price = True · 영향 범위 명시 · [PROPOSED] | 동의 — C26 |
+| 3 | advisor Q3 | 불완전 인쇄는 WAIT 해제도 하지 않는다(더 엄격한 읽기) | 동의 — C29 ④ |
+| 4 | advisor Q4 | 평가 순서 고정 · not_evaluable은 상태를 바꾸지 않음 · 전진과의 차이 기록 | 동의 — C29 · C31 |
+| 5 | advisor Q5 | d − 15의 23:59 종가 요구 · 없으면 not_evaluable{atr_prev_close} | 동의 — C30 |
+| 6 | advisor Q6 | V = 그날 00:00 경계에서 분포 정의 | 동의 — C35 |
+| 7 | advisor Q7 | T > 청산 시각(엄격) · 시간 청산 봉은 경계가 될 수 없다 | 동의 — C32 |
+| 8 | advisor Q8 | Q1·Q2는 [PROPOSED]로 두고 (d) 보고에서 사용자 확인 | 동의 |
+| 9 | advisor 틈 1 | 결정 봉 누락 → decision_bar_missing · 분포 편입은 시각 기준 | 동의 — C28 · C29 ① |
+| 10 | advisor 틈 2 | 인쇄 입력 계약(격자 전부 · 플래그 = n) | 동의 — C27 |
+| 11 | advisor 틈 3 | 창 전 인쇄는 편입만 | 동의 — C28 |
+| 12 | advisor 틈 4 | on_minute_closed 순서 · P2 의도 봉의 인쇄는 position_busy | 동의 — C33 |
+| 13 | advisor 틈 5 | B21 산술 시험(480 오프셋) + 재생 | 동의 — C32 |
+| 14 | advisor 틈 6 | TcParams를 앵커된 표와 대조하는 시험 | 동의 — C24 |
+| 15 | advisor 틈 7 | 두 모듈 모두 시험 먼저 | 동의 |
+
+#### 계획 t4d_plan r1
+> # Trial #4 step (d) plan r1 — config · features · strategy · harness (user 2026-10-11: advisor-only, Codex queued — registry #74)
+> Scope: synthetic tests only; no IS data; no trial #3 edit; no shared RUNTIME edit (if one turns out to be needed → stop and report).
+> One shared TEST edit expected: tests/test_slippage_param.py allowlist += strategies/trial04/ (plan C6). run.py / outputs / provenance = (g).
+>
+> D1 strategies/trial04/config.py — TcParams (frozen; tc_v3): q_lo 0.10 · q_hi 0.90 · n_trail 270 · atr_n 14 · k_sl Decimal("2.0") ·
+>    sl_floor 0.010 · sl_ceiling 0.200 · hold_min = exit_schedule.HOLD_MIN (import; identity test) · slippage 0.0006 · risk_pct 0.01 ·
+>    l_min 3 · l_max 30 · e_ref 1000 · n_stat 1000 · p2_delays (1, 3) prints. LIMITS = SizingLimits(leverage_range=(3, 30), [Q2]);
+>    REGIME = RegimeSizing("trial04", risk_pct, 3, 30).
+> D2 strategies/trial04/features.py (pure, causal):
+>    - DailyAtr: per UTC day H = max mark_high · L = min mark_low · C = mark_close of the 23:59 bar · complete = 1,440 bars.
+>      atr(d) = simple mean of TR over days d−14 … d−1 (Decimal), TR_i = max(H−L, |H−C_{i−1}|, |L−C_{i−1}|). [Q5: day d−15's close]
+>    - TrailingPrints: the last 270 VALID prints strictly before T (float(p)); q10/q90 = numpy.quantile(method="linear"); < 270 → None.
+> D3 strategies/trial04/strategy.py — Trial04(arm, rules, prints, eligible, fill_ref, variant, p, window): one arm = one replay.
+>    Print processing happens in on_minute_closed of the bar with open_ms == T (close = T + 1 min = decision instant); every print
+>    boundary T with window_start ≤ T + 1min ≤ window_end gets exactly ONE funnel reason (first failure, fixed order):
+>      1 print_invalid (no record or n < 475) → not added to the distribution
+>      2 distribution_undefined (< 270 prior valid prints) → then the print joins the distribution
+>      3 print_incomplete (valid, n < 480; user decision 1) → joins the distribution, no decision of any kind [Q3]
+>      4 not_extreme (S: p < Q0.90 · L: p > Q0.10) — if state WAIT ∧ T > exit fill ts ∧ Q0.10 < p < Q0.90 (strict) → IDLE
+>      5 position_busy (state ENTRY_PENDING / DELAYED / IN_POSITION) — recorded, normal
+>      6 wait_absorbed (state WAIT: extreme print before an inside-band print)
+>      7 not_evaluable{window_start|window_end|mark_incomplete|atr_days|funding|atr_prev_close} = Eligibility(t = T + 1min) [Q5]
+>      8 sl_dist_out_of_range{floor|ceiling}
+>      9 sizing_rejected_decision (size_entry at the reference price, E_ref, REGIME, LIMITS)
+>      10 candidate → intent → one entry terminal: filled | sl_crossed_before_fill | sizing_rejected_fill | normalization
+>    Valid prints (2–10) are appended to the trailing distribution AFTER their own classification (strictly-before rule).
+>    SL reference [Q1]: ref = mark_open of the fill bar (open_ms = T + 1 min) — r3 "SL = 체결 기준가 ∓ 2.0 × ATR", "결정 = T + 1분 ·
+>    체결 = 같은 시각 다음 봉 시가"; the harness hands the strategy a read-only {open_ms → mark_open} lookup used ONLY for that one bar
+>    (decision instant == fill instant). sl_raw = ref ∓ 2·ATR · sl = normalize_price(sl_raw) · sl_dist = 2·ATR / ref. Engine gets a FIXED
+>    SL (no engine change); the engine re-sizes at the 6 bps quote (decision + fill sizing = "두 번").
+>    States: IDLE → ENTRY_PENDING (→ DELAYED first for P2) → IN_POSITION → WAIT → IDLE. Aborts 7–9 and unfilled terminals → IDLE
+>    (r3: "진입 없음 · IDLE 유지"); exit (sl | liquidation | time_exit) → WAIT with exit_ts = PositionClosed.ts_ms.
+>    Wiring as trial #3: before_minute → sched.guard; exit_at_bar_open → sched; on_minute_closed first line sched.observe.
+>    Variants: base · P2_print1 · P2_print3 (intent emitted at close of bar T + k·8h → fill T + k·8h + 1 min; SL price and sl_dist
+>    fixed at the original decision; eligibility at the ORIGINAL t; a missing emit bar = RunInvariantError) · P3_invert (gates in the
+>    arm's direction; intent opposite; SL′ = normalize(ref ± 2·ATR) mirrored about ref).
+>    Records: per-print funnel line (T, p, n_minutes, q10, q90, reason, sub, state) · intent/filled/exit/state events as trial #3 ·
+>    p_T sign at entry · counters funnel/sub/entry.
+> D4 strategies/trial04/harness.py: load_rules (#69 four SHA256 + taker 0.0005) · validate_inputs (copied from trial #3 harness @
+>    8b8f103) + validate_prints (T on the 8h grid, strictly increasing, p finite when valid) · run_arm(bars, fundings, prints, arm,
+>    variant) → T4Run · run_arm_with_fixture_rules (tests/ only) · invariants: no open position at end · no entry_refused · funnel sum ==
+>    number of print boundaries in the window · entry terminals sum == candidates · exits == fills == trades · every entry day ∈ V ·
+>    V = complete mark day ∧ trailing distribution defined at that day's 00:00 boundary [Q6].
+> D5 tests (synthetic): features (ATR exactness, 14 vs 13 days, trailing strictness / linear quantile / 269 vs 270) · strategy (each
+>    funnel reason, order, hysteresis incl. extreme-then-inside, print in the exit bar [Q7], busy is recorded not raised, no decision on
+>    the due bar (B21), P2 fixed SL + SL-crossed, P3 mirror, T funding not paid / first settlement T + 8h) · harness invariants ·
+>    determinism (two runs byte-equal) · config constant identity · slippage allowlist.
+> Conventions section C fixed before tests (readings Q1–Q7); ops_log; advisor before/after; Codex prompts queued; push; stop after (d).
+>
+> Questions (my provisional position in brackets):
+> Q1 SL reference: (A) decision-bar mark_close m (trial #3 "기준가 m"); (B) new engine rule "SL offset from ref_mark" (shared runtime
+>    change → regressions + Codex); (C) fill-bar mark_open read by the strategy at the decision instant [C — literal r3, no shared change;
+>    is reading the fill bar's open at T + 1 min acceptable given r3 fixes decision instant == fill instant?].
+> Q2 liq_fee_on_liq_price: trial #2/#3 used True ("청산 시점 남은 명목"); r3 says only "정본 liquidation_estimate(#4 · taker 항 · 누적
+>    펀딩 반영)" and §10 "B2·#4 거리 … 트라이얼 #1~#3에서 가져온 것". [True, as trial #3 — or is this a user decision?]
+> Q3 Does a valid-but-incomplete print inside the band release WAIT? [No: an incomplete print yields no decision of any kind; it only
+>    joins the distribution.]
+> Q4 Funnel order 5→6→7→8→9 (busy/wait before eligibility and band) — r3 §7-3 lists "position_busy · WAIT 흡수 · sl_dist 밴드 밖 ·
+>    not_evaluable · B2 거부"; the band needs ATR whose inputs eligibility checks, so I put not_evaluable before the band. OK?
+> Q5 ATR's 15th day (B22): TR of day d−14 needs C of day d−15. [C_{d−15} = mark_close of that day's 23:59 bar; absent/non-finite →
+>    not_evaluable{atr_prev_close}, checked after Eligibility; no silent fallback to H−L.]
+> Q6 V-day definition "그날 후행 분포 정의" [defined at the day's 00:00 boundary; monotone once 270 valid prints exist].
+> Q7 Hysteresis boundary: exit fill inside bar T (ts ≥ T) → print T does NOT count ("청산 체결 뒤의 인쇄만": T > exit_ts strictly).
+> Q8 Anything that must be a user decision rather than an implementation convention (Q1? Q2?).
+
+### advisor 원문(verbatim)
+You're at the (d) before-pass, plan r1 written, no code. Plan structure is right and follows trial #3. **Verdict: PROCEED** with the readings below fixed in conventions C before any test, and three plan gaps closed.
+
+**Q1–Q8**
+
+- **Q1 → (C).** The anchored wording is "체결 기준가", decision 4 fixes decision instant = fill instant, `count_r2.py` already used the fill bar's open ("체결 = mark 시가"), and forward (§3-3) sets SL from the actual fill reference. Under the anchored idealization this is not lookahead. Reject (A): it deviates from the written text. Reject (B): shared runtime + Codex unavailable. Scope it hard: the harness passes a callable that raises `RunInvariantError` on any key ≠ current T + 1min; eligibility (step 7) runs first so the key exists. Mark **[PROPOSED]** in C.
+- **Q2 → True.** Cite trial #2 §1 "청산 시점 남은 명목", trial #3 `LIMITS`, r3 §10 inheritance, and that the P1 executor identity (plan r4 C9″) uses the engine's `_liquidate`, which reads this flag. State the stakes in C: the flag enters only `loss_at_liquidation_usdt` and the engine's liquidation fee notional — not `liq_dist`, so L selection and the 21.835%/22.010% ceilings are unaffected. Mark **[PROPOSED]**.
+- **Q3 → agree.** Note in C that the release is not a trade trigger, so the other reading is defensible; yours is stricter (can only delay an entry). Pre-IS effect: 1 print / 2,190.
+- **Q4 → agree,** with two records: (i) §7-3's order is a report list; your evaluation order is X, and ATR undefined after eligibility passes is `RunInvariantError` (trial #3 pattern) — except Q5's d−15 close, which eligibility doesn't cover. (ii) `not_evaluable` events do not enter and do not change state. That is the same backtest/forward divergence trial #3 accepted (forward would hold the position; the sample filter is post-hoc there) — write it down for G-F.
+- **Q5 → agree.** r3 §5 says "ATR은 2023-12-17부터" = WINDOW_START − 15 days: the anchored text already assumes day d−15's close. Require that day's 23:59 bar with finite positive `mark_close`; else `not_evaluable{atr_prev_close}`. No H−L fallback.
+- **Q6 → agree** (00:00 boundary; monotone once 270 exist).
+- **Q7 → agree** (strict). Structural note worth testing: due bar = fill + 7,200 min ≡ +1 min mod 8h, so a time exit is never on the grid; T == exit_ts arises only for an open-gap liquidation at a grid bar.
+- **Q8:** Q1 and Q2 go in C as **[PROPOSED]** and are listed in the (d) stop report for the user's veto before (g) — the r3 §3-3 → decision 13 pattern. Neither blocks (d).
+
+**Plan gaps — fix before tests**
+
+1. **Missing decision bar.** D3 processes print T in `on_minute_closed(bar T)`. If mark bar T is absent, the print is never classified (funnel sum breaks) or, worse, fills at T+2min. Eligibility doesn't protect you: its span is [T+1min, …] and day(T)'s completeness isn't required. Rule: distribution ingestion is time-driven (every valid print with T ≤ current bar open joins, bar present or not); classification of print T happens at the first bar close with open_ms ≥ T; if open_ms ≠ T → reason `decision_bar_missing`, no decision. Record in C, test it.
+2. **Prints input contract.** `validate_prints` must assert every grid T in range is present (gap = `InputError`) and that flags match n (`valid ⇔ n ≥ 475`, `complete ⇔ n == 480`). Then `print_invalid` = `valid False` only — never "no record".
+3. **Warm-up prints** (decision instant < WINDOW_START): ingested, never classified. Say so.
+4. **`on_minute_closed` order:** observe → engine events → advance (P2 emit) → classify. A P2 emit bar is a boundary bar, so that bar's own print is classified `position_busy` — state it so the test expects it.
+5. **B21 by construction:** the due bar is never a boundary bar (arithmetic above). Test the arithmetic for all 480 fill offsets plus one replay.
+6. **Config pinning:** add a test that `TcParams` values match the anchored tc_v3 table lines (as trial #3 did for `TF_V1`), not just internal consistency.
+7. **TDD both modules this time** — strategy tests before `strategy.py`. The (c) disclosure shouldn't repeat.
+
+**Process (same as (c))**
+
+- Save this text to scratch now; conventions C → commit → ops_log before-pass "advisor only — Codex queued per #74" with plan r1 verbatim → queued Codex prompt pinned to the pre-commit range → code → after-pass → stop.
+- Grep the registry for a trial #3 (d) row before assuming none is needed.
+- The (d) stop report must also carry: the 10-10 quality verdict and the 03:30 UTC integrity result (read-only — the user asked whether files were deleted), the swap/instance decision still pending with the user, and Q1/Q2 as readings awaiting confirmation. Do not start (e).
+
+### 대기 중인 Codex before-pass 프롬프트(verbatim · 한도 복구 뒤 그대로 보냄)
+> STEP (d) BEFORE-PASS (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (d) plan r1 (verbatim in docs/ops_log.md, section "2026-10-11 — 트라이얼 #4 단계 (d) before-pass") and conventions section C (docs/trials/trial_04_conventions.md items 24–36) in /home/cms/project/BTC_Futures_E2E, as committed in the pre-commitment commit named in that ops_log section. Anchored text: docs/trials/trial_04_preregistration_r3.md (#70). Check: (1) C25 [PROPOSED] SL reference = fill-bar mark open read at the decision instant, vs r3 §1 "SL = 체결 기준가 ∓ 2.0 × ATR" and decision 4 — is it lookahead-free under the anchored timing, and is the one-key lookup guard sufficient; (2) C26 [PROPOSED] liq_fee_on_liq_price=True; (3) the funnel order C29 and the decision_bar_missing / print_incomplete / hysteresis readings (C28, C29, C32) against r3 §1 and user decision 1; (4) ATR_1d(14) and the d−15 close rule C30; (5) P2/P3 variants C34 against r3 §4; (6) anything that must be a user decision or pre-commitment and is not. This pass was QUEUED on 2026-10-11 (Codex over quota; user chose advisor-only for (d), registry #74) — review the plan as logged, not later code. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
