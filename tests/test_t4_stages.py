@@ -718,3 +718,31 @@ def test_evaluate_maps_input_and_guard_errors_to_refusal(chain, monkeypatch):
     with pytest.raises(E.Refusal, match="InputError"):
         E.evaluate(st.base, chain["repo"], evaluator_commit=chain["H"], fetch=False)
     assert not (st.base / "evaluation").exists() and not (st.records / E.ATTEMPT).exists()
+
+
+def test_any_runtime_error_inside_the_computation_is_a_refusal_and_writes_nothing(chain, monkeypatch):
+    """`_run_once`는 계산 중의 `RuntimeError`(실행 불변식·입력 계약 포함)를 모두 거부로 바꾼다 — 시도 기록만 남고 evaluation/은 없다."""
+    st = _prepared(chain)
+    st.stage_runs(3)
+    st.stage_p1(2, 2)
+    st.stage_p1_merge()
+    _patch_eval_inputs(monkeypatch)
+
+    def boom(*a, **k):
+        raise RuntimeError("x")
+    monkeypatch.setattr(E, "compute", boom)
+    with pytest.raises(E.Refusal, match="RuntimeError: x"):
+        E.evaluate(st.base, chain["repo"], evaluator_commit=chain["H"], fetch=False)
+    assert not (st.base / "evaluation").exists() and (st.records / E.ATTEMPT).exists()
+    assert not [p for p in st.base.iterdir() if p.name.startswith("evaluation_")]
+
+
+def test_trial4_prepare_never_uses_the_trial2_window():
+    """공유 `prepare_t2`의 트라이얼 #2 창(`window_range`)은 트라이얼 #4 경로에 없다 — `analyze`에 항상 범위를 명시한다(F80)."""
+    import ast
+    tree = ast.parse((ROOT / "backtest" / "prepare_t4.py").read_text(encoding="utf-8"))
+    attrs = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "T2"}
+    assert "window_range" not in attrs and "capture" not in attrs and "analyze" in attrs
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "analyze"
+             and isinstance(n.func.value, ast.Name) and n.func.value.id == "T2"]
+    assert calls and all(len(c.args) >= 2 for c in calls)
