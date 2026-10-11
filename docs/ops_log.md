@@ -11569,3 +11569,71 @@ You're at the (g) HALF 1 after-pass: committed and pushed at `7db5fe5`, 37 stage
 
 ### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77·#78)
 > STEP (g) HALF 1 AFTER-PASS — optional POST-HOC audit (read-only; never open market data dated ≥ 2024-01-01) of trial #4 step (g) first half in /home/cms/project/BTC_Futures_E2E. Review exactly: pre-commitment d8df880..478ecdd (conventions F71–F79, plan r1) and code 478ecdd..7db5fe5 plus the follow-up commit that adds two tests, conventions F81 and registry #79 — files: backtest/t4_provenance.py, backtest/t4_stages.py, backtest/p1_t4_run.py, strategies/trial04/run.py (namespace ports of the trial #3 modules @ 478ecdd), appended loaders + gate + CLI in backtest/prepare_t4.py, failure writers in backtest/t4_outputs.py, evaluate() wiring in backtest/evaluate_t4.py, tests/test_t4_stages.py, tests/fixtures/t4_prepare_fixture.py. Check: (1) the ports against F71 (t4 token keys, env vars, paths; versioned-freeze logic unchanged) — any trial #3 name or path left; (2) the freeze set F72 + F80 (strategies/trial02/anchor.py added after the import-closure test found it imported by frozen backtest/prepare_t2.py) and registry #79 (record-only correction of trial #3's freeze set omission); (3) pins F73 and loaders F74 (first/last bar, print contract, last print); (4) run-once and evaluate() wiring F78, including that _run_once now converts any RuntimeError inside the computation to a refusal; (5) the HALF 1 / HALF 2 boundary F79 — the three refusal checks were run on the real repo (gate-check rc 6, stage prepare rc 2, var/t4 absent); (6) whether the 39 stage tests pin the behaviours (8 mutations reported killed). Per registry #77/#78 the advisor is the sole reviewer; this prompt is kept for a post-hoc audit when Codex quota returns. End with VERDICT: MERGE or FIX-FIRST.
+
+## 2026-10-11 — 트라이얼 #4 단계 (g) 후반 **before-pass**(advisor만 — 검토자 한 명 · 레지스트리 #77·#80)
+> 사용자(원문 · 서면 · 2026-10-11): "(g) 후반도 advisor 방식으로 진행, SDK는 판정 뒤로"
+- 레지스트리 #80(후반 검토 방식 · 공식 SDK 요청 보류) — 커밋 1dd8b19.
+- advisor: 첫 호출 시간 초과 · 두 번째 호출에서 **PROCEED**(Q1~Q5 답 · 추가 5).
+- **동결 전 네트워크 연기 시험**(advisor Q1 조건대로 · 함수 경로만 · 임시 디렉터리 `t4_smoke_*`(자동 삭제) · 저장소·`var/t4` 무변경 · 2024년 이후 자료 미열람): 범위 2023-10-02 00:00 → 2023-10-04 23:59:59.999Z · `capture` → `build` → `verify_rebuild` → `make_pins` → `load_prepared_pinned` · `load_kline_daily_pinned` 전부 통과 · 프리미엄 zip 요청 달 = ['2023-10'] · 861,119 bytes · SHA256 e3a2d14f7065294a… · CHECKSUM 줄 일치 · REST 호출 = `/fapi/v1/fundingRate` 2회(아카이브 결손 채움 0) · 봉 4,320(첫·마지막 봉 단언 통과) · 인쇄 8(전부 유효·480분) · 펀딩 남김 0 · **버린 워밍업 빈 mark 펀딩 9**(3일 × 3 — A10대로 전부) · kline 일 종가 3일 · 원시 파일 7 · 5.6초. 코드 수정 없음 · 규약 수정 없음(운영 항목 F82+만 추가).
+- 사전 고정: 규약 F82~F88(확정본의 마지막 항목 · C1) · Codex 프롬프트는 선택적 사후 감사용(아래).
+
+### 입장표
+| # | 출처 | 요지 | Claude Code |
+|---|---|---|---|
+| 1 | advisor Q1 | 연기 시험 승인(IS 이전 3일 · 임시 루트 · 함수 경로만 · 기록할 것) | 동의 — 위 결과 |
+| 2 | advisor Q2 | 모든 실패는 멈추고 보고 · 재시작이 허락될 때의 형식(K8)과 전송 실패 절차를 미리 적는다 · 병렬 수 규칙 · 기록 사본 · 개수만 · 가림 · 판정 뒤 불변 | 동의 — F83~F86 |
+| 3 | advisor Q3 | C1 → #81 = H → #82(+시험) · #83 핀 · #84 판정 · 토큰 주의 · C3에서 전체 시험 | 동의 — F82 |
+| 4 | advisor Q4 | 판정 기록에 넣을 것 | 동의 — F87 |
+| 5 | advisor Q5 | 판정 전 정지 없음 · 강제 정지 둘(rc ≠ 0 · 건전성 범위 위반) · verify 뒤 개수 점검 | 동의 — F88 |
+| 6 | advisor 추가 1 | 순서: S_base → L_base → P1_S 첫 조각 → 나머지 실행 → 나머지 P1 → 병합 → 판정 | 동의 — F82 |
+| 7 | advisor 추가 2~4 | 메모리 여유 · 백그라운드 실행 · 단계 전 깨끗한 트리 · gate-check 출력 기록 | 동의 |
+| 8 | advisor 추가 5 | 최종 보고에 VPS 03:30 결과 등 | 동의 |
+
+#### 계획 t4g2_plan r1
+> (g) 후반 계획 r1(사용자 2026-10-11 서면: "(g) 후반도 advisor 방식으로 진행, SDK는 판정 뒤로" · 레지스트리 #80)
+> 사전 점검(동결 전): 전체 시험 통과 재확인 · 네트워크 연기 시험 — 한 번도 실행된 적 없는 프리미엄 zip 다운로드 함수(fetch_premium_http)와 실제 캡처 경로를
+>    IS 이전의 짧은 구간(2023-10-02~10-04)으로 임시 디렉터리에서 한 번(캡처 → 빌드 → verify → 고정 로더) · 2024년 이후 데이터는 열지 않고 var/t4에도 쓰지 않는다 ·
+>    목적: 동결 뒤에야 드러나면 재동결이 필요한 버그를 미리 잡는다.
+> 1 규약 확정: 머리말을 "초안"에서 "확정본"으로 · 후반 운영 규칙을 마지막 항목으로(중단 조건: 캡처가 데이터 품질 문제로 멈추거나 실행이 실패하면 멈추고 보고 ·
+>    재시작은 사용자 결정 뒤에만 / 자원 절차: S_base 단독으로 메모리 측정 뒤 병렬 수 / 기록: 단계마다 docs/trials/trial_04/records/로 복사해 커밋·푸시 · 단계가 도는
+>    동안 저장소에 쓰지 않는다 / 판정 전에는 개수만 보고) · 커밋 C1.
+> 2 규약 행 #81(규약 파일 해시와 C1 커밋) → 커밋 C2 = 동결 커밋 H · 푸시.
+> 3 동결 목록 파일 + 동결 행 #82 · "아직 t4 동결 행이 없다" 시험을 "버전 = [1]"로 같은 커밋에서 · 푸시.
+> 4 --gate-check 종료 코드 0.
+> 5 --stage prepare: 실데이터 캡처(프리미엄 zip 27개월 · 펀딩 · 봉) · 0이 아니면 멈추고 보고.
+> 6 --stage pins: 핀 파일 + 핀 행 #83 + 시험 수정을 한 커밋으로 · 푸시.
+> 7 --stage verify: 원시에서 다시 빌드해 대조.
+> 8 실행: --only S_base로 메모리 측정 → L_base → 나머지 6개 · 개수만 기록.
+> 9 P1: 조각 하나를 단독으로 측정한 뒤 나머지 → 병합.
+> 10 판정 한 번: --stage evaluate.
+> 11 마무리: 판정 행 #84 · 기록 사본 · advisor 사후 확인 · 보고.
+> 질문: Q1 동결 전 네트워크 연기 시험(IS 이전 3일 · 임시 루트)이 사전등록·규약과 충돌하지 않는지 · 범위 · Q2 규약 확정 때 넣을 후반 운영 규칙이 충분한지 — 트라이얼 #3의
+>    "관문 단계 실패는 작업당 한 번 재시작 허용"은 넣지 않고 모든 실패는 멈추고 보고 · Q3 행 번호와 커밋 사슬의 순서 · 시험 수정 시점 · Q4 판정 뒤 기록에 반드시
+>    들어가야 할 것 · Q5 중간에 멈춰서 사용자에게 보고해야 하는 지점 — 판정 직전에는 멈추지 않고 판정 뒤에 한 번에 보고하려 한다.
+
+### advisor 원문(verbatim)
+You're at the (g) HALF 2 before-pass: #80 pushed, trial #3's HALF 2 log and rows #52/#53/#57 read, plan r1 in chat, nothing irreversible done. The plan follows trial #3's sequence correctly. **Verdict: PROCEED**, with the answers below written into the conventions as the last items (F82+) before C1, and the sanity bounds pre-written so the one checkpoint has numbers to compare against.
+
+**Q1–Q5**
+
+- **Q1 → smoke test approved, with constraints.** Pre-IS window 2023-10-02 00:00 → 2023-10-04 23:59:59.999, temp root under `/tmp` (never `.git/`, never `var/t4`), **function path only** (`capture` → `build` → `verify_rebuild` → `make_pins` → `load_prepared_pinned` + `load_kline_daily_pinned`), not the CLI or `Stages` (both would need rows / create records). It is the first real exercise of `fetch_premium_http` and the live REST path, so log in ops_log: the 2023-10 zip SHA256 and that the binance.vision CHECKSUM line parsed and matched, funding rows returned vs dropped (all empty-mark warm-up rows in that range should drop under A10), bars/prints counts (expect 3 days → 4,320 bars, 8 prints — verify), and REST calls made. Pre-commit: the smoke may fix **code bugs** only; it may not change any reading of r3; any conventions edit it causes is listed in the report. No P&L is produced, so nothing is "seen".
+- **Q2 → stop-always is acceptable; pre-commit the restart form anyway.** Write trial #3's K8 conditions into the conventions as the *only* form a restart may take if the user authorizes one after a stop: gate-only rc 8 proven by the record (no data read, no `var/t4` writes from that job), cause identified, tree re-verified byte-identical to H, one registry note line, once per job; a second rc 8 or any rc 7 = full failure (row, new freeze, clean restart). Also pre-commit the realistic case trial #3 didn't hit: a **transport** failure mid-prepare (network, HTTP 5xx, rate limit) is rc 1 with a traceback, not rc 3 — `done()` will then refuse the rerun because a failure record exists. Procedure: stop, report, and only on the user's word delete `var/t4/` (trial #3 did this with permission), note it in the registry, rerun prepare. Add: jobs rule (measure `S_base` RSS; jobs 2 by default, 3 only if free ≥ 3×RSS + 4 GB — non-gate value), records copy to `docs/trials/trial_04/records/{prepare,runs,p1,evaluation}/` committed and pushed after each stage, no repo writes while a stage runs, counts-only in chat until evaluate, failure-report redaction (trial #3 decision 1: realized_pnl / wallet_after / exit_price / funding_paid / fill prices blanked in anything pasted to chat; full log stays in `var/` with its SHA256 in ops_log), and **after `--stage evaluate` nothing changes except the verdict row and the after-pass — later findings are correction rows only**.
+- **Q3 → chain and rows.** C1 = conventions final (header 초안→확정본, F82+ appended, nothing else); C2 = row **#81** (`t4_conventions=` sha of the file at C1, `t4_conventions_commit=` C1) = **H**; C3 = `freeze_manifest(repo, H)` written to `docs/trials/trial_04_freeze_manifest.json` + row **#82** (three tokens) + the test fix (`freeze_versions` → [1], `near == 3`, manifest exists); push after each. Row **#83** = `data_pins.json` + pins row (7 tokens from `pins_row_tokens`, the four counts as prose) + test fix (pins exist), one commit. Row **#84** = verdict. K8 note row only if a restart happens. Guards: C2 must not touch the conventions file; no `t4_freeze`/`t4_fingerprint` strings anywhere in #83/#84 (not even in prose — your precheck's `near` must stay 3); exactly one registry row contains the string `strategies/trial04/data_pins.json` at the pins commit (currently none — grep first). Run the full suite at C3 and record the count in #82 as #53 did.
+- **Q4 → verdict record contents (#84 + records copy):** trial string, per-arm priority/classification/gates, n and liquidations per arm, V days vs window days, `v_cross_check`, report/verdict/record/attempt SHA256s, H, fingerprint, pins commit, `stage_records_sha256` count, run-once evidence (`evaluation/` listing + a second `--stage evaluate` → "한 번만" refusal, recorded), resources (RSS, wall per stage, jobs). Report-only numbers trial #5 will need: SR̂_S, SR̂_L and the report SHA256 (next `PINNED_SR` entries), realized L distribution, P1 liquidated-draw ratio, timing p95, `gross_incl_funding` vs gross (E59), p_T sign at entry, §7-2 class. State "OOS 닫힌 채" explicitly. Then the after-pass.
+- **Q5 → no stop before evaluate is consistent with #80's written go**, with two hard stops (any rc ≠ 0 anywhere; any sanity bound violated) and one soft checkpoint after verify where you log counts against pre-written bounds. Verify these by arithmetic before writing them into F82: DATA_START 2023-10-02 → IS_END 2025-12-31 = 822 days → 1,183,680 bars (trial #3 logged exactly this for the same window); prints = 822×3 − 1 = 2,465 (first T 2023-10-02 08:00, last 2025-12-31 16:00); window prints per run = 731×3 = 2,193 (the (d) harness sum); funding boundaries 2,466 minus dropped warm-up rows (trial #3's #57 pinned 88 — expect the same if the REST payload is unchanged); `prints_valid_incomplete` ≈ 0–2 (pre-IS effect size 1/2,190). Anything outside → stop and report before runs.
+
+**Plan additions**
+
+1. **Order check in `stage_p1`:** it requires both `_base` records, so the sequence is `runs --only S_base --jobs 1` → `runs --only L_base` → `p1 --parts 8 --jobs 1 --only P1_S_000_124` → `runs --jobs N` (remaining 6) → `p1 --jobs N` → `p1-merge` → `evaluate`. Write that order; trial #3 had to deviate here.
+2. **Memory headroom:** trial #3 prepare peaked 4.09 GB; 19 GB free is ample. P1 parts: ~125 draws × 2 kinds × ~50 slots × 0.016 s ≈ 3–4 min each plus the 2.4 s eligibility scan — 16 parts at jobs 2 ≈ 30 min. Use background + Monitor as in (b); don't block the turn.
+3. **Before C1:** `git status` clean, full suite passing, the smoke logged. **Before each stage:** `git status --porcelain` empty (the gate refuses otherwise), previous stage's records committed and pushed.
+4. **Gate-check rc 0 after C3 is step 4** — record the actual stdout ("gate ok") and that `test_real_registry…` now asserts [1].
+5. At the final report also carry: the 03:30 UTC integrity result (read the two files — it has fired), 10-10 FAIL, collectors, and the swap/`t4g.medium` decision still pending.
+
+**Process**
+
+- Conventions F82+ → smoke test (log) → C1 → #81 → #82 (+test) → gate-check → ops_log before-pass with plan r1 verbatim and this text, header "(g) 후반 before-pass (advisor only — sole reviewer per #77/#80)", post-hoc Codex prompt pinned to the C1..C3 range. Then prepare.
+- Nothing in this plan changes a pre-committed value; the only new text is operational.
+
+### Codex 프롬프트(verbatim · 선택적 사후 감사용 — #77·#80)
+> STEP (g) HALF 2 BEFORE-PASS — optional POST-HOC audit (read-only) of trial #4 step (g) second-half plan r1 and conventions items 82+ in /home/cms/project/BTC_Futures_E2E (docs/ops_log.md section "2026-10-11 — 트라이얼 #4 단계 (g) 후반 before-pass"; docs/trials/trial_04_conventions.md final). Check: (1) the commit chain C1 (conventions final) → C2 = H (conventions row #81) → C3 (freeze manifest + freeze row #82) against backtest/t4_provenance.require_rows; (2) the pre-freeze smoke test (three pre-IS days in a temp root, function path only) — did it open any data dated ≥ 2024-01-01 or write under var/t4; (3) the operational rules (stop conditions, restart form, jobs rule, records copy, counts-only until evaluate, nothing changes after evaluate except the verdict row); (4) the sanity bounds (1,183,680 bars, 2,465 prints, 2,193 window prints per run). Per registry #77/#80 the advisor is the sole reviewer; this prompt is kept for a post-hoc audit. End with VERDICT: PROCEED or FIX-PLAN-FIRST.
