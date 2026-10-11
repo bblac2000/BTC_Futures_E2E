@@ -660,14 +660,13 @@ def test_ported_modules_carry_no_trial3_names():
     assert (T.STRATEGY, T.P1_MODULE, T.PREP_MODULE) == ("strategies.trial04.run", "backtest.p1_t4_run", "backtest.prepare_t4")
 
 
-def test_real_registry_has_no_trial4_freeze_rows_yet_and_trial3_parser_is_untouched():
+def test_real_registry_has_exactly_one_trial4_freeze_version_and_trial3_parser_is_untouched():
+    """(g) 후반: 동결 행(#82) 뒤 — 트라이얼 #4 동결 버전은 정확히 [1] · 동결 계열 토큰 셋 · 트라이얼 #3 쪽은 그대로 [1, 2]."""
     from backtest import t3_provenance as PV3
     reg = (ROOT / PV.REGISTRY_REL).read_text(encoding="utf-8")
-    assert PV.near_freeze_assignments(reg) == 0
-    with pytest.raises(PV.ProvenanceError, match="동결 행이 없다"):
-        PV.freeze_versions(reg)
-    assert sorted(PV3.freeze_versions(reg)) == [1, 2]
-    assert not (ROOT / PV.PINS_REL).exists() and not (ROOT / PV.FREEZE_MANIFEST_REL).exists()
+    assert PV.near_freeze_assignments(reg) == 3 and sorted(PV.freeze_versions(reg)) == [1]
+    assert sorted(PV3.freeze_versions(reg)) == [1, 2] and PV3.near_freeze_assignments(reg) == 7
+    assert (ROOT / PV.FREEZE_MANIFEST_REL).exists() and not (ROOT / PV.PINS_REL).exists()
 
 
 def test_pins_carry_the_four_audit_counts_and_are_recomputed(chain):
