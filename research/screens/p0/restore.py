@@ -78,14 +78,20 @@ def fetch() -> int:
     if any(v["drive_orphans"] for v in p["by_stream"].values()):
         print("Drive 고아 파일이 있다 — 디렉터리 단위 복사를 쓰지 않는다", file=sys.stderr)
         return 4
-    rc = 0
-    for date in SP.DATES:
-        for stream in SP.STREAMS:
-            r = subprocess.run(["rclone", "copy", f"{SP.REMOTE}/l2live/BTCUSDT/{date}/{stream}/",
-                                str(SP.RESTORE / "BTCUSDT" / date / stream), "--transfers", "32", "--checkers", "32",
-                                "--drive-pacer-min-sleep", "10ms", "--drive-pacer-burst", "200"])
-            print(date, stream, "rc", r.returncode, flush=True)
-            rc = rc or r.returncode
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(job: tuple[str, str]) -> int:
+        date, stream = job
+        r = subprocess.run(["rclone", "copy", f"{SP.REMOTE}/l2live/BTCUSDT/{date}/{stream}/",
+                            str(SP.RESTORE / "BTCUSDT" / date / stream), "--transfers", "16", "--checkers", "16",
+                            "--drive-pacer-min-sleep", "10ms", "--drive-pacer-burst", "200"], capture_output=True, text=True)
+        print(date, stream, "rc", r.returncode, flush=True)
+        return r.returncode
+
+    jobs = [(d, s) for d in SP.DATES for s in SP.STREAMS]
+    with ThreadPoolExecutor(max_workers=8) as ex:                             # 디렉터리 8개를 동시에(rclone 요청 간격 제한은 프로세스별)
+        rcs = list(ex.map(one, jobs))
+    rc = next((r for r in rcs if r), 0)
     return rc
 
 
