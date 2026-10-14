@@ -14,7 +14,7 @@ ARMS = {"G1": "v1_restated", "hysteresis": "v2_primary"}
 REPORT_ONLY = ("v1_original", "v2_no_accounting_fix")
 SUB_START_MS = 1719792000000                                                    # 2024-07-01T00:00Z
 SEED, N_DRAW = 20261014, 1000
-KEYS = ("gross", "net_A", "net_B", "net_C", "net_A_dtb3", "net_B_dtb3", "net_C_dtb3", "net_B_dgs2", "dtb3", "dgs2", "orig_net",
+KEYS = ("net_B_slip_dtb3", "gross", "net_A", "net_B", "net_C", "net_A_dtb3", "net_B_dtb3", "net_C_dtb3", "net_B_dgs2", "dtb3", "dgs2", "orig_net",
         "orig_cost")
 
 
@@ -33,6 +33,9 @@ def window_stats(rows: list[dict[str, float]], entries: list[int], start_ms: int
         ci, redraws = reprice.block_boot(vals, blocks, k, np.random.default_rng(SEED), N_DRAW)
         out[f"ci95_block60_{key}"], out[f"redraws_{key}"] = ci, redraws
         out[f"ci95_trade_iid_{key}"] = reprice.iid_boot(vals, np.random.default_rng(SEED), N_DRAW)
+    keep = [r["net_B_dtb3"] for r in rows if not r["seeded_rate"]]
+    out["n_seeded_rate"] = len(rows) - len(keep)
+    out["mean_net_B_dtb3_without_seeded"] = float(np.mean(keep)) if keep else None
     if len(rows) > 2:
         m0, n_eff, rho = reprice.mde(v, reprice.COEF_UNCORRECTED)
         m1, _, _ = reprice.mde(v, reprice.COEF_N64)

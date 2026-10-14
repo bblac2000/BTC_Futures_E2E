@@ -11,7 +11,6 @@ LEDGER = DATA / "carrybot_trades.csv"
 DTB3 = DATA / "DTB3_2020-12-01_2026-06-30.csv"
 LEDGER_COLS = ("exit_ms", "entry_ms", "run", "notional", "locked", "funding_collected", "funding_paid", "residual_delta_pnl", "fees",
                "slippage", "opportunity_cost", "net_pnl", "holding_periods", "exit_reason", "forced")
-DTB3_START_MS = 1606780800000                                                   # 2020-12-01 — 첫 거래 진입일 이전 관측을 위해
 
 
 @dataclass(frozen=True)
@@ -49,5 +48,5 @@ def _rate(line: str) -> tuple[str, float | None]:
 
 
 def dtb3(path: Path = DTB3) -> list[tuple[str, float]]:
-    """(날짜, 연율 %) — 관측 없는 날(".")은 뺀다."""
-    return [(d, v) for d, v in bounded_csv_file(path, _rate, ts_kind="iso", header=True, start_ms=DTB3_START_MS) if v is not None]
+    """(날짜, 연율 %) — 기본 창(2021-01-01 ~ · D4)만 · 관측 없는 날(빈 칸 · ".")은 뺀다."""
+    return [(d, v) for d, v in bounded_csv_file(path, _rate, ts_kind="iso", header=True) if v is not None]

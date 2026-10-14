@@ -51,8 +51,8 @@ def test_cost_replaces_fees_and_slippage_and_dtb3_scales_by_holding_days_on_lock
 
 def test_rate_uses_the_last_observation_on_or_before_the_entry_date():
     rates = [("2024-01-01", 5.0), ("2024-01-03", 4.0)]
-    assert reprice.rate_at(rates, ms(2024, 1, 3)) == 4.0
-    assert reprice.rate_at(rates, ms(2024, 1, 2, 23, 59)) == 5.0
+    assert reprice.rate_at(rates, ms(2024, 1, 3)) == (4.0, False)
+    assert reprice.rate_at(rates, ms(2024, 1, 2, 23, 59)) == (5.0, False)
     with pytest.raises(ValueError):
         reprice.rate_at(rates, ms(2023, 12, 31))
 
@@ -77,3 +77,23 @@ def test_mde_uses_the_protocol_n_eff_floor_and_labels():
     assert rho < 0 and n_eff == pytest.approx(16 / 1.6)
     assert m == pytest.approx(2.80 * np.std(v, ddof=1) / np.sqrt(10))
     assert [reprice.power_label(x) for x in (20, 20.01, 40, 40.01)] == ["feasible", "marginal", "marginal", "infeasible"]
+
+
+def test_first_observation_rule_applies_only_before_2021_01_04_and_is_flagged():
+    rates = [("2021-01-04", 0.09), ("2021-01-05", 0.08)]
+    assert reprice.rate_at(rates, ms(2021, 1, 1)) == (0.09, True)
+    assert reprice.rate_at(rates, ms(2021, 1, 2, 8)) == (0.09, True)
+    assert reprice.rate_at(rates, ms(2021, 1, 4)) == (0.09, False)
+    with pytest.raises(ValueError):                                                # 다른 첫 관측이면 규칙이 걸리지 않는다
+        reprice.rate_at([("2021-01-05", 0.08)], ms(2021, 1, 4))
+
+
+def test_dtb3_blank_values_are_missing_and_pre_2021_rows_are_never_parsed(tmp_path):
+    p = tmp_path / "DTB3.csv"
+    p.write_text("observation_date,DTB3\n2020-12-31,BAD\n2021-01-01,\n2021-01-04,0.09\n2021-01-05,.\n", encoding="utf-8")
+    assert loader.dtb3(p) == [("2021-01-04", 0.09)]
+
+
+def test_slippage_sensitivity_subtracts_the_original_pair_round_trip():
+    v = reprice.per_trade(T(ms(2024, 1, 2), ms(2024, 2, 2)), [("2024-01-01", 5.0)])
+    assert v["net_B_slip_dtb3"] == pytest.approx(v["net_B_dtb3"] - 8.0)
