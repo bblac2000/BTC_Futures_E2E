@@ -277,3 +277,28 @@ No new P0/P1/P2/BLOCK-USER findings. No files edited.
 
 VERDICT: MERGE
 
+
+## 문서 r3 — 사용자 #105(GTX 제거 · 현물 1 · 2 복원) · 프롬프트 요지: Q1~Q6 · 첫 BLOCK에서 멈춤
+- 대상 커밋 89cd55a(초안 r3) · 결과 **VERDICT: BLOCK**(BLOCK-USER 1 · P0 2 · P1 1) → #105 규칙대로 **이 회전에서 멈춘다**(고치지 않음 · 다음 회전 없음).
+
+```
+[codex] Turn completed.
+Read-only review at HEAD `89cd55a`; no files edited. Stopping this round at **BLOCK-USER**.
+
+- **Q1: NO for perp exit/SL/TP/trailing/kill-switch/margin decisions as specified.** Clauses 1-1, 1-2 and 1-7 preserve existing policies. Spot cleanup receives perp events afterward—the coupling already authorized.
+- **Q2: YES, an inadequately bounded naked-spot path remains.** A resting spot BUY can survive perp closure, then fill; timeout fallback can also buy the obsolete remainder.
+- **Q3: NOT ESTABLISHED.** GTX re-quotes are gone, but spot rejection/retry handling and repeated guard orders have no explicit attempt or total-time bounds.
+- **Q4: PARTIALLY VERIFIED.** The erratum preserves the supplied user wording, and the [official changelog](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/change-log#2026-04-10) confirms the latest-to-largest description change. I could not independently retrieve the official dump to verify its stream quotation or Last-Modified date.
+- **Q5: PARTLY.** 1-2 adequately preserves existing perp safeguards during an hours-long unhedged interval; it does not resolve the spot-order lifecycle failures below. GTX removal is complete in the operative draft and clause map; the remaining GTX mentions describe its removal or prohibition.
+- **Q6: USER CONFIRMATION REQUIRED.** The rewrite satisfies the direction of dependency, but selects a materially different response to hedge failure.
+
+1. **[P0] Pending spot entry invalidation remains missing.** [Clauses 1-5 and 2-1](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:12) require terminal confirmation before replacement, but do not require cancellation when the perp reduces/disappears, current-short revalidation before fallback, or immediate cleanup on late spot fills. Example: the perp closes while spot inventory is zero; cleanup sells nothing; the resting BUY later fills. If its value is below the residual threshold but above dust, cleanup has no guaranteed trigger. This is the unresolved [PRE r2 finding](/home/cms/project/BTC_Futures_E2E/reports/codex/w5_constitution_v16_rounds.md:148). Require those outcomes entirely within the spot subscriber, without delaying or changing perp exits.
+
+2. **[P0] The signed residual trigger cannot detect hedge deficits as written.** [Clause 1-6](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:13) tests `d × mark > threshold`. For a positive threshold, negative `d` never reaches the deficit branch. Test magnitude, `|d| × mark`, then branch on sign. Tradable excess from late fills also needs unconditional cleanup independent of this threshold.
+
+3. **[P1] Bound order retries explicitly.** [Clauses 1-6 and 2-1](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:19) do not establish a total bound across maker rejection/replacement attempts or failed cleanup retries. Specify exhausted-bound behavior and prevent timer resets from extending an entry intent indefinitely. Continued monitoring is separate from submitting repeated orders.
+
+4. **[BLOCK-USER] One-directional consistency does not establish design authorization.** [The disclosed rewrite](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:5) replaces hedge-deficit MARKET cleanup with alert plus blocked entries, allowing the existing short to remain unhedged until its ordinary exit. It also removes the prior plan’s added margin top-up/reduction policy. These changes eliminate PRE r2’s contradictory perp actions, but [registry #105](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:113) does not explicitly approve these replacement outcomes. Confirm the concrete policy: **hedge failure never causes perp closure, reduction or margin action; existing perp safeguards continue unchanged, even after the hedge deadline.** Disclosure and standalone safety are useful, but cannot substitute for that user decision.
+
+VERDICT: BLOCK
+```
