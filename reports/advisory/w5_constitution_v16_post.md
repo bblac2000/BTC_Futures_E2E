@@ -34,3 +34,11 @@ Full suite at HEAD — the last full run (1,899 at 8701bb2) predates every p0 mo
 
 M-1 result table by T and stratum, verdict, restore counts, exclusions, B_d per day; the θ = 20 correction list exactly as the user asked (four locations, no in-place edits, covered by #96/#100, v3 carries the correct text); W5 Q1 framing + fidelity fix; the UNRESOLVED decisions with options; W3 extraction report; repo-impact list. Memory `screens-round-2026-10.md`: one line — v3 anchored, v1.6 draft at Codex MERGE with Q1 open, the four UNRESOLVED gates.
 
+
+## 마감(2026-10-14) — r3 → r5
+- 초안 r3(#105 · GTX 삭제 · 현물 1 · 2 복원) → Codex 문서 r3 **BLOCK**(#106) → 사용자 #107 → r4 → Codex r4 **BLOCK-USER**(#109) → 사용자 #113: (B)이지만 조건부 범위 축소(carry 가족 닫힘 확인) → **r5 최소 묶음** → **Codex r5 MERGE**(#114).
+- 회전 원문: `reports/codex/w5_constitution_v16_rounds.md`(r3 · r4 · r5 절) · 전체 로그 `w5_constitution_v16_r3_full_log.txt` · `_r4_full_log.txt`.
+- 병합 · 배포는 사용자(마스터 zip) — 그 전까지 D5(주문 0) 유효.
+
+### advisor POST(r5) — 원문(verbatim)
+**Advisor POST for v1.6 r5: ACCEPT.** Scope-cut condition verified from the ledger (S-carry-1 RESULT/POST, #110, L18); r5 contains exactly the three items the user named; nothing operative touches order types, exits, SL/TP, kill-switch, margin or spot; Codex MERGE with no findings; the one open point (independent Last-Modified check on source 2) is already disclosed in the draft as an evidence limitation and does not block. Save this verbatim, then append a closing section to the existing `reports/advisory/w5_constitution_v16_post.md` (it still ends at doc r2): r3 → #106 BLOCK, r4 → #109 BLOCK-USER, r5 → #114 MERGE, advisor POST ACCEPT, pointer to the rounds file. Without that, the `_post.md` for W5 describes a draft that no longer exists.
