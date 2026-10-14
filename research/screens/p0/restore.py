@@ -82,7 +82,8 @@ def fetch() -> int:
     for date in SP.DATES:
         for stream in SP.STREAMS:
             r = subprocess.run(["rclone", "copy", f"{SP.REMOTE}/l2live/BTCUSDT/{date}/{stream}/",
-                                str(SP.RESTORE / "BTCUSDT" / date / stream), "--transfers", "16", "--checkers", "16"])
+                                str(SP.RESTORE / "BTCUSDT" / date / stream), "--transfers", "32", "--checkers", "32",
+                                "--drive-pacer-min-sleep", "10ms", "--drive-pacer-burst", "200"])
             print(date, stream, "rc", r.returncode, flush=True)
             rc = rc or r.returncode
     return rc
