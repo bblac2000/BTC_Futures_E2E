@@ -176,3 +176,26 @@ def test_loader_marks_broken_or_flagged_zips_unusable_and_never_reads_them(tmp_p
     (d / "AUSDT-fundingRate-2024-05.zip.unusable").write_text("checksum mismatch\n")
     rows, bad = loader._read_dir(d, loader._funding_row)
     assert rows == [(T, 0.0001)] and bad == {"2024-04", "2024-05"}
+
+
+def test_reserved_marker_or_zip_names_stop_the_loader(tmp_path):
+    from research.screens.p2 import loader
+    from research.screens.window import ReserveError
+    d = tmp_path / "AUSDT"
+    d.mkdir()
+    (d / "AUSDT-fundingRate-2026-07.zip.unusable").write_text("x\n")
+    with pytest.raises(ReserveError):
+        loader._read_dir(d, loader._funding_row)
+
+
+def test_successful_refetch_removes_the_failure_marker(tmp_path, monkeypatch):
+    import hashlib
+
+    from research.screens.p2_fetch import fetch
+    data = b"zip-bytes"
+    monkeypatch.setattr(fetch, "DEST", tmp_path)
+    monkeypatch.setattr(fetch, "_get", lambda url: (hashlib.sha256(data).hexdigest() + "  x").encode() if url.endswith(".CHECKSUM") else data)
+    k = "data/futures/um/monthly/fundingRate/AUSDT/AUSDT-fundingRate-2024-03.zip"
+    (tmp_path / (k + ".unusable")).parent.mkdir(parents=True)
+    (tmp_path / (k + ".unusable")).write_text("old failure\n")
+    assert fetch.one(k)[1] == "ok" and not (tmp_path / (k + ".unusable")).exists() and (tmp_path / k).read_bytes() == data

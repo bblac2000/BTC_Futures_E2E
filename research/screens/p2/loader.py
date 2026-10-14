@@ -12,6 +12,7 @@ from research.screens.window import (
     assert_within,
     bounded_benchmark_csv,
     bounded_zip_csv,
+    refuse_reserved_archive,
     zip_has_header,
 )
 
@@ -77,8 +78,10 @@ def _read_dir(d: Path, row) -> tuple[list[tuple[int, float]], frozenset[str]]:  
     if not d.exists():
         return rows, frozenset()
     for p in sorted(d.glob("*.zip.unusable")):
+        refuse_reserved_archive(p.name)                                           # 표시 파일도 예약 구간 이름이면 멈춘다
         bad.add(p.name.removesuffix(".zip.unusable")[-7:])
     for p in sorted(d.glob("*.zip")):
+        refuse_reserved_archive(p.name)
         month = p.name.removesuffix(".zip")[-7:]
         if month in bad:
             continue

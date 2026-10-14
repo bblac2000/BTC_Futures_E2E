@@ -67,6 +67,7 @@ def one(k: str) -> tuple[str, str, str]:
         (DEST / (k + ".unusable")).write_text("checksum mismatch\n")
         return k, "unusable:checksum", got
     f.write_bytes(data)
+    (DEST / (k + ".unusable")).unlink(missing_ok=True)                          # 성공한 재시도는 앞선 실패 표시를 지운다
     return k, "ok", got
 
 

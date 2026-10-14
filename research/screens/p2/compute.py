@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from research.screens.p2.loader import Series, Symbol
+from research.screens.window import assert_within
 
 H = 3_600_000
 DAY = 86_400_000
@@ -161,6 +162,7 @@ class Entry:
 
 def eligible(sym: Symbol, t0: int) -> Entry | None:
     """주 t(시작 T)의 적격(§3 · 진입 전 정보만)."""
+    assert_within([t0 - 2 * WEEK, t0 - WEEK - AGE_MS, t0 - 8 * DAY, t0 - 1, t0])   # 계산 전에(§1) — 신호 · 지연 · 나이 · 진입 일봉 종가(T − 1ms)
     lo8 = t0 - 8 * DAY
     if months_between(lo8, t0) & (sym.unusable_funding | sym.unusable_bars):
         return None
@@ -194,6 +196,7 @@ class Outcome:
 
 def outcome(sym: Symbol, e: Entry, t0: int) -> Outcome:
     """매일 점검(§4-3 · 인과): 시각 T + k일에 일봉(open_time T + (k−1)일)이 없거나 나쁘면 그때 마지막 알려진 종가로 청산."""
+    assert_within([t0 + k * DAY - 1 for k in range(1, 8)] + [t0 + WEEK])      # 일봉 종가 시각 · 청산 상한 — 사용 전에(§1)
     last = e.p_entry
     for k in range(1, 8):
         c = bar_close(sym.bars, t0 + (k - 1) * DAY)
