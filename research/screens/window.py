@@ -134,17 +134,22 @@ def zip_has_header(path: Path, *, ts_field: int = 0, delimiter: str = ",") -> bo
         refuse_reserved_archive(name)
         with z.open(name) as raw:
             head = io.TextIOWrapper(raw, encoding="utf-8", newline="").readline()
-    return not head.split(delimiter, ts_field + 1)[ts_field].strip().isdigit()
+    cell = head.split(delimiter, ts_field + 1)[ts_field].strip()
+    if cell.isdigit():
+        return False
+    if not re.fullmatch(r"[A-Za-z_]+", cell):                                  # 머리줄의 칸 이름 꼴이 아니면 잘못된 자료다
+        raise ReserveError(f"첫 줄의 시각 칸이 숫자도 칸 이름도 아니다: {cell!r}")
+    return True
 
 
 def fetch_json_rows[T](url: str, params: Mapping[str, str | int], ts_key: str | int, parse: Callable[[Any], T], *,
-                       opener: Callable[..., Any] = urllib.request.urlopen, timeout_s: float = 30.0) -> list[T]:
+                       timeout_s: float = 30.0) -> list[T]:
     """공개 GET 하나를 **이 모듈이** 부르고(요청의 startTime·endTime이 창 안이어야 한다) 응답 행의 시각을 먼저 검사한 뒤 `parse`한다.
     창 밖 행이 하나라도 있으면 어떤 행도 `parse`하지 않고 예외 — 호출자 코드는 응답을 직접 만지지 못한다."""
     start_ms, end_ms = int(params["startTime"]), int(params["endTime"])
     require_window(start_ms, end_ms)
     q = urllib.parse.urlencode(dict(params))
-    with opener(f"{url}?{q}", timeout=timeout_s) as resp:
+    with urllib.request.urlopen(f"{url}?{q}", timeout=timeout_s) as resp:        # 호출자가 전송을 갈아 끼울 수 없다
         rows = json.loads(resp.read())
     if not isinstance(rows, list):
         raise ReserveError(f"행 목록이 아닌 응답: {type(rows).__name__}")
@@ -169,3 +174,6 @@ def write_result(path: Path, obj: Any) -> str:
 #: 스크린 모듈이 이 모듈에서 가져다 쓸 수 있는 이름(시험이 강제 — `window.io` 같은 우회 금지)
 PUBLIC = ("SCREEN_START_MS", "SCREEN_END_MS", "ReserveError", "require_window", "refuse_reserved_archive", "assert_within",
           "bounded_csv_file", "bounded_zip_csv", "zip_has_header", "fetch_json_rows", "write_result")
+
+#: loader.py가 아닌 스크린 모듈이 쓸 수 있는 이름(읽기 함수 제외)
+PUBLIC_NON_LOADER = ("SCREEN_START_MS", "SCREEN_END_MS", "ReserveError", "assert_within", "write_result")

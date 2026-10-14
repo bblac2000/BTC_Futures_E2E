@@ -80,6 +80,12 @@ def test_reserved_file_is_refused_before_it_is_opened(tmp_path):
         list(W.bounded_zip_csv(tmp_path / "BTCFDUSD-1m-2026-08.zip", lambda s: s, header=False))
     with pytest.raises(W.ReserveError):
         W.zip_has_header(tmp_path / "BTCFDUSD-1m-2026-08.zip")
+    import zipfile
+    z = tmp_path / "Q-1m-2025-01.zip"
+    with zipfile.ZipFile(z, "w") as zz:
+        zz.writestr("Q-1m-2025-01.csv", f"not-a-time,9.0\n{ms(2025, 1, 1)},1.0\n")
+    with pytest.raises(W.ReserveError):                                        # 머리줄 꼴이 아닌 첫 줄은 건너뛰지 않는다
+        W.zip_has_header(z)
     with pytest.raises(W.ReserveError):
         list(W.bounded_csv_file(tmp_path / "ok-2026-06.csv", lambda s: s, end_ms=ms(2026, 7, 2)))
 
@@ -117,7 +123,7 @@ class _Resp:
         return False
 
 
-def test_api_fetch_checks_every_timestamp_before_any_row_is_parsed():
+def test_api_fetch_checks_every_timestamp_before_any_row_is_parsed(monkeypatch):
     import json
     rows = [{"fundingTime": ms(2026, 6, 30, 16), "fundingRate": "0.0001"}, {"fundingTime": ms(2026, 7, 1), "fundingRate": "SECRET"}]
     seen: list[object] = []
@@ -127,14 +133,17 @@ def test_api_fetch_checks_every_timestamp_before_any_row_is_parsed():
         urls.append(url)
         return _Resp(json.dumps(rows if "bad" in url else rows[:1]).encode())
 
+    monkeypatch.setattr(W.urllib.request, "urlopen", opener)
+    assert "opener" not in inspect.signature(W.fetch_json_rows).parameters      # 호출자가 전송을 갈아 끼울 수 없다
+
     params = {"symbol": "BTCUSDT", "startTime": ms(2026, 6, 1), "endTime": W.SCREEN_END_MS}
-    assert W.fetch_json_rows("https://x/ok", params, "fundingTime", lambda r: seen.append(r) or r["fundingRate"], opener=opener) == ["0.0001"]
+    assert W.fetch_json_rows("https://x/ok", params, "fundingTime", lambda r: seen.append(r) or r["fundingRate"]) == ["0.0001"]
     seen.clear()
     with pytest.raises(W.ReserveError):
-        W.fetch_json_rows("https://x/bad", params, "fundingTime", lambda r: seen.append(r), opener=opener)
+        W.fetch_json_rows("https://x/bad", params, "fundingTime", lambda r: seen.append(r))
     assert seen == []                                                          # 창 밖 행이 있으면 어떤 행도 해석하지 않는다
     with pytest.raises(W.ReserveError):                                        # 요청 자체가 예약 구간 → 네트워크 호출 전 거부
-        W.fetch_json_rows("https://x/never", {**params, "endTime": ms(2026, 7, 1)}, "fundingTime", dict, opener=opener)
+        W.fetch_json_rows("https://x/never", {**params, "endTime": ms(2026, 7, 1)}, "fundingTime", dict)
     assert not any("never" in u for u in urls)
 
 
@@ -165,7 +174,8 @@ BANNED_NAMES = {"open", "read", "readline", "readlines", "readinto", "read_text"
                 "read_table", "ZipFile", "FileIO", "urlopen", "loadtxt", "genfromtxt", "fromfile", "fromregex", "load", "memmap",
                 "DataSource", "open_memmap", "tofile", "save", "savez", "savetxt", "__import__", "import_module", "exec", "eval",
                 "compile", "getattr", "setattr", "globals", "vars", "locals", "__dict__", "__builtins__", "io", "json", "zipfile",
-                "urllib", "os", "sys", "subprocess", "bounded_records", "_bounded"}
+                "urllib", "os", "sys", "subprocess", "_bounded", "__kwdefaults__", "__defaults__", "__globals__",
+                "__closure__", "__code__", "__wrapped__", "__module__"}
 BOUNDED = {"bounded_csv_file", "bounded_zip_csv", "fetch_json_rows"}
 
 
@@ -180,17 +190,20 @@ def screen_violations(src: str, *, is_loader: bool, family: str = "p1") -> list[
     for n in ast.walk(tree):
         if isinstance(n, ast.Import):
             for a in n.names:
-                if a.name.split(".")[0] not in ALLOWED_IMPORTS - {"research"} and not (is_loader and a.name == "pathlib"):
-                    bad.append(f"import {a.name}")
+                if a.name.split(".")[0] not in ALLOWED_IMPORTS - {"research"} or (a.asname and a.asname != "np"):
+                    bad.append(f"import {a.name} as {a.asname}")
         elif isinstance(n, ast.ImportFrom):
             mod = n.module or ""
             names = {a.name for a in n.names}
+            if names & BANNED_NAMES or any(a.asname for a in n.names):          # 금지 이름의 import · 별칭 import 금지
+                bad.append(f"banned or aliased import {sorted(names)}")
             if n.level:                                                         # 상대 import: 같은 가족 안(`.` 하나)만
                 if n.level != 1 or mod.split(".")[0] in ("p0", "window") or "p0" in names:
                     bad.append(f"relative import {'.' * n.level}{mod} {sorted(names)}")
             elif mod == "research.screens.window":
-                if names - set(W.PUBLIC):
-                    bad.append(f"window names {sorted(names - set(W.PUBLIC))}")
+                allowed = set(W.PUBLIC if is_loader else W.PUBLIC_NON_LOADER)
+                if names - allowed:
+                    bad.append(f"window names {sorted(names - allowed)}")
             elif mod == own or mod.startswith(own + "."):
                 pass
             elif mod == "pathlib" and is_loader and names == {"Path"}:
@@ -222,6 +235,9 @@ def screen_violations(src: str, *, is_loader: bool, family: str = "p1") -> list[
     ("from research.screens.window import fetch_json_rows, _bounded", True),
     ("import pandas as pd", True),
     ("from research.screens.p2 import loader", False),                                                    # 다른 가족
+    ("from numpy import fromregex as scan\nr = scan('a', r'v', [('v', int)])", False),                    # Codex POST r3 (c): 별칭
+    ("from research.screens.window import fetch_json_rows\nx = fetch_json_rows.__kwdefaults__", True),    # Codex POST r3 (b)
+    ("from research.screens.window import bounded_zip_csv\nrows = list(bounded_zip_csv('a', str, header=False))", False),  # 로더 밖 읽기
 ])
 def test_static_rule_catches_known_bypasses(src, is_loader):
     assert screen_violations(src, is_loader=is_loader)
