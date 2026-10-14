@@ -97,3 +97,17 @@ def test_dtb3_blank_values_are_missing_and_pre_2021_rows_are_never_parsed(tmp_pa
 def test_slippage_sensitivity_subtracts_the_original_pair_round_trip():
     v = reprice.per_trade(T(ms(2024, 1, 2), ms(2024, 2, 2)), [("2024-01-01", 5.0)])
     assert v["net_B_slip_dtb3"] == pytest.approx(v["net_B_dtb3"] - 8.0)
+
+
+def test_undefined_rho_is_zero_and_two_trades_still_get_an_mde():
+    assert reprice.lag1(np.array([1.0, 1.0, 1.0, 1.0])) == 0.0
+    assert reprice.lag1(np.array([1.0, 2.0])) == 0.0
+    m, n_eff, rho = reprice.mde(np.array([0.0, 10.0]), reprice.COEF_UNCORRECTED)
+    assert rho == 0.0 and n_eff == pytest.approx(2 / 1.6) and m > 0
+
+
+def test_empty_window_reports_null_statistics():
+    from research.screens.p1 import run
+    out = run.window_stats([], [], W.SCREEN_START_MS)
+    assert out["n"] == 0 and out["mde"] is None and out["ci95_block60_net_B_dtb3"] is None
+    assert all(v is None for v in out["mean"].values())

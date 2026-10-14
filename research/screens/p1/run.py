@@ -21,7 +21,11 @@ KEYS = ("net_B_slip_dtb3", "gross", "net_A", "net_B", "net_C", "net_A_dtb3", "ne
 def window_stats(rows: list[dict[str, float]], entries: list[int], start_ms: int) -> dict:
     v = np.array([r["net_B_dtb3"] for r in rows])
     out: dict = {"n": len(rows)}
-    if not rows:
+    if not rows:                                                                   # 스펙 §4-4: 통계와 CI는 null
+        out.update({"sd_net_B": None, "mean": {k: None for k in KEYS}, "blocks": reprice.n_blocks(start_ms, SCREEN_END_MS),
+                    "n_seeded_rate": 0, "mean_net_B_dtb3_without_seeded": None, "sd_net_B_dtb3": None, "mde": None})
+        for key in ("net_B_dtb3", "net_A_dtb3", "net_C_dtb3"):
+            out[f"ci95_block60_{key}"] = out[f"redraws_{key}"] = out[f"ci95_trade_iid_{key}"] = None
         return out
     out["sd_net_B"] = float(np.std([r["net_B"] for r in rows], ddof=1)) if len(rows) > 1 else None
     out["mean"] = {k: float(np.mean([r[k] for r in rows])) for k in KEYS}
@@ -36,7 +40,7 @@ def window_stats(rows: list[dict[str, float]], entries: list[int], start_ms: int
     keep = [r["net_B_dtb3"] for r in rows if not r["seeded_rate"]]
     out["n_seeded_rate"] = len(rows) - len(keep)
     out["mean_net_B_dtb3_without_seeded"] = float(np.mean(keep)) if keep else None
-    if len(rows) > 2:
+    if len(rows) >= 2:                                                             # sd(ddof 1)가 정의되는 한 MDE를 적는다
         m0, n_eff, rho = reprice.mde(v, reprice.COEF_UNCORRECTED)
         m1, _, _ = reprice.mde(v, reprice.COEF_N64)
         out["sd_net_B_dtb3"] = float(np.std(v, ddof=1))
@@ -63,9 +67,9 @@ def main() -> int:
             ci = full.get("ci95_block60_net_B_dtb3")
             effect = bool(ci and ci[0] > 0)
             sub_pos = bool(sub.get("n") and sub["mean"]["net_B_dtb3"] > 0)
-            mde64 = full.get("mde", {}).get("n64_4.00")
+            mde64 = (full.get("mde") or {}).get("n64_4.00")
             a["effect_pass"] = effect
-            a["power_label"] = full.get("mde", {}).get("power_label")
+            a["power_label"] = (full.get("mde") or {}).get("power_label")
             a["promotion"] = {"ci_lower_gt_0": effect, "sub_mean_gt_0": sub_pos, "mde_n64_le_20": bool(mde64 is not None and mde64 <= 20),
                               "all": bool(effect and sub_pos and mde64 is not None and mde64 <= 20)}
             res["arms"][label] = a

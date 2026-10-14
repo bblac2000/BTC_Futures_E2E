@@ -81,15 +81,17 @@ def iid_boot(values: np.ndarray, rng: np.random.Generator, n_draw: int) -> list[
 
 
 def lag1(values: np.ndarray) -> float:
-    if values.size < 3 or float(np.std(values)) == 0.0:
-        return float("nan")
-    return float(np.corrcoef(values[:-1], values[1:])[0, 1])
+    """진입 순서 거래열의 이웃 쌍 피어슨 상관 — n < 3이거나 어느 쪽 분산이 0이면 정의되지 않음 → 0(스펙 §4-5)."""
+    if values.size < 3 or float(np.std(values[:-1])) == 0.0 or float(np.std(values[1:])) == 0.0:
+        return 0.0
+    r = float(np.corrcoef(values[:-1], values[1:])[0, 1])
+    return r if math.isfinite(r) else 0.0
 
 
 def mde(values: np.ndarray, coef: float) -> tuple[float, float, float]:
     """(MDE bps, n_eff, ρ̂) — n_eff = n / (1 + 4 · max(ρ̂, 0.15))(프로토콜 §2)."""
     rho = lag1(values)
-    n_eff = values.size / (1 + 4 * max(rho if math.isfinite(rho) else 0.0, 0.15))
+    n_eff = values.size / (1 + 4 * max(rho, 0.15))
     return coef * float(np.std(values, ddof=1)) / math.sqrt(n_eff), n_eff, rho
 
 

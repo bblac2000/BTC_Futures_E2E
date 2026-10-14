@@ -165,3 +165,29 @@ I treated #105’s W3-specific trade unit, B-primary rule, and execution order a
 **Part A verdict: MERGE.**  
 **Part B verdict: FIX — DTB3 missing values/initial rate, cost attribution, bootstrap RNG/edge rules, autocorrelation/MDE definition, mixed-arm family disposition.**
 ```
+
+## Codex PRE r2 — 원문(verbatim · 최종 메시지) · VERDICT: FIX(P1 사용자 승인 필요 · P2 둘)
+Reviewed HEAD `4fe617c` read-only. No files changed and no real-ledger means or CIs computed.
+
+1. **RESOLVED** — Reproduction wording now correctly distinguishes script-generated numeric fields from annotations.
+2. **RESOLVED** — Arm mapping distinguishes shared trade dates/rules from differing dollar notionals.
+3. **RESOLVED** — Fees and the explicit zero-additional-slippage convention are separated; the 8 bps slippage sensitivity is implemented.
+4. **PARTIAL** — Blank rates, benchmark-proxy disclosures, seed flags, exclusion sensitivity, and unavailable-rate failure are implemented; the future-observation exception needs approval.
+5. **PARTIAL** — RNG initialization, half-open blocks, truncated coverage, and 1,000 accepted draws match r2; empty-window output omits the specified `null` statistics/CIs.
+6. **PARTIAL** — Series, ordering, Pearson estimator, floor, coefficients, and `ddof=1` are pinned; small-sample and undefined-rho reporting differ from r2.
+7. **RESOLVED** — Mixed-arm disposition is pinned, effects and power remain separate, and family disposition can appropriately remain in the report.
+
+The ordinary computation path matches r2: fresh RNG per arm/window/column/method, accepted-draw resampling, trade pooling, and all three promotion flags. Family disposition is deliberately absent from the runner.
+
+New findings:
+
+- **P0:** None.
+- **P1 — First-observation exception requires explicit user approval for the primary statistic.** January 4 is a future observation for January 1/2 entries. D4 restricts reads; it does not authorize that substitution. The binding benchmark remains “시점 기준” (point-in-time) in [protocol §6](/home/cms/project/BTC_Futures_E2E/docs/screen_protocol.md:119), and #105 does not waive it. Disclosure and exclusion sensitivity make the exception reviewable, but do not make the primary benchmark point-in-time. Approve the exact [r2 exception](/home/cms/project/BTC_Futures_E2E/research/screens/p1/S-carry-1_spec.md:18), or revise it before calculation.
+- **P2 — Power edge cases violate r2.** [run.py:39](/home/cms/project/BTC_Futures_E2E/research/screens/p1/run.py:39) suppresses MDE/power for `n=2`, although r2 prescribes rho fallback zero and the sample SD is defined. Constant synthetic data reports `rho_lag1: NaN` rather than zero; serialization then emits a nonstandard JSON value. Compute the defined two-trade MDE and normalize undefined rho to zero.
+- **P2 — Empty-window schema differs from r2.** [run.py:24](/home/cms/project/BTC_Futures_E2E/research/screens/p1/run.py:24) returns only `{"n": 0}` instead of explicit `null` statistics/CIs. Its decision conditions correctly remain false.
+
+Verification: 36 checks passed directly, three loader tests passed with in-memory CSV fixtures, and additional synthetic checks confirmed fresh RNGs, accepted-draw counts, seeded exclusion, and promotion flags.
+
+VERDICT: FIX
+
+입장: P2 둘 동의 — 고침(정의 안 되는 ρ̂ = 0 · n = 2도 MDE · 빈 창 null). P1 동의 — 첫 관측 예외는 사용자 결정으로 올린다(계산 전 · 고정 전).
