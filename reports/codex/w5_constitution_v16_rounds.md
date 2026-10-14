@@ -338,3 +338,48 @@ Read-only review at HEAD `72adbb6`; no files edited. Stopping at the next **BLOC
 
 VERDICT: BLOCK
 ```
+
+## 문서 r5 — 사용자 #113(최소 묶음 · carry 가족 닫힘 → 현물 1 · 2항 삭제) · **VERDICT: MERGE**에서 멈춤
+- 대상 커밋 6707ada(초안 r5).
+
+```
+Read-only review at HEAD `6707ada`; no files edited.
+
+(a) **Scope-cut condition confirmed.** S-carry-1’s [RESULT/POST rows](/home/cms/project/BTC_Futures_E2E/docs/screen_registry.md:17), [registry #110](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:118), and [L18](/home/cms/project/BTC_Futures_E2E/docs/learnings.md:70) consistently record **carry family closed, promoted = no**. Therefore #113’s conditional removal supersedes applying (B) and repairing the removed hedge clauses.
+
+(b) **R5 matches the minimal package.** Its three operative sections contain:
+
+- forceOrder `[DOC-CONFLICT]` erratum.
+- Exactly three carry-over items: pre-anchor power gate; P1 SL-inheritance disclosure without a default; sizing-feasibility calibration.
+- Family-specific benchmarks.
+
+There is **no operative change** to order types, exits, SL/TP execution, kill-switch, margin, or spot execution. The required SL item concerns preregistration disclosure; sizing calibration likewise records feasibility rather than changing sizing rules. GTX and spot references in [lines 5–7](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:5) describe removal/history and the prerequisite for a future amendment. No dangling reference to removed clauses remains in an operative sentence.
+
+(c) **Q4 fidelity verified, with one evidence limitation.** The English master text is unchanged from r4 and matches the supplied wording verbatim. The [official changelog](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/change-log#2026-04-10) confirms the description amendment. Source 2’s quotation exactly matches the [cached official dump](/home/cms/project/BTC_Futures_E2E/var/docs_fetch/llms-full.txt:202753). Live retrieval of that dump failed, so **Last-Modified remains independently unverified**. The draft preserves the conflict without choosing stream semantics and does not treat snapshots as liquidation totals.
+
+**Benchmark clause verified.** [Clause 3](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:28) preserves report-only family comparisons and the formal P1 gate, names the correct reference-table target, and correctly limits the DTB3 pass-test exception to carry screens under [protocol v4 §3-1a](/home/cms/project/BTC_Futures_E2E/docs/screen_protocol.md:50). The protocol’s SHA256 matches #111. Its citation neither retroactively reapplies v4 to S-carry-1 nor reopens carry.
+
+(d) R4 dispositions:
+
+| R4 finding/check | R5 status |
+|---|---|
+| Carried R3 Q2 — inventory gaps | **MOOT** — clauses 1–2 removed |
+| Carried R3 Q3 — bounded attempts/time | **MOOT** — removed |
+| Carried P0-1 — racing/excess-fill cleanup | **MOOT** — removed |
+| Carried P0-2 — guard sign test | **MOOT** — removed |
+| Carried P1-3 — retry bounds | **MOOT** — removed |
+| Carried BLOCK-USER-4 — #107 authorization | **MOOT** — removed |
+| Q1 — execution/safeguard changes | **RESOLVED** — no operative execution change |
+| Q2 — naked spot paths | **MOOT** — removed |
+| Q3 — unbounded submissions | **MOOT** — removed |
+| Q4 — source fidelity | **OPEN** only for independent Last-Modified verification; nonblocking |
+| Q5 — GTX/exposure handling | **RESOLVED** for GTX removal; **MOOT** for spot exposure |
+| Q6 — decision fidelity | **RESOLVED** under binding #113 |
+| New P0 — ordinary-close/reduction cleanup | **MOOT** — removed |
+| New P0 — failed perp-entry cleanup | **MOOT** — removed |
+| New BLOCK-USER — positive guard precedence | **MOOT** — removed; (B) has no current consumer |
+
+(e) **New findings: none at P0, P1, P2, or BLOCK-USER.** The remaining Q4 verification limit does not block this document. Stopping at MERGE.
+
+VERDICT: MERGE
+```
