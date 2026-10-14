@@ -180,7 +180,8 @@ def test_b_bound_uses_pooled_values_when_a_day_is_thin():
 def test_head_statistic_is_time_share_weighted_and_undefined_without_a_stratum():
     from research.screens.p0 import run as R
     rows = [{"stratum": "prox", "x": 10.0}, {"stratum": "other", "x": 0.0}]
-    assert abs(R.head(rows, "x") - 10 * 30 / 1440) < 1e-12
+    h = R.head(rows, "x")
+    assert h is not None and abs(h - 10 * 30 / 1440) < 1e-12
     assert R.head([{"stratum": "other", "x": 1.0}], "x") is None
 
 
