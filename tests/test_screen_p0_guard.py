@@ -189,3 +189,104 @@ def test_sample_is_deterministic_and_stratified():
     a, b = sample.draw(), sample.draw()
     assert a == b and len(a) == 9698
     assert sum(1 for _, _, s in a if s == "prox") == 2416
+
+
+# ---------- 강화(사용자 #105 · 다음 M/S 실행 전) ----------
+def _restore_fixture(tmp_path, monkeypatch, *, ok=True, matched=(), excluded=()):
+    from research.screens.p0 import loader
+    data = tmp_path / "BTCUSDT"
+    plan = tmp_path / "plan.json"
+    rj = tmp_path / "restore.json"
+    plan.write_text(json_dumps({"matched": {k: {"stream": k.split("/")[1]} for k in matched}}), encoding="utf-8")
+    rj.write_text(json_dumps({"ok": ok, "excluded": [{"file": k, "why": "x"} for k in excluded]}), encoding="utf-8")
+    monkeypatch.setattr(loader, "DATA", data)
+    monkeypatch.setattr(loader, "PLAN", plan)
+    monkeypatch.setattr(loader, "RESTORE_JSON", rj)
+    loader.allowed_files.cache_clear()
+    return loader, data
+
+
+def json_dumps(o) -> str:
+    import json
+    return json.dumps(o)
+
+
+def _shard(data: Path, rel: str, recv: list[int], tt: list[int] | None = None) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    f = data / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    cols = {"recv_ms": pa.array(recv, pa.int64()), "price": pa.array([float(i) for i in range(len(recv))])}
+    if tt is not None:
+        cols["transact_time"] = pa.array(tt, pa.int64())
+    pq.write_table(pa.table(cols), f)
+
+
+def test_runner_refuses_when_restore_is_not_ok(tmp_path, monkeypatch):
+    from research.screens.p0 import run
+    _restore_fixture(tmp_path, monkeypatch, ok=False)
+    monkeypatch.setattr(run, "OUT_JSON", tmp_path / "M-x.json")
+    monkeypatch.setattr(run.sample, "draw", lambda: pytest.fail("draw before the restore check"))
+    assert run.main() != 0
+    assert not (tmp_path / "M-x.json").exists()
+
+
+def test_runner_refuses_when_restore_record_is_missing(tmp_path, monkeypatch):
+    from research.screens.p0 import loader, run
+    _restore_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(loader, "RESTORE_JSON", tmp_path / "absent.json")
+    monkeypatch.setattr(run, "OUT_JSON", tmp_path / "M-x.json")
+    monkeypatch.setattr(run.sample, "draw", lambda: pytest.fail("draw before the restore check"))
+    assert run.main() != 0
+
+
+def test_loader_fails_loudly_on_a_shard_outside_the_paired_allow_list(tmp_path, monkeypatch):
+    loader, data = _restore_fixture(tmp_path, monkeypatch, matched=("2026-09-20/bookticker/120000_000.parquet",))
+    _shard(data, "2026-09-20/bookticker/120000_000.parquet", [T0])
+    _shard(data, "2026-09-20/bookticker/120100_000.parquet", [T0 + 60_000])          # 짝지어지지 않은 파일
+    with pytest.raises(RuntimeError):
+        loader._read("bookticker", T0 - 1000, T0 + 120_000, ["recv_ms"])
+
+
+def test_loader_skips_verification_excluded_shards_without_reading_them(tmp_path, monkeypatch):
+    rel = "2026-09-20/bookticker/120000_000.parquet"
+    loader, data = _restore_fixture(tmp_path, monkeypatch, matched=(rel,), excluded=(rel,))
+    f = data / rel
+    f.parent.mkdir(parents=True)
+    f.write_bytes(b"not a parquet file")
+    assert len(loader._read("bookticker", T0 - 1000, T0 + 1000, ["recv_ms"])["recv_ms"]) == 0
+
+
+def test_boundary_shard_rows_outside_the_window_are_not_returned(tmp_path, monkeypatch):
+    lo, hi = T0, T0 + 60_000
+    rels = ("2026-09-20/bookticker/115930_000.parquet", "2026-09-20/aggtrade/115930_000.parquet")
+    loader, data = _restore_fixture(tmp_path, monkeypatch, matched=rels)
+    recv = [lo - 30_000, lo - 1, lo, lo + 1, hi - 1, hi, hi + 1, hi + 30_000]
+    _shard(data, rels[0], recv)
+    got = loader._read("bookticker", lo, hi, ["recv_ms", "price"])
+    assert got["recv_ms"].tolist() == [lo, lo + 1, hi - 1, hi]
+    assert got["price"].tolist() == [2.0, 3.0, 4.0, 5.0]                                 # 값 칸도 같은 행만
+    # aggtrade: 두 시각 칸이 모두 [lo, hi] 안이어야 한다
+    _shard(data, rels[1], [lo, lo + 10, hi], tt=[lo - 5, lo + 5, hi])
+    got = loader._read("aggtrade", lo, hi, ["recv_ms", "transact_time"])
+    assert got["recv_ms"].tolist() == [lo + 10, hi]
+
+
+def test_verify_excludes_a_shard_whose_comparison_meta_is_missing(tmp_path, monkeypatch):
+    import json
+
+    from research.screens.p0 import restore
+    rels = {"2026-09-20/bookticker/a.parquet": {"md5": None, "parquet_rows": 1},
+            "2026-09-20/bookticker/b.parquet": {"md5": "x", "parquet_rows": None}}
+    for rel in rels:
+        _shard(tmp_path / "BTCUSDT", rel, [T0])
+    plan = {"matched": {k: {**v, "stream": "bookticker", "remote_md5": None} for k, v in rels.items()},
+            "by_stream": {s: {"expected": 2, "missing_on_drive": []} for s in SP.STREAMS}}
+    (tmp_path / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(restore, "PLAN", tmp_path / "plan.json")
+    monkeypatch.setattr(restore, "OUT", tmp_path / "restore.json")
+    monkeypatch.setattr(restore.SP, "RESTORE", tmp_path)
+    restore.verify()
+    out = json.loads((tmp_path / "restore.json").read_text(encoding="utf-8"))
+    assert sorted(e["file"] for e in out["excluded"]) == sorted(rels)
+    assert all("missing comparison meta" in e["why"] for e in out["excluded"])

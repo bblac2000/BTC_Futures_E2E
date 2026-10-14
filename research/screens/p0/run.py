@@ -71,6 +71,11 @@ def main() -> int:
     if OUT_JSON.exists():
         print("거부: M-1.json이 이미 있다 — 측정은 한 번만", file=sys.stderr)
         return 2
+    try:
+        loader.restore_record()
+    except RuntimeError as e:
+        print(f"거부: {e}", file=sys.stderr)
+        return 3
     draws = sample.draw()
     qfail = quality_fail_intervals()
     bad = loader.bad_intervals(qfail)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import functools
 import json
 import sqlite3
 
@@ -12,6 +13,8 @@ from research.screens.p0 import sim
 from research.screens.p0 import span as SP
 
 DATA = SP.RESTORE / "BTCUSDT"
+PLAN = SP.RESTORE / "M-1_plan.json"
+RESTORE_JSON = SP.ROOT / "research" / "screens" / "p0" / "results" / "M-1_restore.json"
 TS_COLS = {"depth100ms": ("recv_ms",), "bookticker": ("recv_ms",), "aggtrade": ("recv_ms", "transact_time")}
 
 
@@ -25,9 +28,25 @@ def _shard_ms(date: str, name: str) -> int:
     return d0 + ((hh * 60 + mm) * 60 + ss) * 1000 + ms
 
 
+def restore_record() -> dict:
+    """검증 기록 — 없거나 ok가 아니면 실패(사용자 #105 강화 1)."""
+    if not RESTORE_JSON.exists():
+        raise RuntimeError(f"복원 검증 기록이 없다: {RESTORE_JSON}")
+    rec = json.loads(RESTORE_JSON.read_text(encoding="utf-8"))
+    if rec.get("ok") is not True:
+        raise RuntimeError("복원 검증이 ok가 아니다")
+    return rec
+
+
 def excluded_files() -> set[str]:
-    p = SP.ROOT / "research" / "screens" / "p0" / "results" / "M-1_restore.json"
-    return {e["file"] for e in json.loads(p.read_text(encoding="utf-8"))["excluded"]} if p.exists() else set()
+    return {e["file"] for e in restore_record()["excluded"]}
+
+
+@functools.lru_cache(maxsize=1)
+def allowed_files() -> frozenset[str]:
+    """짝지어진 파일 − 검증 제외 = 읽어도 되는 shard(사용자 #105 강화 2)."""
+    matched = json.loads(PLAN.read_text(encoding="utf-8"))["matched"]
+    return frozenset(set(matched) - excluded_files())
 
 
 def bad_intervals(extra: list[tuple[int, int]] | None = None) -> list[tuple[int, int]]:
@@ -57,7 +76,7 @@ def _read(stream: str, lo: int, hi: int, cols: list[str]) -> dict[str, np.ndarra
     """[lo, hi]가 노출 구간 안이어야 한다 · 해당 날짜와 전날 디렉터리의 shard만 · 행 필터(시각 칸) 뒤에만 값 칸을 꺼낸다."""
     if not (SP.EXPOSED_START_MS <= lo <= hi <= SP.EXPOSED_END_MS):
         raise ValueError(f"[{lo}, {hi}]가 노출 구간 밖")
-    ex = excluded_files()
+    ex, allowed = excluded_files(), allowed_files()
     d_lo = dt.datetime.fromtimestamp(lo / 1000, dt.UTC).date() - dt.timedelta(days=1)
     d_hi = dt.datetime.fromtimestamp(hi / 1000, dt.UTC).date()
     parts: list[dict[str, np.ndarray]] = []
@@ -68,8 +87,11 @@ def _read(stream: str, lo: int, hi: int, cols: list[str]) -> dict[str, np.ndarra
         if date not in SP.DATES:
             continue
         for f in sorted((DATA / date / stream).glob("*.parquet")):
-            if f"{date}/{stream}/{f.name}" in ex:
+            rel = f"{date}/{stream}/{f.name}"
+            if rel in ex:
                 continue
+            if rel not in allowed:
+                raise RuntimeError(f"짝지어지지 않은 shard: {rel}")
             flt = [(c, ">=", lo) for c in TS_COLS[stream]] + [(c, "<=", hi) for c in TS_COLS[stream]]
             t = pq.read_table(f, columns=cols, filters=flt)
             if t.num_rows:

@@ -109,6 +109,8 @@ def verify() -> int:
         data = f.read_bytes()
         md5 = hashlib.md5(data).hexdigest()
         why = []
+        if not meta.get("md5") or meta.get("parquet_rows") is None:                 # 비교할 것이 없으면 통과가 아니다(#105 강화 3)
+            why.append("missing comparison meta (drive md5 / manifest parquet_rows)")
         if meta.get("md5") and md5 != meta["md5"]:
             why.append("drive md5 mismatch")
         if meta.get("remote_md5") and md5 != meta["remote_md5"]:
