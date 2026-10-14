@@ -97,10 +97,12 @@ PAPER는 계정 SET 금지(읽기만), WARNING 로그 후 기동 계속. 격리 
 |---|---|---|
 | OI | `GET /fapi/v1/openInterest` / `/futures/data/openInterestHist` | 이력 최근 30일만 |
 | 롱숏 비율(상위·전체·taker) | `/futures/data/*LongShort*` | 30일 |
-| 청산 | WS `<symbol>@forceOrder`, `!forceOrder@arr` | **1초 창 심볼당 가장 큰(largest) 1건 스냅샷** — 총량 아님 |
+| 청산 | WS `<symbol>@forceOrder`, `!forceOrder@arr` | **1초 창 심볼당 1건 스냅샷** — 그 1건이 latest인지 largest인지는 **[DOC-CONFLICT]**(v1.6, 아래) · 총량 아님 |
 | 과거 L2·청산 | Binance 미제공 → Tardis.dev(월 1일 무료) | binance.vision에 USDⓈ-M 청산 아카이브 없음, `allForceOrders` 유지중단 |
 
-forceOrder `side`: SELL=롱 청산, BUY=숏 청산. 저장 시 "snapshot, max 1/sec/symbol, largest per window — not a volume series" 꼬리표를 manifest에 함께 둔다. 페이로드에 `ps`(pair)·`st`가 추가로 온다. Tardis 청산 데이터도 초당 1~2건 천장이 있으므로 Tardis 대조는 "수집 충실도"이지 "진짜 미달"이 아니다.
+forceOrder `side`: SELL=롱 청산, BUY=숏 청산. 저장 시 "snapshot, max 1/sec/symbol, rank-within-second unknown [DOC-CONFLICT latest/largest] — not a volume series" 꼬리표를 manifest에 함께 둔다.
+
+**[DOC-CONFLICT] forceOrder 문구(v1.6 · 2026-10-14 · 고르지 않음).** 공식 변경 기록 2026-04-10(developers.binance.com … /change-log#2026-04-10): "Updated description: changed \"only the latest one liquidation order\" to \"only the largest one liquidation order\" within 1000ms." 반면 2026-10-14에 읽은 스트림 참조 문구(llms-full.txt, Last-Modified 2026-10-13): "For each symbol，only the latest one liquidation order within 1000ms will be pushed as the snapshot." 스트림 자체로는 검증 불가(한 번에 한 건만 푸시). 마스터 영문: "Official change log (2026-04-10) states the per-symbol 1000 ms snapshot changed from 'latest' to 'largest'; the stream reference page as read on 2026-10-14 still says 'latest'. Status [DOC-CONFLICT], unverifiable from the stream itself (only one order is ever pushed). Operational conclusion unchanged: not a liquidation-volume measure; treat each push as one order of unknown rank within its second." v1.5까지의 "largest" 단정은 출처 1만 따른 것이었다. 페이로드에 `ps`(pair)·`st`가 추가로 온다. Tardis 청산 데이터도 초당 1~2건 천장이 있으므로 Tardis 대조는 "수집 충실도"이지 "진짜 미달"이 아니다.
 
 ## 8-1. 웹소켓 엔드포인트 티어 (2026-04-23 이후 필수 — 2026-09-12 도쿄 VPS 실측)
 
@@ -136,6 +138,6 @@ forceOrder `side`: SELL=롱 청산, BUY=숏 청산. 저장 시 "snapshot, max 1/
 - [ ] 실주문 금지 저장소(E2E)에서 주문·서명·거래 SDK import가 나타나는가(`ops/scan_order_path.py`)
 
 ## 10. v6 정정 이력·대기 항목
-- ✅ §10 forceOrder 행 "최신 1건" → "가장 큰(largest) 1건" 정정 삽입(E2E f89af0d, 2026-09-12, change log 2026-04-10 항목 근거).
+- ✅ §10 forceOrder 행 "최신 1건" → "가장 큰(largest) 1건" 정정 삽입(E2E f89af0d, 2026-09-12, change log 2026-04-10 항목 근거). **→ v1.6(2026-10-14) 재정정: 스트림 참조 문구는 여전히 "latest" → [DOC-CONFLICT]로 기록, 어느 쪽도 단정하지 않음(§8).**
 - 대기: §10 forceOrder 행에 `/market/ws` 필수·2026-04-23 폐기일·`ps`/`st` 필드 추가. §10 웹소켓 절(`wss://fstream.binance.com/ws/<stream>` 예시)에 티어 표(§8-1) 반영 — 원문 유지·추가 방식.
 - §1 BTC 표의 `MAX_LEVERAGE = 125` 등 §12.1 RL 상수 블록은 v5 갱신(150x) 전 값이 남아 있음 — 어차피 리터럴 금지라 봇 영향 없으나 문서 내 불일치로 표기.

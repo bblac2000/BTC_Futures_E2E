@@ -60,7 +60,7 @@ qty           = floor(notional / mark, step) → MIN_NOTIONAL 재확인 → MARK
 | MDD | 생존 | 청산 거리·킬스위치와 연동 |
 | Profit Factor | 거래 특성 | 비용 차감 후 |
 | 청산·킬스위치 발동 횟수 | 생존 조건 | 0이 아니면 성과 조건 무효 |
-| 벤치마크 대비(BTC 보유·무위험) | 최종 게이트 | |
+| 벤치마크 대비 | **게이트 = 플라시보 P1(노출 매칭 무작위 타이밍)** · 가족별 벤치마크는 **보고** | v1.6: carry → FRED DTB3(point-in-time·보유기간 환산) · execution → 결정 시각 즉시 taker 실행가 · directional → vol-targeted 롱온리 BTC. B&H는 보고. 가족별 벤치마크가 P1 게이트를 대체하지 않는다(스크린 프로토콜의 carry 통과 귀무만 DTB3 사용 — 스크린 한정) |
 
 **진단용 (quantstats 티어시트, 판정 뒤·중간보고 미첨부)**
 Sharpe·Sortino·Calmar·Omega·Ulcer·Martin, VaR/CVaR, Recovery Period·Drawdown Duration, Win Rate·Risk-Reward·Exposure/Time in Market, Monte Carlo(부트스트랩 자산곡선), 자산곡선 R², IR, t-stat/p-value.
