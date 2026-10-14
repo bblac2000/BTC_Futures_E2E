@@ -58,3 +58,6 @@
 2. **P1의 SL 승계 여부를 사전등록에서 명시**(트라이얼 #5부터): 원판에 SL이 있으면 P1 슬롯에도 같은 sl_dist의 SL을 걸지(위험 정합) 말지를 귀무의 정의로 적는다 — 기본값을 두지 않는다.
 3. **사이징 가능성 보정**(트라이얼 #5부터): IS 이전 보정에 "E_ref · 리스크 예산 · 최소 수량에서 체결할 수 없는 sl_dist × 가격 구간"과 그 구간에 드는 후보 비율을 적는다.
 4. **기각 목록에 L13 추가**(검정력 부족으로 — 효과 부재 아님) · L14~L16은 research-protocol의 설계 주의로.
+
+## 스크린 라운드 M-1 — P0 메이커 진입 실행 감사 · KILL → stay taker(2026-10-14 · 레지스트리 #103 · #104 · #105)
+| L17 | (측정 · 사용자 원문 2026-10-14) "Maker-entry at the touch on BTCUSDT perp yields ≈0.4–0.6 bps per side net of fallback, indistinguishable from direction-flipped and other-day controls (0.41 / 0.61); fill rate 16–22 % within 30–120 s; the gain is the generic value of resting at the touch, not execution alpha. Single-regime pilot 2026-09-17 → 10-11." |
