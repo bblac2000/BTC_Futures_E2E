@@ -1,0 +1,52 @@
+........................................................................ [  3%]
+........................................................
+[ccxt 4.5.78] ccxt.pro.binanceusdm 가 연 소켓
+  watch_ohlcv_1m       wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@kline_1m']
+  watch_mark_price     wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@markPrice@1s']
+  watch_liquidations   wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@forceOrder']
+  watch_trades         wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@trade']
+  watch_bids_asks      wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@bookTicker']
+  watch_order_book     wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@depth@100ms']
+  watch_ticker         wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@miniTicker']
+.
+[ccxt 4.5.78] data.feed.TeeBinanceUsdm 가 연 소켓
+  watch_ohlcv_1m       wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@kline_1m']
+  watch_mark_price     wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@markPrice@1s']
+  watch_liquidations   wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@forceOrder']
+  watch_trades         wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@trade']
+  watch_bids_asks      wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@bookTicker']
+  watch_order_book     wss://fstream.binance.com/public/ws/0  SUBSCRIBE ['btcusdt@depth@100ms']
+  watch_ticker         wss://fstream.binance.com/market/ws/0  SUBSCRIBE ['btcusdt@miniTicker']
+............... [  7%]
+........................................................................ [ 11%]
+........................................................................ [ 14%]
+........................................................................ [ 18%]
+........................................................................ [ 22%]
+........................................................................ [ 25%]
+........................................................................ [ 29%]
+........................................................................ [ 33%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 44%]
+........................................................................ [ 48%]
+........................................................................ [ 51%]
+........................................................................ [ 55%]
+........................................................................ [ 59%]
+........................................................................ [ 63%]
+........................................................................ [ 66%]
+........................................................................ [ 70%]
+........................................................................ [ 74%]
+........................................................................ [ 77%]
+........................................................................ [ 81%]
+........................................................................ [ 85%]
+........................................................................ [ 89%]
+........................................................................ [ 92%]
+........................................................................ [ 96%]
+....................................................................     [100%]
+=============================== warnings summary ===============================
+tests/test_stats_t2.py::test_overflow_is_an_error_not_undefined
+  /home/cms/project/BTC_Futures_E2E/.venv/lib/python3.12/site-packages/numpy/_core/_methods.py:49: RuntimeWarning: overflow encountered in reduce
+    return umr_sum(a, axis, dtype, out, keepdims, initial, where)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+rc=0
