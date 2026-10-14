@@ -1,0 +1,26 @@
+2026-10-14T09:30:36Z run begin HEAD=22cd815f8eac4755de066e0b395e5bda59aa09e8
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/p1/run.py", line 84, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/p1/run.py", line 53, in main
+    trades, dropped = loader.trades()
+                      ^^^^^^^^^^^^^^^
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/p1/loader.py", line 41, in trades
+    out = list(bounded_csv_file(path, _trade, ts_field=0, header=True, dropped=dropped))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/window.py", line 114, in bounded_csv_file
+    yield from _bounded(_data_lines(fh, header), _ts_of_line(ts_field, ts_kind, delimiter), parse, start_ms=start_ms, end_ms=end_ms,
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/window.py", line 52, in _bounded
+    yield from _filtered(raw_items, ts_of, parse, start_ms, end_ms, dropped)
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/window.py", line 62, in _filtered
+    yield parse(raw)
+          ^^^^^^^^^^
+  File "/home/cms/project/BTC_Futures_E2E/research/screens/p1/loader.py", line 32, in _trade
+    c = dict(zip(LEDGER_COLS, line.rstrip("\r\n").split(","), strict=True))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: zip() argument 2 is longer than argument 1
+run rc=1
+2026-10-14T09:30:37Z run end

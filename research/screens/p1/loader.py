@@ -29,7 +29,9 @@ class Trade:
 
 
 def _trade(line: str) -> Trade:
-    c = dict(zip(LEDGER_COLS, line.rstrip("\r\n").split(","), strict=True))
+    head = line.rstrip("\r\n").split(",", len(LEDGER_COLS) - 2)               # 앞 13칸은 숫자 · 이름(쉼표 없음)
+    reason, forced = head.pop().rsplit(",", 1)                                     # exit_reason은 따옴표 속 쉼표를 가질 수 있다
+    c = dict(zip(LEDGER_COLS, [*head, reason.strip('"'), forced], strict=True))
     return Trade(c["run"], int(c["entry_ms"]), int(c["exit_ms"]), float(c["notional"]), float(c["locked"]),
                  float(c["funding_collected"]), float(c["residual_delta_pnl"]), float(c["fees"]), float(c["slippage"]),
                  float(c["opportunity_cost"]), float(c["net_pnl"]))

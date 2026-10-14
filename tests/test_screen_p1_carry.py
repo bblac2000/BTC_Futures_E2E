@@ -115,3 +115,9 @@ def test_empty_window_reports_null_statistics():
     out = run.window_stats([], [], W.SCREEN_START_MS)
     assert out["n"] == 0 and out["mde"] is None and out["ci95_block60_net_B_dtb3"] is None
     assert all(v is None for v in out["mean"].values())
+
+
+def test_quoted_exit_reason_with_a_comma_parses(tmp_path):
+    row = f'{ms(2022, 3, 1)},{ms(2022, 2, 1)},v1_restated,190.0,304.0,1.0,0.0,0.1,0.57,0.152,0.5,-0.1,90,"edge_gone,regime_exit",0'
+    got, dropped = loader.trades(_ledger(tmp_path, [row]))
+    assert dropped == 0 and got[0].run == "v1_restated" and got[0].net_pnl == -0.1 and got[0].notional == 190.0
