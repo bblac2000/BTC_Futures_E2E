@@ -22,7 +22,15 @@
 
 ## 2. 정오표 — forceOrder 문구(충돌 기록 · 고르지 않음)
 > 공식 변경 기록(2026-04-10)은 심볼별 1000 ms 스냅샷이 'latest'에서 'largest'로 바뀌었다고 적는다. 2026-10-14에 읽은 스트림 참조 문구는 여전히 'latest'라고 한다. 상태 **[DOC-CONFLICT]** — 스트림 자체로는 확인할 수 없다(한 번에 한 건만 푸시된다). 운영 결론은 그대로: 청산 총량 지표가 아니다 · 각 푸시는 그 1초 안에서 순위를 모르는 주문 한 건으로 다룬다.
-- 출처 1(변경 기록 · https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/change-log#2026-04-10): "Liquidation Order Streams (`<symbol>@forceOrder`) and All Market Liquidation Order Streams (`!forceOrder@arr`) — Updated description: changed "only the latest one liquidation order" to "only the largest one liquidation order" within 1000ms."
+> **User master text (verbatim, English):** "Official change log (2026-04-10) states the per-symbol 1000 ms snapshot changed from 'latest' to 'largest'; the stream reference page as read on 2026-10-14 still says 'latest'. Status [DOC-CONFLICT], unverifiable from the stream itself (only one order is ever pushed). Operational conclusion unchanged: not a liquidation-volume measure; treat each push as one order of unknown rank within its second."
+
+- 출처 1(변경 기록 · https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/change-log#2026-04-10 · 원래 줄 바꿈 그대로):
+  ```
+  - Liquidation Order Streams (`<symbol>@forceOrder`) and All Market Liquidation Order Streams
+    (`!forceOrder@arr`)
+    - Updated description: changed "only the latest one liquidation order" to "only the largest one
+      liquidation order" within 1000ms.
+  ```
 - 출처 2(스트림 참조 문구 · https://developers.binance.com/en/docs/llms-full.txt, 2026-10-14에 읽음 · Last-Modified 2026-10-13): "The Liquidation Order Snapshot Streams push force liquidation order information for specific symbol. For each symbol，only the latest one liquidation order within 1000ms will be pushed as the snapshot."
 - 증거의 한계: 출처 2는 공식 문서 묶음 파일에서 찾았고, 그 블록 자신의 페이지 URL은 묶음에서 복원되지 않는다. v1.5는 출처 1에 따라 "largest"를 적었다.
 
