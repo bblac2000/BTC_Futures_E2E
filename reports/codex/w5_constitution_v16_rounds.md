@@ -302,3 +302,39 @@ Read-only review at HEAD `89cd55a`; no files edited. Stopping this round at **BL
 
 VERDICT: BLOCK
 ```
+
+## 문서 r4 — 사용자 #107 정책 1~7 · 첫 BLOCK-USER에서 멈춤
+- 대상 커밋 72adbb6(초안 r4) · 결과 **VERDICT: BLOCK**(BLOCK-USER 1 · P0 2) → #107 규칙대로 **이 회전에서 멈춘다**.
+
+```
+[codex] Turn completed.
+Read-only review at HEAD `72adbb6`; no files edited. Stopping at the next **BLOCK-USER**.
+
+(a) R3 findings:
+
+- **Q2 — PARTIAL:** Late fills after perp closure are covered; ordinary-close inventory, shrink-related excess, and failed perp entry still have gaps.
+- **Q3 — RESOLVED:** Clause 1-6 establishes total attempt/time caps, prohibits timer extension, and specifies flat escalation.
+- **P0-1 — PARTIAL:** Cancellation, terminal confirmation, and fallback revalidation are explicit; immediate cleanup of late excess after a partial shrink remains unspecified.
+- **P0-2 — RESOLVED:** Clause 1-5 tests `|d| × mark` before branching on sign.
+- **P1-3 — RESOLVED:** Spot placements, replacements, and guard orders have explicit bounds and exhaustion outcomes.
+- **BLOCK-USER-4 — RESOLVED:** #107 explicitly rejects the former sentence and authorizes TargetState flat escalation and removal of margin top-up/reduction.
+
+(b) Q1–Q6:
+
+- **Q1: NO** — perp exit/SL/TP/trailing/kill-switch/margin paths remain unchanged; hedge-derived exits use the carry strategy’s TargetState.
+- **Q2: YES** — authorized spot-first entry creates transient naked spot, and the cleanup gaps below can leave it persistent.
+- **Q3: NO** — order submission is explicitly bounded; continued monitoring is separate.
+- **Q4: PARTIALLY VERIFIED** — the user’s erratum remains verbatim and the [official changelog](https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/change-log#2026-04-10) confirms the description amendment; I could not retrieve the official dump to verify its quotation or Last-Modified date.
+- **Q5: GTX REMOVAL COMPLETE; EXPOSURE HANDLING PARTIAL** — the hours-long maker wait no longer precedes an unhedged perp short, but spot cleanup remains incomplete.
+- **Q6: PARTIAL** — most of #107 is reflected faithfully; its conflicting instructions for a positive guard breach remain unresolved.
+
+(c) New findings, ending at the first new BLOCK-USER:
+
+1. **[P0] Ordinary perp closure/reduction lost its explicit inventory cleanup rule.** [Clause 1-4](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:12) explicitly sells late fills after closure and inventory after liquidation, but does not explicitly sell already-held inventory after an ordinary close, or excess after a partial reduction. R3 required disposal after every confirmed reduction. A tradable residual below the guard threshold can now remain indefinitely. Require inventory-bounded MARKET disposal after every confirmed reduction/close, including racing excess fills, independently of the guard threshold and without delaying perp exits.
+
+2. **[P0] Spot-first entry lacks complete failed-perp-entry outcomes.** [Clause 1-1](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:9) cleans spot when entry gates fail, but does not specify cleanup when the subsequent perp MARKET order is rejected, confirms less than the intended quantity, or remains unresolved. With no established perp position, there may be no shrink/close event to trigger 1-4. Require confirmed-position reconciliation and bounded disposal of unmatched spot; unknown perp execution must be resolved before selling potentially matched inventory. Setting an already-flat perp TargetState alone cannot dispose of spot.
+
+3. **[BLOCK-USER] #107 gives conflicting outcomes for a positive guard breach.** [Registry #107](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:115), item 2, requires strategy flat when the guard trips **“for either sign of d.”** Item 5 instead specifies excess-spot MARKET sale for `d > 0`; [draft clause 1-5](/home/cms/project/BTC_Futures_E2E/docs/proposals/constitution_v1.6_amendment.md:13) states only that sale. Successful repair can therefore retain the short under one reading, while the other requires closing it. The user must choose whether a positive breach requires **flat plus spot cleanup**, or **spot repair with flat only on exhausted bounds**. Both can preserve Q1 through TargetState; the draft cannot silently choose precedence.
+
+VERDICT: BLOCK
+```
