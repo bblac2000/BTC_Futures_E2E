@@ -224,7 +224,10 @@ def summarize(rows, inelig, flip_inelig, donor_fail, bd, qfail, n_draw) -> dict:
             "donor_fail": donor_fail, "B_d_ms": bd, "quality_fail_intervals": qfail, "per_T": per_t, "best_T": best,
             "head_bps_best": heads.get(best) if best else None, "kill_bps": KILL_BPS, "verdict": verdict, "imbalance_terciles": terc,
             "controls": controls, "range": [SP.EXPOSED_START_MS, SP.EXPOSED_END_MS],
-            "weights": W, "note": "단일 장세 파일럿 · 매매 근거 아님 · 대조와 민감도는 보고 전용"}
+            "weights": W, "note": "단일 장세 파일럿 · 매매 근거 아님 · 대조와 민감도는 보고 전용",
+            "quality_note": ("매니페스트 gaps 표에 2026-10-10 06:16~07:42Z 공백 행이 없다(수집기가 OOM으로 죽어 기록하지 못함). "
+                             "품질 보고서 l2-2026-10-10.json은 스트림별 최대 무수신 길이(depth100ms 5,062.5초)만 있고 시작·끝 시각이 없어 "
+                             "구간으로 옮길 수 없다 — 그 구간은 §4-1 2의 스트림 연속성 검사(depth 수신 간격 ≤ 1초)가 제외한다.")}
 
 
 def markdown(res: dict) -> str:
