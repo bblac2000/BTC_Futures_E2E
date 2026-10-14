@@ -55,6 +55,7 @@ def _get(url: str) -> bytes:
 def one(k: str) -> tuple[str, str, str]:
     f = DEST / k
     f.parent.mkdir(parents=True, exist_ok=True)
+    f.unlink(missing_ok=True)                                                  # 실패하면 남은 zip이 없도록(표시 파일이 권위)
     try:
         data = _get(BASE + k)
         want = _get(BASE + k + ".CHECKSUM").decode().split()[0].lower()

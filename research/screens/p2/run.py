@@ -71,7 +71,7 @@ def main() -> int:
                 rows.append((e, compute.outcome(sym, e, t0)))
         counts.append(len(rows))
         weeks.append(compute.build_week(t0, rows))
-        assert_within([t0 - 2 * compute.WEEK] + [o.x for _, o in rows])
+        assert_within([t0 - 2 * compute.WEEK, t0 - 8 * compute.DAY, t0 - compute.DAY, t0] + [o.x for _, o in rows])
     hold = [c >= compute.MIN_N for c in counts]
     traded = compute.turnover(weeks, hold)
     H_ix = [k for k in range(len(weeks)) if hold[k]]
@@ -144,6 +144,7 @@ def main() -> int:
                   "eligible_count_quantiles": [float(x) for x in np.percentile(counts, [0, 25, 50, 75, 100])]},
         "early_exit_name_weeks": early, "funding_deficit_name_weeks": deficit,
         "missing_settlements": sum(weeks[k].missing for k in H_ix), "collisions": sum(weeks[k].collisions for k in H_ix),
+        "offgrid_settlements": sum(weeks[k].offgrid for k in H_ix), "all_missing_funding_name_weeks": sum(weeks[k].all_missing for k in H_ix),
         "symbols_loaded": len(syms),
         "note": "단일 스크린 · 매매 근거 아님 · 이른 청산 가격은 대체값(스펙 §4-3) · 입력 목록과 SHA256은 fetch_manifest.tsv",
     }

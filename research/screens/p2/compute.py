@@ -97,37 +97,38 @@ class HoldFunding:
     missing: int
     collisions: int
     offgrid: int
+    all_missing: bool
 
 
 def hold_funding(s: Series, t0: int, x: int, g: int) -> HoldFunding:
-    """(T, X]의 예상 격자(§4-3) — 한 칸 유효 하나 = 더함 · 없음/나쁨 = 빠짐 · 둘 이상 = 충돌(빠짐) · 격자 밖 유효 = 더함."""
+    """보유 펀딩(§4-3 · 칸 단위): E_hold = (T, X]의 격자 · 레코드는 가장 가까운 칸(±60초)에 속한다(T 칸 = 진입 전 · X 칸은 X + 60초까지).
+    한 칸에 유효 하나 = 더함 · 없음/나쁨 = 빠짐 · 둘 이상 = 충돌(빠짐) · 격자 밖(T + 60초 초과 ~ X − 60초 미만 · 어느 칸에도 안 듦) = 더함."""
     if x <= t0:
-        return HoldFunding(0.0, 0, 0, 0)
+        return HoldFunding(0.0, 0, 0, 0, True)
     ts, val = _slice(s, t0 - TOL, x + TOL, lo_incl=True, hi_incl=True)
     ok = ~np.isnan(val)
     tv, vv = ts[ok], val[ok]
     pts = grid(t0, x, g, lo_incl=False, hi_incl=True)
-    total, missing, coll = 0.0, 0, 0
-    near = np.zeros(tv.size, dtype=bool)
-    full = grid(t0 - g, x + g, g, lo_incl=True, hi_incl=True)                  # 격자 밖 판단은 T 칸까지 포함한 전체 격자로
-    for p in full:
-        near |= np.abs(tv - p) <= TOL
+    total, missing, coll, used = 0.0, 0, 0, 0
     for p in pts:
         m = np.nonzero(np.abs(tv - p) <= TOL)[0]
         if m.size == 1:
             total += float(vv[m[0]])
+            used += 1
         else:
             missing += 1
             coll += int(m.size >= 2)
-    off = (~near) & (tv > t0) & (tv <= x)
+    near = np.zeros(tv.size, dtype=bool)
+    for p in grid(t0, x, g, lo_incl=True, hi_incl=True):                       # T 칸 포함
+        near |= np.abs(tv - p) <= TOL
+    off = (~near) & (tv > t0 + TOL) & (tv < x - TOL)
     total += float(vv[off].sum())
-    return HoldFunding(total, missing, coll, int(off.sum()))
+    return HoldFunding(total, missing, coll, int(off.sum()), used == 0 and not off.any())
 
 
 def first_obs_run_start(s: Series, before: int) -> int | None:
-    """`before` 이전 마지막 유효 정산이 속한 연속 구간(30일 넘는 공백으로 나뉨)의 시작."""
-    ok = ~np.isnan(s.val)
-    ts = s.ts[ok]
+    """`before` 이전 마지막 정산 레코드(나쁜 레코드 포함 · §3 나이)가 속한 연속 구간(30일 넘는 공백으로 나뉨)의 시작."""
+    ts = s.ts
     i = int(np.searchsorted(ts, before, side="left")) - 1
     if i < 0:
         return None
@@ -161,7 +162,7 @@ class Entry:
 def eligible(sym: Symbol, t0: int) -> Entry | None:
     """주 t(시작 T)의 적격(§3 · 진입 전 정보만)."""
     lo8 = t0 - 8 * DAY
-    if months_between(t0 - WEEK, t0) & sym.unusable_funding:
+    if months_between(lo8, t0) & (sym.unusable_funding | sym.unusable_bars):
         return None
     if bad_in(sym.funding, lo8, t0) or bad_in(sym.bars, lo8, t0):
         return None
@@ -276,6 +277,8 @@ class Week:
     fund_deficit: np.ndarray
     missing: int = 0
     collisions: int = 0
+    offgrid: int = 0
+    all_missing: int = 0
     long: list[int] = field(default_factory=list)
     short: list[int] = field(default_factory=list)
     ratio: np.ndarray = field(default_factory=lambda: np.zeros(0))
@@ -289,7 +292,8 @@ def build_week(t0: int, entries: list[tuple[Entry, Outcome]]) -> Week:
     f = np.array([o.f.total for _, o in entries])
     w = Week(t0, [e.name for e, _ in entries], s0, [e.s1 for e, _ in entries], -r + f, r, f,
              np.array([o.forced for _, o in entries]), np.array([o.f.missing > 0 for _, o in entries]),
-             sum(o.f.missing for _, o in entries), sum(o.f.collisions for _, o in entries))
+             sum(o.f.missing for _, o in entries), sum(o.f.collisions for _, o in entries),
+             sum(o.f.offgrid for _, o in entries), sum(int(o.f.all_missing and o.x > t0) for _, o in entries))
     w.ratio = np.array([o.p_exit / e.p_entry for e, o in entries])
     q = n // 10
     order = sorted(range(n), key=lambda i: (s0[i], w.names[i]))

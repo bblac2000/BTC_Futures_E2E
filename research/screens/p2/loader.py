@@ -7,7 +7,13 @@ from pathlib import Path
 
 import numpy as np
 
-from research.screens.window import bounded_benchmark_csv, bounded_zip_csv, zip_has_header
+from research.screens.window import (
+    ReserveError,
+    assert_within,
+    bounded_benchmark_csv,
+    bounded_zip_csv,
+    zip_has_header,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 ARCHIVE = ROOT / "var" / "p2_archive" / "data" / "futures" / "um" / "monthly"
@@ -63,12 +69,9 @@ def dedup(rows: list[tuple[int, float]]) -> Series:
     return Series(np.array(ts, dtype=np.int64), np.array(val, dtype=float))
 
 
-def _month(p: Path) -> str:
-    stem = p.name.split(".")[0]
-    return stem[-7:]
-
-
 def _read_dir(d: Path, row) -> tuple[list[tuple[int, float]], frozenset[str]]:  # noqa: ANN001
+    """표시 파일(.unusable)이 있는 달은 zip을 읽지 않는다 · 열기/읽기 실패한 zip = 쓸 수 없음(그 파일의 행은 버림) ·
+    시각 칸 오류와 예약 구간은 `ReserveError`로 멈춘다."""
     rows: list[tuple[int, float]] = []
     bad: set[str] = set()
     if not d.exists():
@@ -76,7 +79,17 @@ def _read_dir(d: Path, row) -> tuple[list[tuple[int, float]], frozenset[str]]:  
     for p in sorted(d.glob("*.zip.unusable")):
         bad.add(p.name.removesuffix(".zip.unusable")[-7:])
     for p in sorted(d.glob("*.zip")):
-        rows.extend(bounded_zip_csv(p, row, header=zip_has_header(p)))
+        month = p.name.removesuffix(".zip")[-7:]
+        if month in bad:
+            continue
+        try:
+            part = list(bounded_zip_csv(p, row, header=zip_has_header(p)))
+        except ReserveError:
+            raise
+        except Exception:                                                         # noqa: BLE001 — 열기·읽기 실패
+            bad.add(month)
+            continue
+        rows.extend(part)
     return rows, frozenset(bad)
 
 
@@ -88,7 +101,11 @@ def symbols() -> list[str]:
 def read_symbol(name: str) -> Symbol:
     f, uf = _read_dir(ARCHIVE / "fundingRate" / name, _funding_row)
     b, ub = _read_dir(ARCHIVE / "klines" / name / "1d", _bar_row)
-    return Symbol(name, dedup(f), dedup(b), uf, ub)
+    sym = Symbol(name, dedup(f), dedup(b), uf, ub)
+    for ser in (sym.funding, sym.bars):
+        if ser.ts.size:
+            assert_within([int(ser.ts[0]), int(ser.ts[-1])])
+    return sym
 
 
 def _rate(line: str) -> tuple[str, float | None]:

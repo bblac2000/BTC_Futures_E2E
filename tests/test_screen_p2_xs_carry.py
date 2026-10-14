@@ -134,3 +134,45 @@ def test_mde_and_benchmark_weekly_bps():
     assert m is not None and m["n_eff"] == pytest.approx(16 / 1.6) and m["power_label"] == "feasible"
     assert C.mde(np.array([1.0])) is None
     assert C.dtb3_weekly_bps([("2024-03-01", 5.0)], T) == pytest.approx(1e4 * 0.05 * 7 / 365)
+
+
+# ---------- Codex 코드 검토 회귀(스펙 r7) ----------
+def test_hold_funding_slot_membership_at_T_and_X():
+    base = [(t, 0.001) for t in range(T - DAY, T + 8 * DAY, 8 * H) if t not in (T, T + WEEK)]
+    at_t = C.hold_funding(dedup(base + [(T + 30_000, 0.5), (T + WEEK + 30_000, 0.001)]), T, T + WEEK, 8 * H)
+    assert at_t.total == pytest.approx(21 * 0.001) and at_t.offgrid == 0 and at_t.missing == 0   # T+30초 = T 칸(제외) · X+30초 = X 칸
+    off = C.hold_funding(dedup(base + [(T + WEEK, 0.001), (T + 3 * DAY + 2 * H, 0.004)]), T, T + WEEK, 8 * H)
+    assert off.offgrid == 1 and off.total == pytest.approx(21 * 0.001 + 0.004)
+    assert C.hold_funding(dedup([]), T, T + WEEK, 8 * H).all_missing
+
+
+def test_unusable_bar_month_in_the_pre_entry_window_makes_it_ineligible():
+    t = ms(2024, 3, 4)
+    s = Symbol("AUSDT", fund(t - 60 * DAY, t + 8 * DAY), bars(t - 60 * DAY, t + 8 * DAY), frozenset(), frozenset({"2024-02"}))
+    assert C.eligible(s, t) is None
+    s2 = Symbol("AUSDT", s.funding, s.bars, frozenset(), frozenset({"2023-12"}))
+    assert C.eligible(s2, t) is not None
+
+
+def test_age_counts_bad_records_as_observations():
+    rows = [(T - 50 * DAY, float("nan"))] + [(t, 0.001) for t in range(T - 20 * DAY, T + 8 * DAY, 8 * H)]
+    s = sym(f=dedup(rows))
+    assert C.first_obs_run_start(s.funding, T) == T - 50 * DAY and C.eligible(s, T) is not None
+
+
+def test_loader_marks_broken_or_flagged_zips_unusable_and_never_reads_them(tmp_path):
+    import zipfile
+
+    from research.screens.p2 import loader
+    d = tmp_path / "AUSDT"
+    d.mkdir()
+    good = d / "AUSDT-fundingRate-2024-03.zip"
+    with zipfile.ZipFile(good, "w") as z:
+        z.writestr("AUSDT-fundingRate-2024-03.csv", f"calc_time,funding_interval_hours,last_funding_rate\n{T},8,0.0001\n")
+    (d / "AUSDT-fundingRate-2024-04.zip").write_bytes(b"not a zip")
+    stale = d / "AUSDT-fundingRate-2024-05.zip"
+    with zipfile.ZipFile(stale, "w") as z:
+        z.writestr("x.csv", f"{T + 70 * DAY},8,0.5\n")
+    (d / "AUSDT-fundingRate-2024-05.zip.unusable").write_text("checksum mismatch\n")
+    rows, bad = loader._read_dir(d, loader._funding_row)
+    assert rows == [(T, 0.0001)] and bad == {"2024-04", "2024-05"}
