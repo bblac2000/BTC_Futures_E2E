@@ -19583,6 +19583,7 @@ data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2024-12.zip	1956
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-01.zip	1921
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-02.zip	1742
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-03.zip	1903
+data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-04.zip	1833
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-05.zip	1899
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-06.zip	1874
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2025-07.zip	1918
@@ -19597,7 +19598,7 @@ data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2026-03.zip	1842
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2026-04.zip	1792
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2026-05.zip	1826
 data/futures/um/monthly/klines/AAVEUSDT/1d/AAVEUSDT-1d-2026-06.zip	1810
-data/futures/um/monthly/klines/AAVEUSDdata/futures/um/monthly/klines/ACEUSDT/1d/ACEUSDT-1d-2023-12.zip	1127
+data/futures/um/monthly/klines/ACEUSDT/1d/ACEUSDT-1d-2023-12.zip	1127
 data/futures/um/monthly/klines/ACEUSDT/1d/ACEUSDT-1d-2024-01.zip	2114
 data/futures/um/monthly/klines/ACEUSDT/1d/ACEUSDT-1d-2024-02.zip	1986
 data/futures/um/monthly/klines/ACEUSDT/1d/ACEUSDT-1d-2024-03.zip	2118
@@ -37626,7 +37627,6 @@ data/futures/um/monthly/klines/XEMUSDT/1d/XEMUSDT-1d-2026-03.zip	536
 data/futures/um/monthly/klines/XEMUSDT/1d/XEMUSDT-1d-2026-04.zip	531
 data/futures/um/monthly/klines/XEMUSDT/1d/XEMUSDT-1d-2026-05.zip	540
 data/futures/um/monthly/klines/XEMUSDT/1d/XEMUSDT-1d-2026-06.zip	536
-data/futures/um/monthly/klines/XEMUSDT/1d/XEMUSDdata/futures/um/monthly/klines/YALAUSDT/1d/YALAUSDT-1d-2025-08.zip	1597
 data/futures/um/monthly/klines/XLEUSDT/1d/XLEUSDT-1d-2026-06.zip	1232
 data/futures/um/monthly/klines/XLMUSDT/1d/XLMUSDT-1d-2020-01.zip	803
 data/futures/um/monthly/klines/XLMUSDT/1d/XLMUSDT-1d-2020-02.zip	1652
@@ -38057,6 +38057,7 @@ data/futures/um/monthly/klines/XVSUSDT/1d/XVSUSDT-1d-2026-03.zip	1751
 data/futures/um/monthly/klines/XVSUSDT/1d/XVSUSDT-1d-2026-04.zip	1687
 data/futures/um/monthly/klines/XVSUSDT/1d/XVSUSDT-1d-2026-05.zip	1737
 data/futures/um/monthly/klines/XVSUSDT/1d/XVSUSDT-1d-2026-06.zip	1699
+data/futures/um/monthly/klines/YALAUSDT/1d/YALAUSDT-1d-2025-08.zip	1597
 data/futures/um/monthly/klines/YALAUSDT/1d/YALAUSDT-1d-2025-09.zip	1800
 data/futures/um/monthly/klines/YALAUSDT/1d/YALAUSDT-1d-2025-10.zip	1827
 data/futures/um/monthly/klines/YALAUSDT/1d/YALAUSDT-1d-2025-11.zip	1866
