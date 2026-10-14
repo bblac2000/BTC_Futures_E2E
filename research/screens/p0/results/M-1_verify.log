@@ -1,0 +1,25 @@
+{
+ "retained": {
+  "depth100ms": {
+   "expected": 34795,
+   "kept": 34783,
+   "ratio": 0.9996551228624803
+  },
+  "bookticker": {
+   "expected": 34790,
+   "kept": 34779,
+   "ratio": 0.9996838171888474
+  },
+  "aggtrade": {
+   "expected": 34637,
+   "kept": 34626,
+   "ratio": 0.9996824205329561
+  }
+ },
+ "excluded": 0,
+ "ok": true
+}
+
+real	1m39.657s
+user	0m42.938s
+sys	0m16.614s
