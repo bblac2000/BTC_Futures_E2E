@@ -102,6 +102,9 @@ def test_slippage_sensitivity_subtracts_the_original_pair_round_trip():
 
 def test_undefined_rho_is_zero_and_two_trades_still_get_an_mde():
     assert reprice.lag1(np.array([1.0, 1.0, 1.0, 1.0])) == 0.0
+    assert reprice.lag1(np.full(4, 0.1)) == 0.0                                      # Codex PRE r3: 부동소수 상수
+    assert reprice.mde(np.full(4, 0.1), reprice.COEF_UNCORRECTED)[1] == pytest.approx(4 / 1.6)
+    assert reprice.lag1(np.array([0.1, 0.1, 0.1, 0.2])) == 0.0                      # 앞쪽 조각이 상수
     assert reprice.lag1(np.array([1.0, 2.0])) == 0.0
     m, n_eff, rho = reprice.mde(np.array([0.0, 10.0]), reprice.COEF_UNCORRECTED)
     assert rho == 0.0 and n_eff == pytest.approx(2 / 1.6) and m > 0

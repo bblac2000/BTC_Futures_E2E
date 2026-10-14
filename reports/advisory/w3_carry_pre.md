@@ -191,3 +191,31 @@ Verification: 36 checks passed directly, three loader tests passed with in-memor
 VERDICT: FIX
 
 입장: P2 둘 동의 — 고침(정의 안 되는 ρ̂ = 0 · n = 2도 MDE · 빈 창 null). P1 동의 — 첫 관측 예외는 사용자 결정으로 올린다(계산 전 · 고정 전).
+
+## Codex PRE r3 — 원문(verbatim · 최종 메시지) · VERDICT: FIX(P2 하나)
+Reviewed `d610e65` read-only. HEAD advanced to `adeeb30` during review; all scoped files remain identical. I made no edits and computed no real-ledger excess-return means or CIs.
+
+| Prior item | Status | Assessment |
+|---|---|---|
+| R2 P1: first-observation exception | **RESOLVED** | Binding #108 authorizes the DTB3 lookback. Lookup now uses the last observation on/before entry; flags and exclusion sensitivity remain. |
+| R2 P2: rho / n=2 | **PARTIAL** | Two-trade MDE is fixed. Constant-series rho still has an edge-case defect below. |
+| R2 P2: empty-window nulls | **RESOLVED** | Explicit null statistics/CIs; decision conditions remain false. |
+| Earlier item 4 | **RESOLVED** | Missing-rate handling, disclosures, point-in-time lookup, flags, and sensitivity match r3. |
+| Earlier item 5 | **RESOLVED** | RNG, blocks, accepted draws, and empty-window output match r3. |
+| Earlier item 6 | **PARTIAL** | Ordering, estimator, coefficients, floor, and `ddof=1` match; constant-series detection remains incomplete. |
+
+The guard exception is keyed to the **DTB3 basename pattern**, with fixed bounds of `2020-12-22` through `2026-06-30` and no window-widening parameter. Ordinary market/funding/premium filenames are rejected before opening. Reserved filenames are refused, and reserved rows never reach the parser. Existing CSV/ZIP paths retain `require_window`; API validation is unchanged. `_filtered` is excluded from both public allowlists, and direct-import/module-access probes are rejected by the static rule.
+
+This is filename enforcement: it cannot authenticate the contents of a renamed or symlinked file. The current loader uses the specified DTB3 file, with no market-data use of the exception.
+
+The code otherwise implements r3, but **not exactly**:
+
+- **P0:** None.
+- **P1:** None.
+- **P2 — Constant decimal series can report rho ≈ 1 instead of zero.** In [reprice.py:81](/home/cms/project/BTC_Futures_E2E/research/screens/p1/reprice.py:81), checking `np.std(...) == 0.0` misses some exactly constant inputs because of floating-point rounding. Synthetic `np.full(4, 0.1)` produces `rho_lag1 = 1.0` and `n_eff = 0.8`; r3 requires `rho_lag1 = 0.0` and `n_eff = 2.5`. Detect constant pair slices directly, and add this decimal-valued regression case.
+
+Verification: **49 existing targeted checks passed**, including 11 file-fixture tests using in-memory files. Additional synthetic checks confirmed guard boundaries, static rejection of `_filtered`, two-trade MDE, flags, empty-arm decisions, and strict JSON serialization.
+
+VERDICT: FIX
+
+입장: 동의 — 상수 판정을 값 비교로 · 회귀 시험 추가.

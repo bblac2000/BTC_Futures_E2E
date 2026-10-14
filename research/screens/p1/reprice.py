@@ -78,7 +78,8 @@ def iid_boot(values: np.ndarray, rng: np.random.Generator, n_draw: int) -> list[
 
 def lag1(values: np.ndarray) -> float:
     """진입 순서 거래열의 이웃 쌍 피어슨 상관 — n < 3이거나 어느 쪽 분산이 0이면 정의되지 않음 → 0(스펙 §4-5)."""
-    if values.size < 3 or float(np.std(values[:-1])) == 0.0 or float(np.std(values[1:])) == 0.0:
+    a, b = values[:-1], values[1:]
+    if values.size < 3 or bool(np.all(a == a[0])) or bool(np.all(b == b[0])):       # 상수 판정은 값 비교로(부동소수 분산 잔차 회피)
         return 0.0
     r = float(np.corrcoef(values[:-1], values[1:])[0, 1])
     return r if math.isfinite(r) else 0.0
