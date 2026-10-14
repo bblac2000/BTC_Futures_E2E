@@ -174,7 +174,7 @@ BANNED_NAMES = {"open", "read", "readline", "readlines", "readinto", "read_text"
                 "read_table", "ZipFile", "FileIO", "urlopen", "loadtxt", "genfromtxt", "fromfile", "fromregex", "load", "memmap",
                 "DataSource", "open_memmap", "tofile", "save", "savez", "savetxt", "__import__", "import_module", "exec", "eval",
                 "compile", "getattr", "setattr", "globals", "vars", "locals", "__dict__", "__builtins__", "io", "json", "zipfile",
-                "urllib", "os", "sys", "subprocess", "_bounded", "__kwdefaults__", "__defaults__", "__globals__",
+                "urllib", "os", "sys", "subprocess", "bounded_records", "_bounded", "__kwdefaults__", "__defaults__", "__globals__",
                 "__closure__", "__code__", "__wrapped__", "__module__"}
 BOUNDED = {"bounded_csv_file", "bounded_zip_csv", "fetch_json_rows"}
 
@@ -190,7 +190,7 @@ def screen_violations(src: str, *, is_loader: bool, family: str = "p1") -> list[
     for n in ast.walk(tree):
         if isinstance(n, ast.Import):
             for a in n.names:
-                if a.name.split(".")[0] not in ALLOWED_IMPORTS - {"research"} or (a.asname and a.asname != "np"):
+                if a.name.split(".")[0] not in ALLOWED_IMPORTS - {"research"} or (a.asname and (a.name, a.asname) != ("numpy", "np")):
                     bad.append(f"import {a.name} as {a.asname}")
         elif isinstance(n, ast.ImportFrom):
             mod = n.module or ""
@@ -238,6 +238,9 @@ def screen_violations(src: str, *, is_loader: bool, family: str = "p1") -> list[
     ("from numpy import fromregex as scan\nr = scan('a', r'v', [('v', int)])", False),                    # Codex POST r3 (c): 별칭
     ("from research.screens.window import fetch_json_rows\nx = fetch_json_rows.__kwdefaults__", True),    # Codex POST r3 (b)
     ("from research.screens.window import bounded_zip_csv\nrows = list(bounded_zip_csv('a', str, header=False))", False),  # 로더 밖 읽기
+    ("from . import loader\nx = loader.bounded_records([], 't', dict)", False),                           # Codex POST r4
+    ("import math as np", False),
+    ("import numpy.linalg as np", False),
 ])
 def test_static_rule_catches_known_bypasses(src, is_loader):
     assert screen_violations(src, is_loader=is_loader)
