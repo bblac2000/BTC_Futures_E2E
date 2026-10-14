@@ -61,3 +61,6 @@
 
 ## 스크린 라운드 M-1 — P0 메이커 진입 실행 감사 · KILL → stay taker(2026-10-14 · 레지스트리 #103 · #104 · #105)
 | L17 | (측정 · 사용자 원문 2026-10-14) "Maker-entry at the touch on BTCUSDT perp yields ≈0.4–0.6 bps per side net of fallback, indistinguishable from direction-flipped and other-day controls (0.41 / 0.61); fill rate 16–22 % within 30–120 s; the gain is the generic value of resting at the touch, not execution alpha. Single-regime pilot 2026-09-17 → 10-11." |
+
+## 스크린 라운드 S-carry-1 — carrybot G1 장부 사후 비용 민감도 · carry 가족 닫힘(2026-10-14 · 레지스트리 #110 · 스크린 원장 S-carry-1)
+| L18 | (스크린 · carry k = 1) **carry 가족을 닫는다 — 효과 부재가 아니라 검정력 불가와 최근 창 음수다.** 현물 헤지 캐리(carrybot G1 거래 장부 · 비용 B 17.5 bps · DTB3 시점 기준)의 평균 (net_B − DTB3): G1 19.96 bps(n 77 · 60일 블록 CI [−3.31, 55.18]) · 히스테리시스 81.66(n 24 · [17.95, 157.60]). 보정 전 MDE 43.6 · 180.9 bps(둘 다 불가) · N = 64 보정 62.3 · 258.5. 히스테리시스의 전 구간 양수는 2024-07 이전 15건(평균 +145 bps)에 몰렸고 이후 9건은 −23.9(0 포함 CI) — 2024–26 금리에서는 헤지 보유 기간의 DTB3(85.7 bps)가 비용 전 gross(79.3)를 넘는다. 사후 스크린(원래 결과를 읽은 뒤)이라 효과 통과는 발견 증거가 아니다. 다시 열려면 사용자 레지스트리 행이 필요하다. |

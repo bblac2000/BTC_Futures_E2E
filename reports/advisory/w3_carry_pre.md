@@ -219,3 +219,20 @@ Verification: **49 existing targeted checks passed**, including 11 file-fixture 
 VERDICT: FIX
 
 입장: 동의 — 상수 판정을 값 비교로 · 회귀 시험 추가.
+
+## Codex PRE r4 — 원문(verbatim · 최종 메시지) · **VERDICT: MERGE**
+Reviewed `aedcd4e` read-only.
+
+| Prior item | Status | Assessment |
+|---|---|---|
+| R3 P2: constant decimal series rho | **RESOLVED** | `np.full(4, 0.1)` now yields `rho_lag1 = 0.0`, `n_eff = 2.5`. Either constant pair slice is detected. |
+| R2 P2: rho / n=2 | **RESOLVED** | Constant-series fix verified; two-trade MDE remains correct. |
+| Earlier item 6 | **RESOLVED** | Constant detection is complete; ordering, estimator, coefficients, floor, and `ddof=1` remain correct. |
+
+`git diff d610e65..aedcd4e -- research/screens tests` confirms only the `lag1` fix and three regression assertions changed: two files, five insertions, one deletion. Nothing else changed in scope.
+
+**New findings:** P0: none. P1: none. P2: none.
+
+Verification: **49 targeted tests passed**, with file fixtures redirected to memory. Additional synthetic checks passed for short series, both constant slices, nonconstant Pearson correlation, window integration, and empty-arm decisions. HEAD stayed `aedcd4e`; working tree remained clean. No files edited and no real-ledger excess-return means or CIs computed.
+
+VERDICT: MERGE
