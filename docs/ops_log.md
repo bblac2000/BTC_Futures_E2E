@@ -11930,3 +11930,8 @@ sd requires a P&L replay on pre-IS, which #4 never did. Contain it: script commi
 - 하지 않은 것: 인스턴스 중지/종료(이 PC에 AWS CLI 없음 · 종료(Terminate)는 삭제라 사용자에게 중지와의 차이를 알리고 콘솔에서 직접 하도록 남김) · 파일 삭제 · E2E_Hybrid_Bot 저장소 문서 수정.
 - 트라이얼 #5: 브리프 r1 before-pass(위) 뒤 보정 스크립트를 썼으나 **실행 전 중단** — 자료 미열람 · 스크립트는 미실행 표시와 함께 보존.
 - 검토: 종료 기록은 advisor 호출 없이 적었다(사용자의 정지 지시 뒤 · 기록 전용). Codex 검토 없이 수집기 호스트를 바꾼 것은 사용자 직접 지시에 따른 것이며 #92에 공시.
+
+## 2026-10-14 — 재개(#95) · W1 스크린 프로토콜과 원장(#96~#98)
+- 검토 원문(advisor + Codex · PRE/POST)은 `reports/advisory/w1_screen_protocol_pre.md` · `w1_screen_protocol_post.md`에 그대로 있다 — 이번 라운드부터 원문 보존 규칙은 그 파일들로 충족한다(사용자 2026-10-14 상설 규칙).
+- 프로토콜 v1(30229b25 · Drive 02:30:44.771Z) → v2(367a04ba · Drive 02:49:45.052Z) · Codex PRE r3 MERGE · POST r5 MERGE · 전체 시험 1,899 통과.
+- #96: 판정기 문턱 표기 정정(θ = 10 bps · MDE 문턱 2θ = 20) — Claude Code의 2026-10-11 기록 오류.
