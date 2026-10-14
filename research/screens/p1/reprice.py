@@ -20,29 +20,25 @@ def utc_date(ms: int) -> str:
     return datetime.datetime.fromtimestamp(ms / 1000, datetime.UTC).date().isoformat()
 
 
-FIRST_OBS_SEED_BEFORE = "2021-01-04"                                             # 창 안 첫 관측(스펙 §2 첫 관측 규칙 · D4)
+FLAG_ENTRY_BEFORE = "2021-01-04"                                                 # 창 안 첫 관측 — 이보다 앞선 진입은 표시(민감도 열 · #108)
 
 
-def rate_at(rates: list[tuple[str, float]], entry_ms: int) -> tuple[float, bool]:
-    """(진입 날짜(UTC) 이하의 마지막 DTB3 관측 · 첫 관측 규칙을 썼는가). 진입일이 창 안 첫 관측(2021-01-04)보다 앞서면 그 첫 관측 —
-    그 밖에 관측이 없으면 오류(앞 값 채우기 · 0 대체 없음)."""
+def rate_at(rates: list[tuple[str, float]], entry_ms: int) -> float:
+    """진입 날짜(UTC) 이하의 마지막 DTB3 관측(연율 %) — 시점 기준(#108). 없으면 오류(앞 값 채우기 · 0 대체 없음)."""
     days = [d for d, _ in rates]
-    day = utc_date(entry_ms)
-    i = bisect.bisect_right(days, day) - 1
-    if i >= 0:
-        return rates[i][1], False
-    if days and days[0] == FIRST_OBS_SEED_BEFORE and day < FIRST_OBS_SEED_BEFORE:
-        return rates[0][1], True
-    raise ValueError(f"진입 {day} 이전 DTB3 관측 없음")
+    i = bisect.bisect_right(days, utc_date(entry_ms)) - 1
+    if i < 0:
+        raise ValueError(f"진입 {utc_date(entry_ms)} 이하 DTB3 관측 없음")
+    return rates[i][1]
 
 
 def per_trade(t: Trade, rates: list[tuple[str, float]]) -> dict[str, float]:
     """거래 하나의 값(전부 그 거래 명목의 bps)."""
     k = 1e4 / t.notional
     gross = t.funding_collected + t.residual_delta_pnl
-    r, seeded = rate_at(rates, t.entry_ms)
+    r = rate_at(rates, t.entry_ms)
     dtb3 = t.locked * r / 100.0 * (t.exit_ms - t.entry_ms) / (365 * DAY_MS)
-    out = {"seeded_rate": float(seeded), "gross": gross * k, "dtb3": dtb3 * k, "dgs2": t.opportunity_cost * k, "orig_net": t.net_pnl * k,
+    out = {"flag_entry_before_2021_01_04": float(utc_date(t.entry_ms) < FLAG_ENTRY_BEFORE), "gross": gross * k, "dtb3": dtb3 * k, "dgs2": t.opportunity_cost * k, "orig_net": t.net_pnl * k,
            "orig_cost": (t.fees + t.slippage) * k}
     for x, bps in COSTS.items():
         out[f"net_{x}"] = out["gross"] - bps

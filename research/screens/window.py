@@ -49,6 +49,11 @@ def _bounded[R, T](raw_items: Iterable[R], ts_of: Callable[[R], int], parse: Cal
                   end_ms: int = SCREEN_END_MS, dropped: list[int] | None = None) -> Iterator[T]:
     """(모듈 내부용) 원시 항목을 게으르게 받아 창 안의 것만 `parse`한다. 창 밖 항목은 값 해석 없이 버리고 센다(`dropped[0]`)."""
     require_window(start_ms, end_ms)
+    yield from _filtered(raw_items, ts_of, parse, start_ms, end_ms, dropped)
+
+
+def _filtered[R, T](raw_items: Iterable[R], ts_of: Callable[[R], int], parse: Callable[[R], T], start_ms: int, end_ms: int,
+                    dropped: list[int] | None) -> Iterator[T]:
     for raw in raw_items:
         t = ts_of(raw)
         if not isinstance(t, int) or isinstance(t, bool) or t < 0:
@@ -126,6 +131,23 @@ def bounded_zip_csv[T](path: Path, parse: Callable[[str], T], *, header: bool, t
                                 end_ms=end_ms, dropped=dropped)
 
 
+#: 벤치마크 예외(사용자 #108): 이 이름의 **벤치마크 파일만** 창 시작 10일 전부터 읽을 수 있다(진입 시점의 마지막 관측용).
+#: 시장 · 펀딩 · 프리미엄 · 전략 자료의 읽기(`bounded_csv_file` · `bounded_zip_csv` · `fetch_json_rows`)는 그대로 2021-01-01부터다.
+BENCHMARK_FILE = re.compile(r"^DTB3_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.csv$")
+BENCHMARK_LOOKBACK_MS = 10 * 86_400_000
+
+
+def bounded_benchmark_csv[T](path: Path, parse: Callable[[str], T], *, ts_kind: str = "iso") -> Iterator[T]:
+    """벤치마크 CSV(첫 칸 = 날짜 · 머리줄 있음)를 [창 시작 − 10일, 창 끝]으로 읽는다. 이름이 `BENCHMARK_FILE`이 아니면 열기 전에 거부."""
+    name = Path(path).name
+    if not BENCHMARK_FILE.match(name):
+        raise ReserveError(f"벤치마크 예외는 벤치마크 파일에만: {name}")
+    refuse_reserved_archive(name)
+    with Path(path).open(encoding="utf-8", newline="") as fh:
+        yield from _filtered(_data_lines(fh, True), _ts_of_line(0, ts_kind, ","), parse, SCREEN_START_MS - BENCHMARK_LOOKBACK_MS,
+                             SCREEN_END_MS, None)
+
+
 def zip_has_header(path: Path, *, ts_field: int = 0, delimiter: str = ",") -> bool:
     """첫 줄의 **시각 칸만** 보고 머리줄인지 답한다(숫자가 아니면 머리줄) — 값 칸은 읽지 않는다. 결과는 로더가 `header=`로 명시해 넘긴다."""
     refuse_reserved_archive(Path(path).name)
@@ -173,7 +195,7 @@ def write_result(path: Path, obj: Any) -> str:
 
 #: 스크린 모듈이 이 모듈에서 가져다 쓸 수 있는 이름(시험이 강제 — `window.io` 같은 우회 금지)
 PUBLIC = ("SCREEN_START_MS", "SCREEN_END_MS", "ReserveError", "require_window", "refuse_reserved_archive", "assert_within",
-          "bounded_csv_file", "bounded_zip_csv", "zip_has_header", "fetch_json_rows", "write_result")
+          "bounded_csv_file", "bounded_zip_csv", "zip_has_header", "fetch_json_rows", "write_result", "bounded_benchmark_csv")
 
 #: loader.py가 아닌 스크린 모듈이 쓸 수 있는 이름(읽기 함수 제외)
 PUBLIC_NON_LOADER = ("SCREEN_START_MS", "SCREEN_END_MS", "ReserveError", "assert_within", "write_result")

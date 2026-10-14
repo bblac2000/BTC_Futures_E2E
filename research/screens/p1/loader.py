@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from research.screens.window import bounded_csv_file
+from research.screens.window import bounded_benchmark_csv, bounded_csv_file
 
 DATA = Path(__file__).resolve().parent / "data"
 LEDGER = DATA / "carrybot_trades.csv"
@@ -48,5 +48,5 @@ def _rate(line: str) -> tuple[str, float | None]:
 
 
 def dtb3(path: Path = DTB3) -> list[tuple[str, float]]:
-    """(날짜, 연율 %) — 기본 창(2021-01-01 ~ · D4)만 · 관측 없는 날(빈 칸 · ".")은 뺀다."""
-    return [(d, v) for d, v in bounded_csv_file(path, _rate, ts_kind="iso", header=True) if v is not None]
+    """(날짜, 연율 %) — 벤치마크 예외(#108): 창 시작 10일 전부터 · 관측 없는 날(빈 칸 · ".")은 뺀다."""
+    return [(d, v) for d, v in bounded_benchmark_csv(path, _rate) if v is not None]

@@ -176,7 +176,7 @@ BANNED_NAMES = {"open", "read", "readline", "readlines", "readinto", "read_text"
                 "compile", "getattr", "setattr", "globals", "vars", "locals", "__dict__", "__builtins__", "io", "json", "zipfile",
                 "urllib", "os", "sys", "subprocess", "bounded_records", "_bounded", "__kwdefaults__", "__defaults__", "__globals__",
                 "__closure__", "__code__", "__wrapped__", "__module__"}
-BOUNDED = {"bounded_csv_file", "bounded_zip_csv", "fetch_json_rows"}
+BOUNDED = {"bounded_csv_file", "bounded_zip_csv", "fetch_json_rows", "bounded_benchmark_csv"}
 
 
 def screen_violations(src: str, *, is_loader: bool, family: str = "p1") -> list[str]:
@@ -264,3 +264,31 @@ def test_no_order_path_in_screens():
     for p in SCREENS.rglob("*.py"):
         src = p.read_text(encoding="utf-8")
         assert "create_order" not in src and "/fapi/v1/order" not in src and "new_order" not in src, p
+
+
+# ---------- 벤치마크 예외(사용자 #108) ----------
+def test_market_and_funding_reads_at_2020_12_31_are_still_refused(tmp_path):
+    """실패하도록 설계: 벤치마크 예외가 생긴 뒤에도 시장 · 펀딩 읽기는 2021-01-01 전을 거부한다."""
+    p = tmp_path / "BTCUSDT-fundingRate-2020-12.csv"
+    p.write_text(f"{ms(2020, 12, 31)},0.0001\n", encoding="utf-8")
+    with pytest.raises(W.ReserveError):
+        list(W.bounded_csv_file(p, str, start_ms=ms(2020, 12, 31)))
+    with pytest.raises(W.ReserveError):
+        W.require_window(ms(2020, 12, 31), ms(2021, 1, 2))
+    q = tmp_path / "BTCUSDT-1m-2021-01.csv"
+    q.write_text(f"{ms(2020, 12, 31)},1.0\n{ms(2021, 1, 1)},2.0\n", encoding="utf-8")
+    assert list(W.bounded_csv_file(q, lambda s: s.split(",")[1].strip())) == ["2.0"]          # 12-31 줄은 버린다
+
+
+def test_benchmark_exception_is_keyed_to_the_benchmark_file_and_ten_days(tmp_path):
+    rows = "observation_date,DTB3\n2020-12-21,BAD\n2020-12-22,0.09\n2020-12-31,0.09\n2021-01-04,0.09\n2026-06-30,4.0\n2026-07-01,BAD\n"
+    good = tmp_path / "DTB3_2020-12-01_2026-06-30.csv"
+    good.write_text(rows, encoding="utf-8")
+    got = list(W.bounded_benchmark_csv(good, lambda s: s.split(",")[0]))
+    assert got == ["2020-12-22", "2020-12-31", "2021-01-04", "2026-06-30"]                   # 10일 전부터 · 예약 구간 없음
+    for name in ("BTCUSDT-fundingRate-2020-12.csv", "premiumIndex_2020-12-01_2026-06-30.csv", "DTB3.csv"):
+        bad = tmp_path / name
+        bad.write_text(rows, encoding="utf-8")
+        with pytest.raises(W.ReserveError):
+            list(W.bounded_benchmark_csv(bad, str))
+    assert list(inspect.signature(W.bounded_benchmark_csv).parameters) == ["path", "parse", "ts_kind"]   # 창을 넓히는 인자 없음

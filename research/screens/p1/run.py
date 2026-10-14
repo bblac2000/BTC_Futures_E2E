@@ -23,7 +23,7 @@ def window_stats(rows: list[dict[str, float]], entries: list[int], start_ms: int
     out: dict = {"n": len(rows)}
     if not rows:                                                                   # 스펙 §4-4: 통계와 CI는 null
         out.update({"sd_net_B": None, "mean": {k: None for k in KEYS}, "blocks": reprice.n_blocks(start_ms, SCREEN_END_MS),
-                    "n_seeded_rate": 0, "mean_net_B_dtb3_without_seeded": None, "sd_net_B_dtb3": None, "mde": None})
+                    "n_entry_before_2021_01_04": 0, "mean_net_B_dtb3_excl_entry_before_2021_01_04": None, "sd_net_B_dtb3": None, "mde": None})
         for key in ("net_B_dtb3", "net_A_dtb3", "net_C_dtb3"):
             out[f"ci95_block60_{key}"] = out[f"redraws_{key}"] = out[f"ci95_trade_iid_{key}"] = None
         return out
@@ -37,9 +37,9 @@ def window_stats(rows: list[dict[str, float]], entries: list[int], start_ms: int
         ci, redraws = reprice.block_boot(vals, blocks, k, np.random.default_rng(SEED), N_DRAW)
         out[f"ci95_block60_{key}"], out[f"redraws_{key}"] = ci, redraws
         out[f"ci95_trade_iid_{key}"] = reprice.iid_boot(vals, np.random.default_rng(SEED), N_DRAW)
-    keep = [r["net_B_dtb3"] for r in rows if not r["seeded_rate"]]
-    out["n_seeded_rate"] = len(rows) - len(keep)
-    out["mean_net_B_dtb3_without_seeded"] = float(np.mean(keep)) if keep else None
+    keep = [r["net_B_dtb3"] for r in rows if not r["flag_entry_before_2021_01_04"]]
+    out["n_entry_before_2021_01_04"] = len(rows) - len(keep)
+    out["mean_net_B_dtb3_excl_entry_before_2021_01_04"] = float(np.mean(keep)) if keep else None
     if len(rows) >= 2:                                                             # sd(ddof 1)가 정의되는 한 MDE를 적는다
         m0, n_eff, rho = reprice.mde(v, reprice.COEF_UNCORRECTED)
         m1, _, _ = reprice.mde(v, reprice.COEF_N64)
