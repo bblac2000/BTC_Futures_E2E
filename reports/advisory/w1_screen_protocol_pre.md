@@ -163,3 +163,63 @@ R9 (Codex 9 · P1 — accepted). Benchmarks (D6) are reported comparisons with m
 Advisor items not covered above: Drive upload of the protocol for createdTime after the commit (file id + createdTime + sha256 into the registry row); draw count 1,000 fixed in the protocol.
 Files to write: docs/screen_protocol.md · docs/screen_registry.md · research/screens/__init__.py · research/screens/window.py · tests/test_screen_window.py · registry rows (correction, then procedure change).
 
+
+## 7. Codex PRE r2 — 프롬프트 머리(계획 r2 전문은 6절과 같다)와 응답 원문(verbatim)
+Read-only review completed; no files changed. “RESOLVED” below means resolved in the plan, subject to POST verification.
+
+1. **RESOLVED** — R1 correctly distinguishes θ = 10 from the 20 bps MDE cutoff; [registry #96](/home/cms/project/BTC_Futures_E2E/docs/trial_registry.md:104) records the correction without changing the judge.
+2. **RESOLVED** — R2 blocks execution pending the P1/P2 user decisions and fixes P0’s accounting and strict kill boundary.
+3. **RESOLVED** — R3 requires the sample, estimator, null, seed, direction, and decision conventions to be committed before execution.
+4. **PARTIAL [P0]** — R4 covers the main leakage paths, but an upstream reader can already parse reserve values before yielding `(ts_ms, row)`; require raw/lazy payloads, timestamp filtering before payload parsing, and an actual ingestion-path test proving excluded payloads are never interpreted.
+5. **PARTIAL [P0]** — R5 makes local START records countable, but must explicitly require new IDs for parameter/measurement-semantic changes and disclose the entire family search lineage, including relevant cross-repository runs, rather than only selected contributors.
+6. **RESOLVED** — R6 blocks promotion until formal pre-registration specifies and verifies k’s DSR use alongside the audited count without double counting.
+7. **RESOLVED** — R7 identifies P0’s exposed interval and dependent promotions, requires disjoint evaluation, and treats screened dates as development data.
+8. **RESOLVED** — R8 preserves coefficient provenance, the dependence formula, unit distinctions, and registry #88’s formal power gate.
+9. **RESOLVED** — R9 separates protocol approval from promotion and freezes benchmark methodology and provenance requirements.
+
+**NEW findings**
+
+- **[P1] “Best T” needs a frozen selection procedure.** Require P0’s spec to declare the candidate T set, selection statistic, tie handling, and common eligible decision sample across T; adding T values after observation requires a new measurement record. This can be deferred to P0’s spec behind the execution block.
+
+**Q1:** Remaining choices are acceptable only before execution; P1/P2 remain blocked, and P0’s “best T” search must also be pre-fixed.
+
+**Q2:** D4 is proposed, not yet verified in code; R4 still needs a raw/lazy ingestion contract and behavioral tests because importing `window` does not prove guard invocation.
+
+**Q3:** Local k is visible through immutable START IDs, but complete promotion accounting still requires explicit variant-change rules and the full relevant family lineage across repositories.
+
+**Q4:** No disguised formal-judge change is proposed: θ = 10, existing classification precedence, α/MDE rules, and #88 remain intact; future DSR integration requires its own formal specification.
+
+**P0 M-row judgement:** Acceptable to proceed with protocol preparation: a separate measurement record excluded from every k and N reconciles recordkeeping with D2. Keep the S-versus-M label on the user-decision list; that naming issue is not a blocker. Overall approval still requires the two P0 plan fixes above.
+
+VERDICT: FIX-PLAN-FIRST
+
+
+## 8. 계획 r3 델타
+## W1 plan r3 = plan r2 + the following (answers to Codex PRE r2)
+
+R4+ (finding 4 · P0). Ingestion contract: `window.bounded(raw_items, ts_of, parse)` receives RAW, un-interpreted items (a text line, a raw CSV field list, a raw JSON object) lazily; `ts_of(raw)` extracts ONLY the timestamp; `parse(raw)` — the only function allowed to interpret payload values — is called solely for items whose timestamp is inside [SCREEN_START, SCREEN_END]; items outside are counted and discarded without `parse` being called; a malformed timestamp raises. File-level rule: an archive whose name declares a month entirely after 2026-06 (e.g. `…-2026-07.zip`) is refused before it is opened. Every screen loader must be built on `bounded` (no other file reads of market data in `research/screens/p1|p2`). Tests on the actual ingestion path: a spy `parse` proves it is never called for reserve-dated items in a contaminated input; a July-named archive is refused unopened; the (2026-06-01, 2026-07-01) request is refused; a static AST test that p1/p2 modules contain no `open(`/`read_text`/`read_csv`/`ZipFile` call outside the loader module built on `bounded`.
+R5+ (finding 5 · P0). (i) Explicit rule in the protocol: ANY change of a parameter or of measurement semantics (statistic, sample construction, estimator, null, cost number, seed, window) creates a NEW S id with its own START row; a pure defect fix that changes no semantics is recorded as a note on the same id only if no result has been observed — once a result exists, a fix that alters the number is a new S id. (ii) Promotion disclosure = the ENTIRE search lineage of the family, not selected contributors: every S id of that family in this ledger (all outcomes) PLUS every relevant prior run of the same hypothesis family in the other repositories under ~/project (formal trials and informal measurements), enumerated with source paths in the pre-registration; the S row's "nearest rejected trial and what differs" column is the seed of that list, not a substitute for it.
+New finding (P1 — accepted). P0's spec must pre-fix the candidate timeout set T ∈ {30, 60, 120} s, the selection statistic for "best T" (mean net improvement per side over the common decision sample), tie handling (the smaller T), and that all T are evaluated on the same sampled decisions; adding a T value after observation is a new measurement id. Deferred to the P0 spec behind the execution block.
+
+## 9. Codex PRE r3 — 응답 원문(verbatim)
+1. **Finding 4 [P0] — RESOLVED.** R4+ closes the ingestion-contract gap: lazy raw items, timestamp-only extraction, payload parsing only within the permitted window, malformed-timestamp refusal, and rejection of future-month archives before opening. Mandatory loader routing and actual-path tests complement r2’s dependency and outcome-horizon guards.
+
+2. **Finding 5 [P0] — RESOLVED.** R5+ explicitly requires a new S id and START row for parameter or measurement-semantic changes, and for number-changing fixes after results exist. Promotion must disclose the entire family search lineage, including all ledger outcomes and relevant formal and informal runs across repositories. The nearest-rejected-trial column cannot substitute for that disclosure.
+
+3. **New round-2 finding [P1] — RESOLVED at plan level.** The timeout candidates `{30, 60, 120}` seconds, mean-net-improvement selection statistic, smaller-T tie rule, and common decision sample are fixed requirements for the P0 spec. Deferral is acceptable behind the execution block; adding candidates after observation requires a new measurement id.
+
+**NEW findings: none requiring a plan change.** Implementation compliance remains for POST review.
+
+The on-disk report ends with plan r2; this assessment uses that text plus your supplied round-2 status and verbatim r3 delta.
+
+VERDICT: MERGE
+
+
+## 10. 회전 표
+| 회전 | 판정 | 열린 P0 |
+|---|---|---|
+| advisor PRE | PROCEED(수정 4) | — |
+| Codex r1 | FIX-PLAN-FIRST | 6 |
+| Codex r2 | FIX-PLAN-FIRST | 2(발견 4 · 5) |
+| Codex r3 | **MERGE** | 0 |
+P1 항목: Codex 7·8·9 accepted(9의 "POST MERGE = 승격"만 rejected because 승격은 정식 사전등록이 있어야 한다) · r2 새 P1("best T") accepted — P0 스펙으로.
