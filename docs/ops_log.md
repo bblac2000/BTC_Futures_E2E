@@ -11935,3 +11935,5 @@ sd requires a P&L replay on pre-IS, which #4 never did. Contain it: script commi
 - 검토 원문(advisor + Codex · PRE/POST)은 `reports/advisory/w1_screen_protocol_pre.md` · `w1_screen_protocol_post.md`에 그대로 있다 — 이번 라운드부터 원문 보존 규칙은 그 파일들로 충족한다(사용자 2026-10-14 상설 규칙).
 - 프로토콜 v1(30229b25 · Drive 02:30:44.771Z) → v2(367a04ba · Drive 02:49:45.052Z) · Codex PRE r3 MERGE · POST r5 MERGE · 전체 시험 1,899 통과.
 - #96: 판정기 문턱 표기 정정(θ = 10 bps · MDE 문턱 2θ = 20) — Claude Code의 2026-10-11 기록 오류.
+
+- 2026-10-14: `var/p0_restore`(M-1 복원본 · 11 GB · git 무시) 삭제 — 사용자 확인("삭제해") 뒤. Drive 원본(`gdrive:E2E_Hybrid_Bot/`)과 입력 SHA256 목록 · 복원 계획(`gdrive:BTC_Futures_E2E/screens/M-1/`)은 보존 · fetch/verify/run 로그는 `research/screens/p0/results/`에 있다(#105).
