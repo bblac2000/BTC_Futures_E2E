@@ -187,3 +187,91 @@ Reviewed r6 at HEAD `d3425a2` read-only. No files changed or data downloaded.
 **NEW findings: none.** Protocol and benchmark hashes match. No START row or p2 implementation exists, so downloader and calculation enforcement remain unverified.
 
 VERDICT: MERGE
+
+## 코드 대 스펙 검토(START 전) — Codex r1 FIX(P1 3 · P2 4) → r2 FIX(P2 3 · 스펙 r7 칸 단위 매칭 수용) → r3 FIX(P2 2) → **r4 MERGE**
+입장: 전부 동의 — 고침 6a6bd6b · 38d6d2d · 03095f2(가드 `zip_has_header(names=)`는 좁히기만 · W1 가드 변경으로 검토됨).
+
+### 코드 검토 r1 — 원문(verbatim)
+Reviewed HEAD `98fa770` against r6. No downloads or file changes. **No P0 findings; three P1 and four P2 findings.**
+
+1. **P1 — Holding funding violates `(T, X]` and the off-grid rule.** [compute.py:106](/home/cms/project/BTC_Futures_E2E/research/screens/p2/compute.py:106) admits records through `X+60s`; its off-grid classification also includes the excluded `T` grid point. Synthetic cases confirm that `X+30s` funding is included, while `T+30s` funding is silently omitted. This changes funding returns, IC, spreads and missing-settlement counts. Restrict actual records to `(T, X]` and classify against `E_hold`.
+
+2. **P1 — Unusable bar months do not disqualify the signal week.** [compute.py:164](/home/cms/project/BTC_Futures_E2E/research/screens/p2/compute.py:164) checks only `unusable_funding`; `unusable_bars` is never consulted. A February bar archive marked unusable still permits entry on March 4 when the March 3 entry bar exists. Under §3, the signal week’s intersection with February must make that symbol ineligible. This changes eligible counts, deciles and statistics.
+
+3. **P1 — ZIP-opening failures abort instead of producing an unusable month.** [loader.py:78](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:78) propagates opening/reading failures. R6 §3 requires these archives to become unusable and follow eligibility or outcome missing-data rules. Handle archive failures per file, discard any partially collected rows, and record the month as unusable. Preserve the required exceptions for malformed timestamps and reserved archives.
+
+4. **P2 — Failed-fetch recovery can consume stale ZIP contents.** [fetch.py:61](/home/cms/project/BTC_Futures_E2E/research/screens/p2_fetch/fetch.py:61) writes failure markers without deleting an existing ZIP; [loader.py:76](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:76) subsequently reads ZIPs even when their markers exist. After an interrupted fetch and failed retry, stale funding or prices can enter holding outcomes instead of becoming missing. Delete failed ZIPs and make markers authoritative.
+
+5. **P2 — Age/reset history adds an unstated valid-only filter.** [compute.py:129](/home/cms/project/BTC_Futures_E2E/research/screens/p2/compute.py:129) removes bad records before determining first observation and 30-day gaps. R6 defines first observation as the first readable funding settlement, separately restricting bad-record eligibility to `[T−8d,T)`. With a bad observation at `T−50d` and valid observations starting at `T−20d`, the exactly-30-day gap should not reset age; the code instead rejects the symbol as young.
+
+6. **P2 — `assert_within` coverage is incomplete.** The sole calculation check, [run.py:74](/home/cms/project/BTC_Futures_E2E/research/screens/p2/run.py:74), checks a lag-window boundary and exit times, after outcomes have been calculated. Actual signal settlements, entry times, holding settlements and bar-close times never receive the assertions required by §1.
+
+7. **P2 — Required funding diagnostics disappear from the result.** [compute.py:284](/home/cms/project/BTC_Futures_E2E/research/screens/p2/compute.py:284) drops `HoldFunding.offgrid`, and the result does not distinguish wholly missing funding from partial deficits. Preserve and report off-grid counts and the §4-3 “all missing” flag.
+
+**Verification:** 39 selected existing tests passed. Independent synthetic checks confirmed exact shuffle RNG ordering, tie ordering, realised-notional turnover, skipped-week/final liquidation handling and constant-IC FAIL. The allow-list hash matches; scheduling contains exactly 281 weeks, **2021-02-08 through 2026-06-22**.
+
+No further discrepancies found in cadence completeness, causal daily exits, S₀/S₁ bounds, spread/decomposition, lag thresholds, cost clause, `>250 bps` override, power formulas, DTB3 conversion or static-rule compliance. The disclosed manifest-location deviation is accepted.
+
+VERDICT: FIX
+
+### 코드 검토_r2 — 원문(verbatim)
+Reviewed HEAD `6a6bd6b` against r7. No downloads or file changes. **Three P2 issues remain; no P0/P1 issues remain.**
+
+The slot clarification is **acceptable before START**: it changes r6’s literal timestamp treatment, but r7 fixes the tolerance, boundary ownership and off-grid rule explicitly. It leaves no choice based on observed results. The code matches those rules.
+
+| Round-1 finding | Status | Assessment |
+|---|---|---|
+| P1-1: Holding funding boundaries | **RESOLVED** | Matches r7, including inclusive ±60-second slots and strict off-grid boundaries. |
+| P1-2: Unusable bar months | **RESOLVED** | Eligibility checks both funding and bar months across `[T−8d,T)`. |
+| P1-3: ZIP-opening failures | **PARTIAL** | Opening/read failures mark the month unusable and discard partial rows. Exception preservation has the new edge case below. |
+| P2-4: Stale ZIP after failed fetch | **RESOLVED** | Existing ZIPs are deleted before fetching; markers prevent stale contents from being read. Successful recovery has a separate regression below. |
+| P2-5: Valid-only age history | **RESOLVED** | Bad funding records now count toward first observation and gap resets. |
+| P2-6: Assertion coverage | **PARTIAL** | Sorted-series extrema cover raw funding/open timestamps. Calculation checks still occur after use, and derived bar-close timestamps lack assertions. |
+| P2-7: Funding diagnostics | **RESOLVED** | Off-grid and wholly missing counts propagate into the result JSON. |
+
+**Remaining round-1 P2 — Assertions still occur after calculation.** [run.py:74](/home/cms/project/BTC_Futures_E2E/research/screens/p2/run.py:74) runs after eligibility, outcomes and week construction. An instrumented synthetic run confirmed this ordering. [loader.py:105](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:105) checks raw-series extrema, but derived daily close times remain unchecked. Move calculation-boundary assertions before use and include the close timestamps required by §1.
+
+**NEW P2 — Successful retry leaves an authoritative failure marker.** [fetch.py:69](/home/cms/project/BTC_Futures_E2E/research/screens/p2_fetch/fetch.py:69) writes the verified ZIP and returns `ok` without removing an existing `.unusable` marker. After an interrupted fetch containing an earlier failure, a successful retry therefore produces an `ok` manifest entry while [loader.py:83](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:83) discards that month. This changes eligibility and missing outcomes. Remove the marker after successfully writing the verified ZIP. Reproduced entirely in memory.
+
+**NEW P2 — Markers bypass the reserved-name exception.** [loader.py:79](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:79) accepts marker names, then skips marked ZIPs before checking reserved archive names. A `2026-07.zip` raises `ReserveError` alone but becomes silently “unusable” when its marker exists, contrary to r7 §3. Validate archive names before applying marker skips, including marker-only entries. No reserved contents were read.
+
+**Verification:** 43 read-only selected tests passed. In-memory checks additionally verified corrupt ZIP handling, partial-read rollback, malformed-timestamp exceptions, exact slot boundaries, result diagnostics and both new regressions. The allow-list hash matches; the working tree remains clean.
+
+VERDICT: FIX
+
+### 코드 검토_r3 — 원문(verbatim)
+Reviewed HEAD `38d6d2d` against r7, before START. **All three round-2 P2 issues are resolved. Two new P2 findings remain; no P0/P1 findings.**
+
+| Round-2 item | Status | Assessment |
+|---|---|---|
+| Assertions after calculation; unchecked daily closes | **RESOLVED** | [compute.py:165](/home/cms/project/BTC_Futures_E2E/research/screens/p2/compute.py:165) and [compute.py:199](/home/cms/project/BTC_Futures_E2E/research/screens/p2/compute.py:199) check boundaries before use, including entry and holding-bar close timestamps. |
+| Successful retry retains failure marker | **RESOLVED** | [fetch.py:70](/home/cms/project/BTC_Futures_E2E/research/screens/p2_fetch/fetch.py:70) removes the marker after writing the verified ZIP. |
+| Markers bypass reserved-name exception | **RESOLVED** | [loader.py:80](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:80) checks marker and ZIP names before skips, including marker-only entries. |
+
+Previously resolved round-1 items remain resolved. ZIP-opening failures now fully preserve the reserved-name exception.
+
+**NEW P2 — Malformed first-row timestamps can be silently discarded.** [window.py:162](/home/cms/project/BTC_Futures_E2E/research/screens/window.py:162) accepts any alphabetic first timestamp cell as a header. In-memory ZIPs beginning with `NaN,8,0.5`, `NULL,8,0.5`, or `inf,8,0.5` loaded subsequent records successfully without raising or marking the month unusable. The same malformed timestamp on a later row raises `ReserveError`. This violates r7 §1/§3’s malformed-timestamp exception rule and can silently alter completeness or age history. Recognize supported headers explicitly; reject other noninteger first-row timestamps.
+
+**NEW P2 — Result JSON omits the required input inventory and hashes.** [run.py:149](/home/cms/project/BTC_Futures_E2E/research/screens/p2/run.py:149) supplies only a note referring to `fetch_manifest.tsv`; the runner never loads or embeds that inventory. A captured four-week synthetic result confirmed there are no input-file or SHA256 fields. [Spec §1](/home/cms/project/BTC_Futures_E2E/research/screens/p2/S-xs-carry-1_spec.md:15) explicitly requires the file/SHA256 inventory inside the result JSON. Include it before exclusive result creation so the result binds to its inputs.
+
+**Verification:** 43 selected tests passed. Additional in-memory checks verified all three fixes, corrupt-ZIP handling, partial-read rollback and both new findings. The allow-list hash matches. No downloads or file changes; working tree clean.
+
+VERDICT: FIX
+
+### 코드 검토_r4 — 원문(verbatim)
+Reviewed HEAD `03095f2` against r7, before START.
+
+| Round-3 finding | Status | Assessment |
+|---|---|---|
+| Malformed first-row timestamps silently discarded | **RESOLVED** | [loader.py:91](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:91) supplies the four supported header names. `NaN`, `NULL`, `inf`, and other unknown first cells now propagate `ReserveError`. |
+| Result JSON omits input inventory and hashes | **RESOLVED** | [loader.py:124](/home/cms/project/BTC_Futures_E2E/research/screens/p2/loader.py:124) reads the CSV through `bounded_csv_file`; [run.py:150](/home/cms/project/BTC_Futures_E2E/research/screens/p2/run.py:150) embeds every inventory key, status, and SHA256 before exclusive result creation. |
+
+The three earlier fixes remain **RESOLVED**: assertions precede calculation, successful retries clear failure markers, and reserved marker/ZIP names stop before skips.
+
+**W1 guard review:** [window.py:151](/home/cms/project/BTC_Futures_E2E/research/screens/window.py:151)’s optional `names=` only narrows header acceptance. Default behavior, timestamp filtering, and outer/member reserved-name checks remain intact.
+
+**NEW findings:** None.
+
+**Verification:** 52 selected tests passed; 18 tests requiring filesystem writes were deselected. In-memory checks covered loader failures and rollback, header compatibility, reserved boundaries, retry cleanup, all **37,649 downloadable manifest keys**, and exact inventory embedding in a four-week synthetic result. Allow-list SHA256 matches. No downloads or file changes; working tree clean.
+
+VERDICT: MERGE
