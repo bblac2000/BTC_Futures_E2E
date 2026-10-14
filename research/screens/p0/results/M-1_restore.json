@@ -1,0 +1,89 @@
+{
+ "evidence": "drive md5 (server) vs local md5 · manifest remote_md5 where present · parquet footer rows vs manifest parquet_rows",
+ "excluded": [],
+ "floor": 0.99,
+ "missing_on_drive_sample": {
+  "aggtrade": [
+   "2026-10-11/aggtrade/060519_005.parquet",
+   "2026-10-11/aggtrade/060619_236.parquet",
+   "2026-10-11/aggtrade/060719_657.parquet",
+   "2026-10-11/aggtrade/060820_112.parquet",
+   "2026-10-11/aggtrade/060920_319.parquet",
+   "2026-10-11/aggtrade/061020_580.parquet",
+   "2026-10-11/aggtrade/061121_338.parquet",
+   "2026-10-11/aggtrade/061221_528.parquet",
+   "2026-10-11/aggtrade/061321_661.parquet",
+   "2026-10-11/aggtrade/061421_943.parquet",
+   "2026-10-11/aggtrade/061522_308.parquet"
+  ],
+  "bookticker": [
+   "2026-10-11/bookticker/060526_345.parquet",
+   "2026-10-11/bookticker/060626_381.parquet",
+   "2026-10-11/bookticker/060726_439.parquet",
+   "2026-10-11/bookticker/060826_478.parquet",
+   "2026-10-11/bookticker/060926_520.parquet",
+   "2026-10-11/bookticker/061026_534.parquet",
+   "2026-10-11/bookticker/061126_657.parquet",
+   "2026-10-11/bookticker/061226_878.parquet",
+   "2026-10-11/bookticker/061326_902.parquet",
+   "2026-10-11/bookticker/061427_024.parquet",
+   "2026-10-11/bookticker/061527_098.parquet"
+  ],
+  "depth100ms": [
+   "2026-10-11/depth100ms/060447_935.parquet",
+   "2026-10-11/depth100ms/060548_013.parquet",
+   "2026-10-11/depth100ms/060648_129.parquet",
+   "2026-10-11/depth100ms/060748_195.parquet",
+   "2026-10-11/depth100ms/060848_319.parquet",
+   "2026-10-11/depth100ms/060948_427.parquet",
+   "2026-10-11/depth100ms/061048_511.parquet",
+   "2026-10-11/depth100ms/061148_667.parquet",
+   "2026-10-11/depth100ms/061248_745.parquet",
+   "2026-10-11/depth100ms/061348_799.parquet",
+   "2026-10-11/depth100ms/061448_955.parquet",
+   "2026-10-11/depth100ms/061549_051.parquet"
+  ]
+ },
+ "ok": true,
+ "plan_by_stream": {
+  "aggtrade": {
+   "drive_orphans": 0,
+   "expected": 34637,
+   "matched": 34626,
+   "ratio": 0.9996824205329561,
+   "remote_md5_present": 0
+  },
+  "bookticker": {
+   "drive_orphans": 0,
+   "expected": 34790,
+   "matched": 34779,
+   "ratio": 0.9996838171888474,
+   "remote_md5_present": 0
+  },
+  "depth100ms": {
+   "drive_orphans": 0,
+   "expected": 34795,
+   "matched": 34783,
+   "ratio": 0.9996551228624803,
+   "remote_md5_present": 0
+  }
+ },
+ "restore_sha256_of_list": "2919625e46e45f650ce97e0e84a58568186ad78f952db06b33248bb7637621b2",
+ "retained": {
+  "aggtrade": {
+   "expected": 34637,
+   "kept": 34626,
+   "ratio": 0.9996824205329561
+  },
+  "bookticker": {
+   "expected": 34790,
+   "kept": 34779,
+   "ratio": 0.9996838171888474
+  },
+  "depth100ms": {
+   "expected": 34795,
+   "kept": 34783,
+   "ratio": 0.9996551228624803
+  }
+ }
+}

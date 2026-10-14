@@ -1,0 +1,27 @@
+2026-10-14T06:22:51Z run begin HEAD=e7e02c21ab8b7bd3d71dc4f3f00d618f7bb2225e
+{"verdict": "KILL(stay taker)", "best_T": "120", "head_bps": 0.5692510634791461}
+	Command being timed: "uv run python -m research.screens.p0.run"
+	User time (seconds): 1329.12
+	System time (seconds): 487.18
+	Percent of CPU this job got: 129%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 23:18.33
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 8431628
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 273
+	Minor (reclaiming a frame) page faults: 20625337
+	Voluntary context switches: 10315464
+	Involuntary context switches: 4476
+	Swaps: 0
+	File system inputs: 46976
+	File system outputs: 88
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+run rc=0
+2026-10-14T06:46:09Z run end
