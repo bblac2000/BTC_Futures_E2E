@@ -64,9 +64,10 @@
 스크린은 **2021-01-01 00:00:00.000Z → 2026-06-30 23:59:59.999Z**만 읽는다. **2026-07-01부터는 예약 구간**이며 알파 스크린이 읽을 수 없다(승격되는 가족의 전진/OOS 예비).
 
 ### 4-2. 코드로 집행
-- `research/screens/window.py`: `require_window`(I/O **전** 범위 검사 · 우회 인자 없음) · `refuse_reserved_archive`(2026-06 뒤의 달을 가리키는 아카이브는 열기 전에 거부) · `assert_within`(계산 직전 검사) · 읽기 경로 셋 — `bounded_csv_file` · `bounded_zip_csv`(파일을 **가드 모듈이** 열고 줄마다 시각 칸만 잘라 본 뒤 창 안의 줄만 호출자의 `parse`에 넘긴다 · 창 밖 줄은 해석 없이 버리고 센다 · 잘못된 시각은 예외) · `bounded_records`(요청에서 이미 창으로 묶은 API 응답용 · 창 밖 행이 오면 예외) · `write_result`(결과를 한 번만 쓴다).
-- `research/screens/p1` · `p2`의 시장 자료 읽기는 각 가족의 `loader.py` 하나에서만, 위 읽기 경로로만 한다. `loader.py` 밖의 모듈은 I/O 모듈(csv · zipfile · pathlib · json · pandas · requests …)을 import할 수 없고, `loader.py`도 직접 읽기(`open` · `read_text` · `ZipFile` …)를 쓸 수 없다. 기존 계층(`backtest` · `strategies` · `paper` · `exchange` …)과 `p0`를 import하지 않는다.
-- 시험 `tests/test_screen_window.py`가 강제한다: 2026-07-01에 닿는 요청 거부 · 실제 파일·zip 읽기 경로에서 예약 구간 값이 한 번도 해석되지 않음 · 7월 이름 파일은 열기 전에 거부 · 잘못된 시각은 건너뛰지 않고 예외 · 정적 규칙(알려진 우회 여덟 가지의 회귀 사례 포함) · 주문 경로 문자열 없음.
+- `research/screens/window.py`: `require_window`(I/O **전** 범위 검사 · 우회 인자 없음) · `refuse_reserved_archive`(2026-06 뒤의 달을 가리키는 아카이브는 열기 전에 거부) · `assert_within`(계산 직전 검사) · 읽기 경로 셋 — `bounded_csv_file` · `bounded_zip_csv`(파일을 **가드 모듈이** 열고 줄마다 시각 칸만 잘라 본 뒤 창 안의 줄만 호출자의 `parse`에 넘긴다 · 창 밖 줄은 해석 없이 버리고 센다 · 잘못된 시각은 예외) · `fetch_json_rows`(공개 GET을 가드 모듈이 직접 부르고 응답 행의 시각을 먼저 검사한다 · 창 밖 행이 하나라도 있으면 어떤 행도 넘기지 않고 예외) · zip의 머리줄 유무는 자동 판별하지 않고 `zip_has_header`(시각 칸만 본다)의 답을 명시해 넘긴다 · `write_result`(결과를 한 번만 쓴다).
+- `research/screens/p1` · `p2`의 시장 자료 읽기는 각 가족의 `loader.py` 하나에서만, 위 읽기 경로로만 한다. 이 두 디렉터리의 모듈은 **허용 목록**의 import만 쓴다(순수 계산용 표준 모듈 · numpy · 같은 가족 패키지 · `window`의 공개 이름 `window.PUBLIC`만 · `loader.py`는 `pathlib.Path` 추가). 직접 읽기·동적 접근 이름(`open` · `read` · `load` · `getattr` · `io` …)은 이름으로도 속성으로도 쓸 수 없다. 기존 계층(`backtest` · `strategies` · `paper` · `exchange` …)과 `p0` · 다른 가족을 import하지 않는다.
+- 정적 규칙은 **심층 방어**다 — 모든 우회를 막는다고 주장하지 않는다. 스크린마다의 스펙 PRE·결과 POST 검토(§7)가 코드의 읽기 경로를 다시 본다.
+- 시험 `tests/test_screen_window.py`가 강제한다: 2026-07-01에 닿는 요청 거부 · 실제 파일·zip 읽기 경로에서 예약 구간 값이 한 번도 해석되지 않음 · 7월 이름 파일은 열기 전에 거부 · 잘못된 시각은 건너뛰지 않고 예외 · 정적 규칙(알려진 우회의 회귀 사례 포함) · API 응답은 창 밖 행이 있으면 한 행도 해석되지 않음 · 결과 파일은 배타 생성 · 주문 경로 문자열 없음.
 - 정식 트라이얼이 예약 구간을 읽게 하려면 **코드 변경 + 레지스트리 행**이 필요하다(이번 라운드에는 그런 경로가 없다).
 
 ### 4-3. 글로 정하는 규칙(코드 검사에 더해)
