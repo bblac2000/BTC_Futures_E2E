@@ -11,6 +11,7 @@ from research.screens.window import (
     ReserveError,
     assert_within,
     bounded_benchmark_csv,
+    bounded_csv_file,
     bounded_zip_csv,
     refuse_reserved_archive,
     zip_has_header,
@@ -19,6 +20,7 @@ from research.screens.window import (
 ROOT = Path(__file__).resolve().parents[3]
 ARCHIVE = ROOT / "var" / "p2_archive" / "data" / "futures" / "um" / "monthly"
 DTB3 = Path(__file__).resolve().parent / "data" / "DTB3_2020-12-01_2026-06-30.csv"
+HEADER_TS = frozenset({"calc_time", "fundingTime", "funding_time", "open_time"})   # 알려진 머리줄의 시각 칸 이름
 ASCII_USDT = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 
@@ -86,7 +88,7 @@ def _read_dir(d: Path, row) -> tuple[list[tuple[int, float]], frozenset[str]]:  
         if month in bad:
             continue
         try:
-            part = list(bounded_zip_csv(p, row, header=zip_has_header(p)))
+            part = list(bounded_zip_csv(p, row, header=zip_has_header(p, names=HEADER_TS)))
         except ReserveError:
             raise
         except Exception:                                                         # noqa: BLE001 — 열기·읽기 실패
@@ -109,6 +111,19 @@ def read_symbol(name: str) -> Symbol:
         if ser.ts.size:
             assert_within([int(ser.ts[0]), int(ser.ts[-1])])
     return sym
+
+
+MANIFEST = Path(__file__).resolve().parent / "data" / "fetch_manifest.csv"
+
+
+def _manifest_row(line: str) -> tuple[str, str, str]:
+    _, key, status, sha = line.rstrip("\r\n").split(",")
+    return key, status, sha
+
+
+def manifest(path: Path = MANIFEST) -> list[tuple[str, str, str]]:
+    """내려받기 목록(키 · 상태 · SHA256) — 첫 칸 = 그 파일 달의 시작(ms)이라 창 가드로 읽는다."""
+    return list(bounded_csv_file(path, _manifest_row, header=True))
 
 
 def _rate(line: str) -> tuple[str, float | None]:

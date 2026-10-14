@@ -5,10 +5,11 @@
 - 허용 목록 `research/screens/p2/data/archive_listing_le_2026-06.tsv`의 키만 받는다(목록 해시를 먼저 확인 · 목록 밖 키 없음).
 - 2021-01 이전 달은 받지 않는다 · 2026-07 이후 달 이름은 거부(`refuse_reserved_archive`).
 - 각 zip을 `.CHECKSUM`(SHA256)과 대조한다 — 실패하면 zip을 지우고 `<zip>.unusable` 표시만 남긴다(로더가 그 심볼-달을 '쓸 수 없음'으로 본다).
-- 내용은 열지 않는다(바이트 해시만). 결과 목록 `research/screens/p2/data/fetch_manifest.tsv`(키 · 상태 · SHA256).
+- 내용은 열지 않는다(바이트 해시만). 결과 목록 `research/screens/p2/data/fetch_manifest.csv`(달 시작 ms · 키 · 상태 · SHA256).
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import sys
 import time
@@ -22,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 LISTING = ROOT / "research" / "screens" / "p2" / "data" / "archive_listing_le_2026-06.tsv"
 LISTING_SHA256 = "32cfccee8f366627ae707b8105d2b52ddeac18a36dcbf355634c5ebee9d21d45"
 DEST = ROOT / "var" / "p2_archive"
-MANIFEST = ROOT / "research" / "screens" / "p2" / "data" / "fetch_manifest.tsv"
+MANIFEST = ROOT / "research" / "screens" / "p2" / "data" / "fetch_manifest.csv"
 BASE = "https://data.binance.vision/"
 
 
@@ -38,6 +39,11 @@ def keys() -> list[str]:
         if ym >= "2021-01":
             out.append(k)
     return out
+
+
+def month_ms(k: str) -> int:
+    y, m = k.rsplit("-", 2)[-2], k.rsplit("-", 1)[-1][:2]
+    return int(datetime.datetime(int(y), int(m), 1, tzinfo=datetime.UTC).timestamp() * 1000)
 
 
 def _get(url: str) -> bytes:
@@ -73,14 +79,14 @@ def one(k: str) -> tuple[str, str, str]:
 
 def main() -> int:
     if MANIFEST.exists():
-        print("거부: 이미 내려받았다(fetch_manifest.tsv)", file=sys.stderr)
+        print("거부: 이미 내려받았다(fetch_manifest.csv)", file=sys.stderr)
         return 2
     ks = keys()
     with ThreadPoolExecutor(16) as ex:
         rows = list(ex.map(one, ks))
-    with MANIFEST.open("x", encoding="utf-8") as fh:
-        fh.write("key\tstatus\tsha256\n")
-        fh.writelines(f"{k}\t{s}\t{h}\n" for k, s, h in sorted(rows))
+    with MANIFEST.open("x", encoding="utf-8") as fh:                         # 첫 칸 = 파일 달의 시작(ms) — p2 로더가 창 가드로 읽는다
+        fh.write("month_start_ms,key,status,sha256\n")
+        fh.writelines(f"{month_ms(k)},{k},{s},{h}\n" for k, s, h in sorted(rows))
     bad = sum(1 for _, s, _ in rows if s != "ok")
     print(f"keys {len(rows)} ok {len(rows) - bad} unusable {bad}")
     return 0

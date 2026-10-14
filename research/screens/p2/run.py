@@ -58,6 +58,7 @@ def ic_block(weeks: list[compute.Week], ix: list[int], keep_fn=None) -> dict:  #
 
 
 def main() -> int:
+    inventory = loader.manifest()                                                # 입력 목록(키 · 상태 · SHA256) — 결과에 묶는다(스펙 §1)
     syms = [loader.read_symbol(n) for n in loader.symbols()]
     rates = loader.dtb3()
     t_list = list(range(FIRST_T, LAST_T + 1, compute.WEEK))
@@ -146,7 +147,10 @@ def main() -> int:
         "missing_settlements": sum(weeks[k].missing for k in H_ix), "collisions": sum(weeks[k].collisions for k in H_ix),
         "offgrid_settlements": sum(weeks[k].offgrid for k in H_ix), "all_missing_funding_name_weeks": sum(weeks[k].all_missing for k in H_ix),
         "symbols_loaded": len(syms),
-        "note": "단일 스크린 · 매매 근거 아님 · 이른 청산 가격은 대체값(스펙 §4-3) · 입력 목록과 SHA256은 fetch_manifest.tsv",
+        "inputs": {"n": len(inventory), "n_ok": sum(1 for _, st, _ in inventory if st == "ok"),
+                   "unusable": [[k, st] for k, st, _ in inventory if st != "ok"],
+                   "files": [[k, st, h] for k, st, h in inventory]},
+        "note": "단일 스크린 · 매매 근거 아님 · 이른 청산 가격은 대체값(스펙 §4-3)",
     }
     print(write_result(OUT, res))
     return 0

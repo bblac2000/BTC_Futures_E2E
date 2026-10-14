@@ -148,8 +148,9 @@ def bounded_benchmark_csv[T](path: Path, parse: Callable[[str], T], *, ts_kind: 
                              SCREEN_END_MS, None)
 
 
-def zip_has_header(path: Path, *, ts_field: int = 0, delimiter: str = ",") -> bool:
-    """첫 줄의 **시각 칸만** 보고 머리줄인지 답한다(숫자가 아니면 머리줄) — 값 칸은 읽지 않는다. 결과는 로더가 `header=`로 명시해 넘긴다."""
+def zip_has_header(path: Path, *, ts_field: int = 0, delimiter: str = ",", names: frozenset[str] | None = None) -> bool:
+    """첫 줄의 **시각 칸만** 보고 머리줄인지 답한다(숫자가 아니면 머리줄) — 값 칸은 읽지 않는다. 결과는 로더가 `header=`로 명시해 넘긴다.
+    `names`를 주면 더 엄격하다: 숫자가 아닌 첫 칸은 그 이름 가운데 하나여야 하고, 아니면(예 `NaN` · `NULL`) 예외다(S-xs-carry-1 코드 검토)."""
     refuse_reserved_archive(Path(path).name)
     with zipfile.ZipFile(path) as z:
         [name] = z.namelist()
@@ -161,6 +162,8 @@ def zip_has_header(path: Path, *, ts_field: int = 0, delimiter: str = ",") -> bo
         return False
     if not re.fullmatch(r"[A-Za-z_]+", cell):                                  # 머리줄의 칸 이름 꼴이 아니면 잘못된 자료다
         raise ReserveError(f"첫 줄의 시각 칸이 숫자도 칸 이름도 아니다: {cell!r}")
+    if names is not None and cell not in names:
+        raise ReserveError(f"첫 줄의 시각 칸이 알려진 머리줄 이름이 아니다: {cell!r}")
     return True
 
 

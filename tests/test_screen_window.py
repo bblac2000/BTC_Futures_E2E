@@ -292,3 +292,17 @@ def test_benchmark_exception_is_keyed_to_the_benchmark_file_and_ten_days(tmp_pat
         with pytest.raises(W.ReserveError):
             list(W.bounded_benchmark_csv(bad, str))
     assert list(inspect.signature(W.bounded_benchmark_csv).parameters) == ["path", "parse", "ts_kind"]   # 창을 넓히는 인자 없음
+
+
+def test_zip_has_header_with_names_rejects_unknown_alphabetic_first_cells(tmp_path):
+    import zipfile
+    for first, ok in (("calc_time,a", True), ("NaN,1", False), ("NULL,1", False)):
+        p = tmp_path / f"x-{first[:3]}.zip"
+        with zipfile.ZipFile(p, "w") as z:
+            z.writestr("x.csv", f"{first}\n1609459200000,1\n")
+        if ok:
+            assert W.zip_has_header(p, names=frozenset({"calc_time"}))
+        else:
+            assert W.zip_has_header(p)                                               # 이름 없이 부르면 예전처럼 머리줄로 본다
+            with pytest.raises(W.ReserveError):
+                W.zip_has_header(p, names=frozenset({"calc_time"}))

@@ -199,3 +199,25 @@ def test_successful_refetch_removes_the_failure_marker(tmp_path, monkeypatch):
     (tmp_path / (k + ".unusable")).parent.mkdir(parents=True)
     (tmp_path / (k + ".unusable")).write_text("old failure\n")
     assert fetch.one(k)[1] == "ok" and not (tmp_path / (k + ".unusable")).exists() and (tmp_path / k).read_bytes() == data
+
+
+def test_malformed_first_row_timestamp_is_not_taken_as_a_header(tmp_path):
+    import zipfile
+
+    from research.screens.p2 import loader
+    from research.screens.window import ReserveError
+    d = tmp_path / "AUSDT"
+    d.mkdir()
+    with zipfile.ZipFile(d / "AUSDT-fundingRate-2024-03.zip", "w") as z:
+        z.writestr("a.csv", f"NaN,8,0.5\n{T},8,0.0001\n")
+    with pytest.raises(ReserveError):
+        loader._read_dir(d, loader._funding_row)
+
+
+def test_manifest_is_read_through_the_window_guard(tmp_path):
+    from research.screens.p2 import loader
+    from research.screens.p2_fetch import fetch
+    k = "data/futures/um/monthly/fundingRate/AUSDT/AUSDT-fundingRate-2024-03.zip"
+    p = tmp_path / "fetch_manifest.csv"
+    p.write_text(f"month_start_ms,key,status,sha256\n{fetch.month_ms(k)},{k},ok,abc\n", encoding="utf-8")
+    assert loader.manifest(p) == [(k, "ok", "abc")] and fetch.month_ms(k) == ms(2024, 3, 1)
