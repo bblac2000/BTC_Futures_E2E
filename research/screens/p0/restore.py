@@ -73,10 +73,19 @@ def fetch() -> int:
     if not p["ok"]:
         print("plan이 99% 문턱을 넘지 못했다 — 내려받지 않는다", file=sys.stderr)
         return 4
-    lst = SP.RESTORE / "M-1_files.txt"
-    lst.write_text("\n".join(sorted(p["matched"])) + "\n")
-    return subprocess.run(["rclone", "copy", f"{SP.REMOTE}/l2live/BTCUSDT/", str(SP.RESTORE / "BTCUSDT"), "--files-from", str(lst),
-                           "--transfers", "16", "--checkers", "16", "--no-traverse"]).returncode
+    # 디렉터리 단위(날짜 × 스트림 75개) — 파일별 조회(--files-from)는 Drive에서 10만 번의 조회가 되어 느리다.
+    # 짝지어진 집합 = 그 디렉터리의 Drive 파일 전체(plan의 drive_orphans = 0이 전제 — 아니면 거부). 보조 구간 날짜는 목록에 없다.
+    if any(v["drive_orphans"] for v in p["by_stream"].values()):
+        print("Drive 고아 파일이 있다 — 디렉터리 단위 복사를 쓰지 않는다", file=sys.stderr)
+        return 4
+    rc = 0
+    for date in SP.DATES:
+        for stream in SP.STREAMS:
+            r = subprocess.run(["rclone", "copy", f"{SP.REMOTE}/l2live/BTCUSDT/{date}/{stream}/",
+                                str(SP.RESTORE / "BTCUSDT" / date / stream), "--transfers", "16", "--checkers", "16"])
+            print(date, stream, "rc", r.returncode, flush=True)
+            rc = rc or r.returncode
+    return rc
 
 
 def verify() -> int:
